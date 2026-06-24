@@ -1,0 +1,219 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth / Users ─────────────────────────────────────────────────────────────
+
+model User {
+  id             String         @id @default(uuid())
+  email          String         @unique
+  passwordHash   String
+  name           String?
+  role           UserRole       @default(OPERATOR)
+  state          EntityState    @default(ACTIVE)
+  incidents      Incident[]     @relation("AssignedIncidents")
+  logbookEntries LogbookEntry[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  SUPERVISOR
+  OPERATOR
+  TECHNICIAN
+  VIEWER
+}
+
+// ─── Geographic hierarchy ─────────────────────────────────────────────────────
+
+model City {
+  id         String    @id @default(uuid())
+  name       String
+  department String
+  state      EntityState @default(ACTIVE)
+  projects   Project[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model Project {
+  id          String             @id @default(uuid())
+  name        String
+  client      String
+  contract    String?
+  startDate   DateTime
+  endDate     DateTime?
+  state       EntityState        @default(ACTIVE)
+  cityId      String
+  city        City               @relation(fields: [cityId], references: [id])
+  centers     MonitoringCenter[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+}
+
+model MonitoringCenter {
+  id          String      @id @default(uuid())
+  name        String
+  address     String?
+  state       EntityState @default(ACTIVE)
+  projectId   String
+  project     Project     @relation(fields: [projectId], references: [id])
+  routes      Route[]
+  incidents   Incident[]  @relation("CenterIncidents")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+// ─── Network topology ─────────────────────────────────────────────────────────
+
+model Route {
+  id                 String           @id @default(uuid())
+  identifier         String
+  type               RouteType        @default(FIBER)
+  state              EntityState      @default(ACTIVE)
+  monitoringCenterId String
+  center             MonitoringCenter @relation(fields: [monitoringCenterId], references: [id])
+  nodes              Node[]
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+}
+
+enum RouteType {
+  FIBER
+  WIRELESS
+  HYBRID
+}
+
+model Node {
+  id             String         @id @default(uuid())
+  code           String         @unique
+  name           String
+  lat            Float
+  lng            Float
+  address        String?
+  operativeState NodeState      @default(ONLINE)
+  routeId        String
+  route          Route          @relation(fields: [routeId], references: [id])
+  cameras        Camera[]
+  logbookEntries LogbookEntry[]
+  incidents      Incident[]     @relation("NodeIncidents")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+enum NodeState {
+  ONLINE
+  DEGRADED
+  OFFLINE
+  MAINTENANCE
+}
+
+// ─── Cameras ──────────────────────────────────────────────────────────────────
+
+model Camera {
+  id              String         @id @default(uuid())
+  code            String         @unique
+  name            String
+  ip              String?
+  brand           String?
+  model           String?
+  resolution      String?
+  state           CameraState    @default(ONLINE)
+  hasAnalytics    Boolean        @default(false)
+  nodeId          String
+  node            Node           @relation(fields: [nodeId], references: [id])
+  incidents       Incident[]     @relation("CameraIncidents")
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+enum CameraState {
+  ONLINE
+  OFFLINE
+  DEGRADED
+  MAINTENANCE
+}
+
+// ─── Incidents ────────────────────────────────────────────────────────────────
+
+model Incident {
+  id             String           @id @default(uuid())
+  title          String
+  description    String?
+  status         IncidentStatus   @default(NEW)
+  severity       IncidentSeverity @default(MEDIUM)
+  detectedAt     DateTime         @default(now())
+  resolvedAt     DateTime?
+  solution       String?
+  nodeId         String?
+  node           Node?            @relation("NodeIncidents", fields: [nodeId], references: [id])
+  cameraId       String?
+  camera         Camera?          @relation("CameraIncidents", fields: [cameraId], references: [id])
+  centerId       String?
+  center         MonitoringCenter? @relation("CenterIncidents", fields: [centerId], references: [id])
+  assignedUserId String?
+  assignedUser   User?            @relation("AssignedIncidents", fields: [assignedUserId], references: [id])
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+}
+
+enum IncidentStatus {
+  NEW
+  IN_PROGRESS
+  PENDING_PARTS
+  RESOLVED
+  CLOSED
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// ─── Logbook ──────────────────────────────────────────────────────────────────
+
+model LogbookEntry {
+  id           String          @id @default(uuid())
+  date         DateTime        @default(now())
+  activityType ActivityType
+  observations String?
+  result       EntryResult     @default(SATISFACTORY)
+  technicianId String
+  technician   User            @relation(fields: [technicianId], references: [id])
+  nodeId       String
+  node         Node            @relation(fields: [nodeId], references: [id])
+  createdAt    DateTime        @default(now())
+}
+
+enum ActivityType {
+  PREVENTIVE_MAINTENANCE
+  CORRECTIVE_MAINTENANCE
+  INSPECTION
+  INSTALLATION
+  CONFIGURATION
+  OTHER
+}
+
+enum EntryResult {
+  SATISFACTORY
+  PARTIAL
+  FAILED
+  PENDING
+}
+
+// ─── Shared enums ─────────────────────────────────────────────────────────────
+
+enum EntityState {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
