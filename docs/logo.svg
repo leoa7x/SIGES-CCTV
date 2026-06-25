@@ -1,0 +1,25 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Escudo institucional -->
+  <path
+    d="M60 6L14 26v34c0 27.6 19.74 53.4 46.67 60C87.27 113.4 106 87.6 106 60V26L60 6z"
+    fill="#0A2540"
+    stroke="#1D4ED8"
+    stroke-width="3"
+    stroke-linejoin="round"
+  />
+  <!-- Aro exterior del lente -->
+  <circle cx="60" cy="62" r="26" fill="#061929" stroke="#1D4ED8" stroke-width="2.5" />
+  <!-- Aro medio -->
+  <circle cx="60" cy="62" r="18" fill="#0A2540" stroke="#1D4ED8" stroke-width="1.5" opacity="0.8"/>
+  <!-- Lente principal -->
+  <circle cx="60" cy="62" r="11" fill="#1D4ED8" />
+  <!-- Punto central -->
+  <circle cx="60" cy="62" r="4" fill="#0A2540" />
+  <!-- Reflejo -->
+  <circle cx="54" cy="56" r="3.5" fill="#94A3B8" opacity="0.45" />
+  <!-- Destellos de lente (líneas cruzadas) -->
+  <line x1="60" y1="36" x2="60" y2="40" stroke="#1D4ED8" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+  <line x1="60" y1="84" x2="60" y2="88" stroke="#1D4ED8" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+  <line x1="34" y1="62" x2="38" y2="62" stroke="#1D4ED8" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+  <line x1="82" y1="62" x2="86" y2="62" stroke="#1D4ED8" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+</svg>
