@@ -8,10 +8,30 @@ import { useAuth } from "./auth-provider";
 const NAV = [
   { href: "/dashboard",  label: "Dashboard",   icon: "⬡" },
   { href: "/map",        label: "Mapa GIS",     icon: "◈" },
-  { href: "/projects",   label: "Proyectos",    icon: "◫" },
+  { href: "/topology",   label: "Topología",    icon: "◫" },
   { href: "/incidents",  label: "Incidentes",   icon: "⚠" },
   { href: "/logbook",    label: "Bitácora",     icon: "≡" },
 ];
+
+function SigesLogo() {
+  return (
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="SIGES-CCTV">
+      {/* Escudo */}
+      <path
+        d="M18 2L4 8v10c0 8.28 5.92 16.02 14 18 8.08-1.98 14-9.72 14-18V8L18 2z"
+        fill="#0A2540"
+        stroke="#1D4ED8"
+        strokeWidth="1.5"
+      />
+      {/* Lente exterior */}
+      <circle cx="18" cy="18" r="7" fill="#0D2F55" stroke="#1D4ED8" strokeWidth="1.2" />
+      {/* Lente interior */}
+      <circle cx="18" cy="18" r="3.5" fill="#1D4ED8" />
+      {/* Reflejo */}
+      <circle cx="16.5" cy="16.5" r="1" fill="#94A3B8" opacity="0.6" />
+    </svg>
+  );
+}
 
 type OpsShellProps = {
   children: ReactNode;
@@ -31,7 +51,7 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
   if (isLoading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-ops-bg">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-ops-border border-t-ops-cyan" />
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" />
       </div>
     );
   }
@@ -41,16 +61,21 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
       {/* Sidebar */}
       <aside className="flex w-64 flex-shrink-0 flex-col border-r border-ops-border bg-ops-panel">
         {/* Logo */}
-        <div className="border-b border-ops-border px-5 py-5">
-          <p className="text-[9px] font-bold uppercase tracking-[0.4em] text-ops-cyan/60">Sistema</p>
-          <p className="mt-0.5 font-mono text-sm font-bold tracking-wide text-ops-text">SIGES<span className="text-ops-cyan">-CCTV</span></p>
+        <div className="flex items-center gap-3 border-b border-ops-border px-5 py-4">
+          <SigesLogo />
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-ops-silver/60">Sistema Integral</p>
+            <p className="mt-0.5 font-display text-sm font-bold tracking-wide text-ops-text">
+              SIGES<span className="text-ops-blue">-CCTV</span>
+            </p>
+          </div>
         </div>
 
         {/* User */}
         <div className="border-b border-ops-border px-5 py-4">
           <p className="text-[9px] uppercase tracking-widest text-ops-muted">Operador</p>
           <p className="mt-0.5 truncate text-sm font-medium text-ops-text">{user.name ?? user.email}</p>
-          <span className="mt-1 inline-block rounded-full border border-ops-cyan/30 bg-ops-cyan/10 px-2 py-0.5 font-mono text-[9px] text-ops-cyan">
+          <span className="mt-1 inline-block rounded-full border border-ops-blue/30 bg-ops-blue/10 px-2 py-0.5 font-mono text-[9px] text-ops-blue">
             {user.role}
           </span>
         </div>
@@ -65,7 +90,7 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
                 href={item.href}
                 className={`flex items-center gap-3 rounded-ops px-3 py-2.5 text-sm font-medium transition-colors ${
                   isActive
-                    ? "bg-ops-cyan/10 text-ops-cyan shadow-ops-glow-cyan"
+                    ? "bg-ops-blue/10 text-ops-blue shadow-ops-glow-blue"
                     : "text-ops-muted hover:bg-ops-surface hover:text-ops-text"
                 }`}
               >
@@ -94,7 +119,7 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
         {(eyebrow || title) && (
           <header className="border-b border-ops-border bg-ops-panel px-6 py-4">
             {eyebrow && (
-              <p className="text-[9px] font-bold uppercase tracking-[0.36em] text-ops-cyan/70">{eyebrow}</p>
+              <p className="text-[9px] font-bold uppercase tracking-[0.36em] text-ops-blue/70">{eyebrow}</p>
             )}
             {title && (
               <h1 className="mt-0.5 text-lg font-semibold text-ops-text">{title}</h1>

@@ -300,13 +300,19 @@ useWebSocket(centerId) {
 
 ### Design system
 
-Tokens definidos en `tailwind.config.ts`:
-- `ops-bg`: #080d14 (fondo principal)
-- `ops-panel`: #0e1724 (paneles)
-- `ops-cyan`: #06b6d4 (acciones primarias)
-- `ops-amber`: #f59e0b (alertas)
-- `ops-rose`: #f43f5e (errores/offline)
-- `ops-emerald`: #10b981 (online/success)
+Colores según Manual de Imagen Corporativa oficial:
+- `ops-bg`: #061929 (fondo raíz)
+- `ops-panel`: #0A2540 (Azul Marino Institucional — paneles)
+- `ops-surface`: #0D2F55 (superficies elevadas)
+- `ops-blue`: #1D4ED8 (Azul Rey Tecnológico — acento primario, botones)
+- `ops-silver`: #94A3B8 (Gris Plata Operativo — texto secundario)
+- `ops-amber`: #f59e0b (advertencias)
+- `ops-rose`: #f43f5e (alertas críticas / offline)
+- `ops-emerald`: #10b981 (online / ok)
+
+Tipografía: Arial / Helvetica Neue (brand), Inter como fallback web.
+
+Logo: escudo con lente óptica centrada — SVG inline en `components/ops-shell.tsx`.
 
 ---
 
