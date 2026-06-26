@@ -19,11 +19,12 @@ export function useMonitor(centerId: string | null) {
     if (!centerId) return;
     const socket = getSocket();
     socket.emit("subscribe", { centerId });
-    socket.on("state-change", (evt: StateChangeEvent) => {
+    const handler = (evt: StateChangeEvent) => {
       if (evt.centerId === centerId) setLastEvent(evt);
-    });
+    };
+    socket.on("state-change", handler);
     return () => {
-      socket.off("state-change");
+      socket.off("state-change", handler);
     };
   }, [centerId]);
 
