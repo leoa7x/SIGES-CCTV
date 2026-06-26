@@ -36,22 +36,29 @@ services:
       timeout: 3s
       retries: 5
 
-  # ── RabbitMQ ─────────────────────────────────────────────────────────────────
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: siges-rabbitmq
+  # ── Redpanda (Kafka-compatible) ──────────────────────────────────────────────
+  redpanda:
+    image: redpandadata/redpanda:latest
+    container_name: siges-redpanda
     restart: unless-stopped
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-siges}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-siges_pass_change_me}
+    command:
+      - redpanda
+      - start
+      - --kafka-addr=0.0.0.0:9092
+      - --advertise-kafka-addr=localhost:9092
+      - --pandaproxy-addr=0.0.0.0:8082
+      - --advertise-pandaproxy-addr=localhost:8082
+      - --mode=dev-container
+      - --smp=1
+      - --default-log-level=warn
     volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
+      - redpanda_data:/var/lib/redpanda/data
     ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "15672:15672"  # management UI
+      - "9092:9092"
+      - "8082:8082"
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 30s
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 15s
       timeout: 10s
       retries: 5
 
@@ -66,7 +73,6 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-siges}:${POSTGRES_PASSWORD:-siges_pass_change_me}@postgres:5432/${POSTGRES_DB:-siges_cctv}
       REDIS_HOST: redis
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-siges}:${RABBITMQ_PASSWORD:-siges_pass_change_me}@rabbitmq:5672
     ports:
       - "${API_PORT:-4001}:4000"
     depends_on:
@@ -74,7 +80,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      rabbitmq:
+      redpanda:
         condition: service_healthy
 
   # ── Next.js Web ──────────────────────────────────────────────────────────────
@@ -97,4 +103,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  rabbitmq_data:
+  redpanda_data:
