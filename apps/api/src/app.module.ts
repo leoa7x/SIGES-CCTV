@@ -13,6 +13,8 @@ import { IncidentsModule } from "./incidents/incidents.module";
 import { LogbookModule } from "./logbook/logbook.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { FiberSegmentsModule } from "./fiber-segments/fiber-segments.module";
+import { EventsModule } from "./events/events.module";
+import { MonitorModule } from "./monitor/monitor.module";
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { FiberSegmentsModule } from "./fiber-segments/fiber-segments.module";
     LogbookModule,
     DashboardModule,
     FiberSegmentsModule,
+    EventsModule,
+    MonitorModule,
   ],
 })
 export class AppModule {}
