@@ -15,6 +15,7 @@ import { DashboardModule } from "./dashboard/dashboard.module";
 import { FiberSegmentsModule } from "./fiber-segments/fiber-segments.module";
 import { EventsModule } from "./events/events.module";
 import { MonitorModule } from "./monitor/monitor.module";
+import { GatewayModule } from "./gateway/gateway.module";
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { MonitorModule } from "./monitor/monitor.module";
     FiberSegmentsModule,
     EventsModule,
     MonitorModule,
+    GatewayModule,
   ],
 })
 export class AppModule {}

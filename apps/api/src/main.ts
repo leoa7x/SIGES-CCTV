@@ -1,6 +1,7 @@
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { IoAdapter } from "@nestjs/platform-socket.io";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
@@ -10,6 +11,8 @@ async function bootstrap() {
     origin: process.env.CORS_ORIGIN ?? "http://localhost:3001",
     credentials: true,
   });
+
+  app.useWebSocketAdapter(new IoAdapter(app));
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
