@@ -46,7 +46,7 @@ export default function LoginPage() {
         {/* Logo area */}
         <div className="mb-8 text-center">
           <p className="font-mono text-2xl font-bold tracking-wide text-ops-text">
-            SIGES<span className="text-ops-cyan">-CCTV</span>
+            SIGES<span className="text-ops-blue">-CCTV</span>
           </p>
           <p className="mt-1 text-xs font-semibold uppercase tracking-[0.32em] text-ops-muted">
             Sistema Integral de Gestión Operacional
@@ -55,7 +55,7 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="rounded-ops-lg border border-ops-border bg-ops-panel p-8 shadow-ops">
-          <h2 className="mb-1 text-sm font-semibold uppercase tracking-widest text-ops-cyan">
+          <h2 className="mb-1 text-sm font-semibold uppercase tracking-widest text-ops-blue">
             Acceso al sistema
           </h2>
           <p className="mb-6 text-xs text-ops-muted">Ingresa con tu cuenta institucional</p>
@@ -69,7 +69,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="usuario@entidad.gov.co"
-                className="w-full rounded-ops border border-ops-border bg-ops-surface px-3.5 py-2.5 text-sm text-ops-text placeholder-ops-dim outline-none transition focus:border-ops-cyan"
+                className="w-full rounded-ops border border-ops-border bg-ops-surface px-3.5 py-2.5 text-sm text-ops-text placeholder-ops-dim outline-none transition focus:border-ops-blue"
               />
             </label>
 
@@ -82,7 +82,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full rounded-ops border border-ops-border bg-ops-surface px-3.5 py-2.5 pr-20 text-sm text-ops-text placeholder-ops-dim outline-none transition focus:border-ops-cyan"
+                  className="w-full rounded-ops border border-ops-border bg-ops-surface px-3.5 py-2.5 pr-20 text-sm text-ops-text placeholder-ops-dim outline-none transition focus:border-ops-blue"
                 />
                 <button
                   type="button"
@@ -103,7 +103,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading || !email || !password}
-              className="w-full rounded-ops bg-ops-cyan px-4 py-2.5 text-sm font-semibold text-ops-bg transition hover:bg-ops-cyan-dim disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-ops bg-ops-blue px-4 py-2.5 text-sm font-semibold text-ops-bg transition hover:bg-ops-blue-dim disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? "Verificando…" : "Ingresar"}
             </button>

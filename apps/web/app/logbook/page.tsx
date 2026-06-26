@@ -60,7 +60,7 @@ export default function LogbookPage() {
     <OpsShell eyebrow="Mantenimiento" title="Bitácora Técnica">
       <div className="space-y-4">
         <input
-          className="w-full rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-text placeholder-ops-dim outline-none transition focus:border-ops-cyan sm:w-72"
+          className="w-full rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-text placeholder-ops-dim outline-none transition focus:border-ops-blue sm:w-72"
           placeholder="Buscar por nodo o técnico…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -69,7 +69,7 @@ export default function LogbookPage() {
         <div className="rounded-ops border border-ops-border bg-ops-panel">
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-16 text-ops-muted">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-cyan" />
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" />
             </div>
           ) : filtered.length === 0 ? (
             <p className="py-12 text-center text-sm text-ops-muted">Sin registros.</p>
@@ -89,7 +89,7 @@ export default function LogbookPage() {
                       <td className="whitespace-nowrap px-4 py-3 text-[11px] text-ops-dim">
                         {new Intl.DateTimeFormat("es-CO", { dateStyle: "short", timeStyle: "short" }).format(new Date(e.date))}
                       </td>
-                      <td className="px-4 py-3 font-mono text-[11px] text-ops-cyan">{e.node.code}</td>
+                      <td className="px-4 py-3 font-mono text-[11px] text-ops-blue">{e.node.code}</td>
                       <td className="px-4 py-3 text-[11px] text-ops-text">{activityLabels[e.activityType] ?? e.activityType}</td>
                       <td className="px-4 py-3">
                         <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${resultColor[e.result] ?? ""}`}>

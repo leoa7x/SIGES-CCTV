@@ -56,7 +56,7 @@ export default function DashboardPage() {
     <OpsShell eyebrow="Centro de Operaciones" title="Panel General">
       {loading ? (
         <div className="flex items-center gap-2 py-16 text-ops-muted">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-cyan" />
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" />
           Cargando estadísticas…
         </div>
       ) : (
@@ -73,7 +73,7 @@ export default function DashboardPage() {
               label="Cámaras activas"
               value={`${pct(data?.cameras.online ?? 0, data?.cameras.total ?? 1)}%`}
               sub={`${data?.cameras.online ?? 0} / ${data?.cameras.total ?? 0} en línea`}
-              accent="text-ops-cyan"
+              accent="text-ops-blue"
             />
             <StatCard
               label="Incidentes abiertos"

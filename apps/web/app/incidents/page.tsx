@@ -89,13 +89,13 @@ export default function IncidentsPage() {
         {/* Filters */}
         <div className="flex flex-wrap gap-3">
           <input
-            className="rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-text placeholder-ops-dim outline-none transition focus:border-ops-cyan sm:w-72"
+            className="rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-text placeholder-ops-dim outline-none transition focus:border-ops-blue sm:w-72"
             placeholder="Buscar por título, nodo…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
           <select
-            className="rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-text outline-none transition focus:border-ops-cyan"
+            className="rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-text outline-none transition focus:border-ops-blue"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -108,7 +108,7 @@ export default function IncidentsPage() {
         <div className="rounded-ops border border-ops-border bg-ops-panel">
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-16 text-ops-muted">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-cyan" />
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" />
             </div>
           ) : filtered.length === 0 ? (
             <p className="py-12 text-center text-sm text-ops-muted">No hay incidentes.</p>
@@ -176,7 +176,7 @@ export default function IncidentsPage() {
 
             <div className="flex items-center gap-3">
               <select
-                className="flex-1 rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-text outline-none focus:border-ops-cyan"
+                className="flex-1 rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-text outline-none focus:border-ops-blue"
                 value={newStatus}
                 onChange={(e) => setNewStatus(e.target.value)}
               >
@@ -185,7 +185,7 @@ export default function IncidentsPage() {
               <button
                 onClick={handleStatusChange}
                 disabled={saving || newStatus === selected.status}
-                className="rounded-ops bg-ops-cyan px-4 py-2 text-sm font-semibold text-ops-bg transition hover:bg-ops-cyan-dim disabled:opacity-50"
+                className="rounded-ops bg-ops-blue px-4 py-2 text-sm font-semibold text-ops-bg transition hover:bg-ops-blue-dim disabled:opacity-50"
               >
                 {saving ? "…" : "Actualizar"}
               </button>

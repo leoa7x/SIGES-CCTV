@@ -39,7 +39,7 @@ export default function ProjectsPage() {
     <OpsShell eyebrow="Estructura" title="Proyectos">
       {loading ? (
         <div className="flex items-center gap-2 py-16 text-ops-muted">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-cyan" />
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" />
         </div>
       ) : projects.length === 0 ? (
         <div className="rounded-ops border border-ops-border bg-ops-panel py-16 text-center text-sm text-ops-muted">
@@ -48,7 +48,7 @@ export default function ProjectsPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map((p) => (
-            <div key={p.id} className="rounded-ops border border-ops-border bg-ops-panel p-5 shadow-ops transition hover:border-ops-cyan/30">
+            <div key={p.id} className="rounded-ops border border-ops-border bg-ops-panel p-5 shadow-ops transition hover:border-ops-blue/30">
               <div className="mb-3 flex items-start justify-between gap-2">
                 <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase ${stateColor[p.state] ?? ""}`}>
                   {p.state}
@@ -64,7 +64,7 @@ export default function ProjectsPage() {
                 <p className="text-[11px] text-ops-muted">
                   {p.city.name}, {p.city.department}
                 </p>
-                <p className="text-[11px] text-ops-cyan">{p._count.centers} CMC{p._count.centers !== 1 ? "s" : ""}</p>
+                <p className="text-[11px] text-ops-blue">{p._count.centers} CMC{p._count.centers !== 1 ? "s" : ""}</p>
               </div>
             </div>
           ))}

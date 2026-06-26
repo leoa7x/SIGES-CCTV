@@ -42,7 +42,7 @@ export default function MapPage() {
       <div className="relative h-[calc(100vh-10rem)] w-full overflow-hidden rounded-ops border border-ops-border bg-ops-panel">
         {loading || !MapComponent ? (
           <div className="flex h-full items-center justify-center gap-2 text-ops-muted">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-cyan" />
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" />
             Cargando mapa…
           </div>
         ) : (
