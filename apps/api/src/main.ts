@@ -7,7 +7,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.enableCors({
-    origin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
+    origin: process.env.CORS_ORIGIN ?? "http://localhost:3001",
     credentials: true,
   });
 
@@ -21,7 +21,7 @@ async function bootstrap() {
     .build();
   SwaggerModule.setup("docs", app, SwaggerModule.createDocument(app, config));
 
-  const port = process.env.API_PORT ?? 4000;
+  const port = process.env.API_PORT ?? 4001;
   await app.listen(port);
   console.log(`SIGES-CCTV API running on port ${port}`);
 }
