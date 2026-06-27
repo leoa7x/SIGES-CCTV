@@ -1,111 +1,163 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { OpsShell } from "../../components/ops-shell";
+import { OpsModal } from "../../components/ops-modal";
 import { useAuth } from "../../components/auth-provider";
-import { apiGet } from "../../lib/api";
+import { apiGet, apiPost } from "../../lib/api";
 
 type Entry = {
-  id: string;
-  date: string;
-  activityType: string;
-  observations: string | null;
-  result: string;
+  id: string; date: string; activityType: string; observations: string | null; result: string;
   technician: { name: string | null; email: string };
   node: { code: string; name: string };
 };
+type NodeRef = { id: string; code: string; name: string };
+type UserRef = { id: string; name: string | null; email: string; role: string };
+type CreateForm = { activityType: string; observations: string; result: string; technicianId: string; nodeId: string };
 
-const resultColor: Record<string, string> = {
+const INPUT = "w-full rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-text focus:border-ops-blue focus:outline-none";
+
+const RESULT_COLOR: Record<string, string> = {
   SATISFACTORY: "text-ops-emerald border-ops-emerald/30 bg-ops-emerald/10",
   PARTIAL:      "text-ops-amber border-ops-amber/30 bg-ops-amber/10",
   FAILED:       "text-ops-rose border-ops-rose/30 bg-ops-rose/10",
   PENDING:      "text-ops-muted border-ops-dim bg-ops-surface",
 };
 
-const activityLabels: Record<string, string> = {
+const ACTIVITY_LABELS: Record<string, string> = {
   PREVENTIVE_MAINTENANCE: "Mant. Preventivo",
   CORRECTIVE_MAINTENANCE: "Mant. Correctivo",
-  INSPECTION:  "Inspección",
+  INSPECTION: "Inspección",
   INSTALLATION: "Instalación",
   CONFIGURATION: "Configuración",
   OTHER: "Otro",
 };
 
-const resultLabels: Record<string, string> = {
-  SATISFACTORY: "Satisfactorio",
-  PARTIAL: "Parcial",
-  FAILED: "Fallido",
-  PENDING: "Pendiente",
-};
-
 export default function LogbookPage() {
   const { accessToken } = useAuth();
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [nodes, setNodes] = useState<NodeRef[]>([]);
+  const [users, setUsers] = useState<UserRef[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState<CreateForm>({ activityType: "INSPECTION", observations: "", result: "SATISFACTORY", technicianId: "", nodeId: "" });
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!accessToken) return;
-    apiGet<Entry[]>("/logbook", accessToken)
-      .then(setEntries)
-      .finally(() => setLoading(false));
+    setLoading(true);
+    try {
+      const [e, n, u] = await Promise.all([
+        apiGet<Entry[]>("/logbook", accessToken),
+        apiGet<NodeRef[]>("/nodes", accessToken),
+        apiGet<UserRef[]>("/users", accessToken),
+      ]);
+      setEntries(e); setNodes(n); setUsers(u);
+    } catch { } finally { setLoading(false); }
   }, [accessToken]);
 
-  const filtered = entries.filter((e) => {
-    const q = search.toLowerCase();
-    return !q || e.node.code.toLowerCase().includes(q) || e.node.name.toLowerCase().includes(q) || (e.technician.name ?? "").toLowerCase().includes(q);
-  });
+  useEffect(() => { load(); }, [load]);
+
+  function openCreate() {
+    setForm({ activityType: "INSPECTION", observations: "", result: "SATISFACTORY", technicianId: users[0]?.id ?? "", nodeId: nodes[0]?.id ?? "" });
+    setModalOpen(true);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!accessToken) return;
+    setSaving(true);
+    try {
+      await apiPost("/logbook", accessToken, { ...form, observations: form.observations || undefined });
+      setModalOpen(false);
+      await load();
+    } catch (err) { console.error(err); } finally { setSaving(false); }
+  }
 
   return (
-    <OpsShell eyebrow="Mantenimiento" title="Bitácora Técnica">
-      <div className="space-y-4">
-        <input
-          className="w-full rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-text placeholder-ops-dim outline-none transition focus:border-ops-blue sm:w-72"
-          placeholder="Buscar por nodo o técnico…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-
-        <div className="rounded-ops border border-ops-border bg-ops-panel">
-          {loading ? (
-            <div className="flex items-center justify-center gap-2 py-16 text-ops-muted">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" />
-            </div>
-          ) : filtered.length === 0 ? (
-            <p className="py-12 text-center text-sm text-ops-muted">Sin registros.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-ops-border text-left">
-                    {["Fecha", "Nodo", "Actividad", "Resultado", "Técnico", "Observaciones"].map((h) => (
-                      <th key={h} className="px-4 py-3 text-[9px] font-bold uppercase tracking-widest text-ops-muted">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((e) => (
-                    <tr key={e.id} className="border-b border-ops-border/50 transition hover:bg-ops-surface">
-                      <td className="whitespace-nowrap px-4 py-3 text-[11px] text-ops-dim">
-                        {new Intl.DateTimeFormat("es-CO", { dateStyle: "short", timeStyle: "short" }).format(new Date(e.date))}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-[11px] text-ops-blue">{e.node.code}</td>
-                      <td className="px-4 py-3 text-[11px] text-ops-text">{activityLabels[e.activityType] ?? e.activityType}</td>
-                      <td className="px-4 py-3">
-                        <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${resultColor[e.result] ?? ""}`}>
-                          {resultLabels[e.result] ?? e.result}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-[11px] text-ops-muted">{e.technician.name ?? e.technician.email}</td>
-                      <td className="max-w-[200px] truncate px-4 py-3 text-[11px] text-ops-dim">{e.observations ?? "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+    <OpsShell eyebrow="Operaciones" title="Bitácora">
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-sm text-ops-muted">{entries.length} entradas</p>
+        <button onClick={openCreate} className="rounded-ops bg-ops-blue px-4 py-2 text-sm font-semibold text-white hover:bg-ops-blue/80">
+          + Nueva entrada
+        </button>
       </div>
+
+      {loading ? (
+        <div className="flex justify-center py-16"><div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" /></div>
+      ) : entries.length === 0 ? (
+        <div className="rounded-ops border border-ops-border bg-ops-panel py-16 text-center text-sm text-ops-muted">No hay entradas en la bitácora.</div>
+      ) : (
+        <div className="overflow-hidden rounded-ops border border-ops-border bg-ops-panel">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-ops-border text-left text-[10px] font-semibold uppercase tracking-wide text-ops-muted">
+                <th className="px-4 py-3">Fecha</th>
+                <th className="px-4 py-3">Actividad</th>
+                <th className="px-4 py-3">Nodo</th>
+                <th className="px-4 py-3 hidden sm:table-cell">Técnico</th>
+                <th className="px-4 py-3">Resultado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-ops-border">
+              {entries.map((entry) => (
+                <tr key={entry.id} className="hover:bg-ops-surface">
+                  <td className="px-4 py-3 text-[11px] text-ops-muted">
+                    {new Intl.DateTimeFormat("es-CO", { dateStyle: "short", timeStyle: "short" }).format(new Date(entry.date))}
+                  </td>
+                  <td className="px-4 py-3 text-ops-text">{ACTIVITY_LABELS[entry.activityType] ?? entry.activityType}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-ops-muted">{entry.node.code}</td>
+                  <td className="px-4 py-3 hidden sm:table-cell text-[11px] text-ops-muted">{entry.technician.name ?? entry.technician.email}</td>
+                  <td className="px-4 py-3">
+                    <span className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${RESULT_COLOR[entry.result] ?? ""}`}>{entry.result}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <OpsModal open={modalOpen} title="Nueva entrada de bitácora" onClose={() => setModalOpen(false)}>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Tipo de actividad</label>
+            <select className={INPUT} value={form.activityType} onChange={(e) => setForm((f) => ({ ...f, activityType: e.target.value }))}>
+              {Object.entries(ACTIVITY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Resultado</label>
+            <select className={INPUT} value={form.result} onChange={(e) => setForm((f) => ({ ...f, result: e.target.value }))}>
+              {["SATISFACTORY", "PARTIAL", "FAILED", "PENDING"].map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Nodo</label>
+            <select className={INPUT} value={form.nodeId} onChange={(e) => setForm((f) => ({ ...f, nodeId: e.target.value }))} required>
+              <option value="">Seleccionar…</option>
+              {nodes.map((n) => <option key={n.id} value={n.id}>{n.code} — {n.name}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Técnico</label>
+            <select className={INPUT} value={form.technicianId} onChange={(e) => setForm((f) => ({ ...f, technicianId: e.target.value }))} required>
+              <option value="">Seleccionar…</option>
+              {users.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email} ({u.role})</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Observaciones (opcional)</label>
+            <textarea className={INPUT} rows={3} value={form.observations} onChange={(e) => setForm((f) => ({ ...f, observations: e.target.value }))} placeholder="Descripción del trabajo realizado…" />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={() => setModalOpen(false)} className="rounded-ops border border-ops-border px-4 py-2 text-sm text-ops-muted hover:text-ops-text">Cancelar</button>
+            <button type="submit" disabled={saving} className="rounded-ops bg-ops-blue px-4 py-2 text-sm font-semibold text-white hover:bg-ops-blue/80 disabled:opacity-50">
+              {saving ? "Guardando…" : "Registrar"}
+            </button>
+          </div>
+        </form>
+      </OpsModal>
     </OpsShell>
   );
 }
