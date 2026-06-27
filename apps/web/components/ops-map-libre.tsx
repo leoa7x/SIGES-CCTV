@@ -25,10 +25,20 @@ const OSM_STYLE: maplibregl.StyleSpecification = {
   layers: [{ id: "osm-tiles", type: "raster", source: "osm" }],
 };
 
-export default function OpsMapLibre({ nodes }: { nodes: NodeGeo[] }) {
+export default function OpsMapLibre({
+  nodes,
+  onPlaceNode,
+}: {
+  nodes: NodeGeo[];
+  onPlaceNode?: (lat: number, lng: number) => void;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  // Mutable ref so the circle click handler can check placement mode without
+  // triggering the heavy nodes useEffect on every onPlaceNode change.
+  const onPlaceNodeRef = useRef(onPlaceNode);
+  useEffect(() => { onPlaceNodeRef.current = onPlaceNode; }, [onPlaceNode]);
 
   // Initialize map once
   useEffect(() => {
@@ -94,6 +104,8 @@ export default function OpsMapLibre({ nodes }: { nodes: NodeGeo[] }) {
       });
 
       map.on("click", "nodes-circle", (e) => {
+        // Suppress popup while placement mode is active
+        if (onPlaceNodeRef.current) return;
         const feat = e.features?.[0];
         if (!feat) return;
         const p = feat.properties as { code: string; name: string; state: string };
@@ -111,13 +123,14 @@ export default function OpsMapLibre({ nodes }: { nodes: NodeGeo[] }) {
       });
 
       map.on("mouseenter", "nodes-circle", () => {
+        if (onPlaceNodeRef.current) return;
         map.getCanvas().style.cursor = "pointer";
       });
       map.on("mouseleave", "nodes-circle", () => {
+        if (onPlaceNodeRef.current) return;
         map.getCanvas().style.cursor = "";
       });
 
-      // Fit to nodes if we have any
       if (nodes.length > 0) {
         const lngs = nodes.map((n) => n.lng);
         const lats = nodes.map((n) => n.lat);
@@ -128,6 +141,25 @@ export default function OpsMapLibre({ nodes }: { nodes: NodeGeo[] }) {
       }
     }
   }, [nodes, mapReady]);
+
+  // Placement mode: crosshair cursor + capture one map click
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    if (!onPlaceNode) {
+      map.getCanvas().style.cursor = "";
+      return;
+    }
+    map.getCanvas().style.cursor = "crosshair";
+    const handler = (e: maplibregl.MapMouseEvent) => {
+      onPlaceNode(e.lngLat.lat, e.lngLat.lng);
+    };
+    map.once("click", handler);
+    return () => {
+      map.off("click", handler);
+      map.getCanvas().style.cursor = "";
+    };
+  }, [onPlaceNode, mapReady]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }
