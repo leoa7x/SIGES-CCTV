@@ -3,7 +3,6 @@ package poller_test
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -15,11 +14,6 @@ func TestProbeONVIF_reachable(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
-
-	// Extract host:port from test server URL
-	addr := strings.TrimPrefix(srv.URL, "http://")
-	host := strings.Split(addr, ":")[0]
-	_ = host
 
 	// ProbeONVIF expects an IP; use 127.0.0.1 and the server's port
 	// We test via a helper that accepts a full URL for testability

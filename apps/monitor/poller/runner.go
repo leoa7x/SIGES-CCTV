@@ -86,6 +86,7 @@ func (r *Runner) runSNMP() {
 		ok := ProbeSNMP(d.IP, community, 3*time.Second)
 		current, exists := r.cache.Get(d.ID)
 		if !exists {
+			log.Printf("[runner] SNMP: %s not in cache, skipping", d.ID)
 			continue
 		}
 		var newState string
@@ -130,6 +131,7 @@ func (r *Runner) refreshDevices() {
 func (r *Runner) maybePost(d client.Device, newState string) {
 	current, ok := r.cache.Get(d.ID)
 	if !ok {
+		log.Printf("[runner] %s %s not in cache, seeding as %s", d.Type, d.ID, newState)
 		r.cache.Set(d.ID, newState)
 		return
 	}

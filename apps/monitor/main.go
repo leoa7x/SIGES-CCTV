@@ -20,6 +20,7 @@ func main() {
 	runner := poller.NewRunner(cfg, api)
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
