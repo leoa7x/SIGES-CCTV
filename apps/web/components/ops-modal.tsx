@@ -6,11 +6,13 @@ export function OpsModal({
   open,
   title,
   onClose,
+  saving,
   children,
 }: {
   open: boolean;
   title: string;
   onClose: () => void;
+  saving?: boolean;
   children: ReactNode;
 }) {
   useEffect(() => {
@@ -27,7 +29,7 @@ export function OpsModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-      onClick={onClose}
+      onClick={() => { if (!saving) onClose(); }}
     >
       <div
         className="w-full max-w-lg rounded-ops border border-ops-border bg-ops-panel shadow-2xl"
