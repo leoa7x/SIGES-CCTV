@@ -6,11 +6,21 @@ import { ReactNode, useEffect } from "react";
 import { useAuth } from "./auth-provider";
 
 const NAV = [
-  { href: "/dashboard",  label: "Dashboard",   icon: "⬡" },
-  { href: "/map",        label: "Mapa GIS",     icon: "◈" },
-  { href: "/topology",   label: "Topología",    icon: "◫" },
-  { href: "/incidents",  label: "Incidentes",   icon: "⚠" },
-  { href: "/logbook",    label: "Bitácora",     icon: "≡" },
+  { href: "/dashboard",  label: "Dashboard",  icon: "⬡" },
+  { href: "/map",        label: "Mapa GIS",    icon: "◈" },
+  { href: "/topology",   label: "Topología",   icon: "◫" },
+  { href: "/projects",   label: "Proyectos",   icon: "◧" },
+  { href: "/incidents",  label: "Incidentes",  icon: "⚠" },
+  { href: "/logbook",    label: "Bitácora",    icon: "≡" },
+];
+
+const ADMIN_NAV = [
+  { href: "/admin/cities",   label: "Ciudades",  icon: "○" },
+  { href: "/admin/centers",  label: "CMC",       icon: "◎" },
+  { href: "/admin/routes",   label: "Rutas",     icon: "⌥" },
+  { href: "/admin/nodes",    label: "Nodos",     icon: "◉" },
+  { href: "/admin/cameras",  label: "Cámaras",   icon: "⊙" },
+  { href: "/admin/users",    label: "Usuarios",  icon: "⊕" },
 ];
 
 function SigesLogo() {
@@ -99,6 +109,31 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
               </Link>
             );
           })}
+
+          {(user.role === "SUPER_ADMIN" || user.role === "ADMIN") && (
+            <>
+              <p className="px-3 pb-1 pt-4 text-[9px] font-bold uppercase tracking-widest text-ops-dim">
+                Administración
+              </p>
+              {ADMIN_NAV.map((item) => {
+                const isActive = pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-3 rounded-ops px-3 py-2.5 text-sm font-medium transition-colors ${
+                      isActive
+                        ? "bg-ops-blue/10 text-ops-blue shadow-ops-glow-blue"
+                        : "text-ops-muted hover:bg-ops-surface hover:text-ops-text"
+                    }`}
+                  >
+                    <span className="font-mono text-base leading-none">{item.icon}</span>
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </>
+          )}
         </nav>
 
         {/* Logout */}
