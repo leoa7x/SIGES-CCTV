@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString } from "class-validator";
+import { IsBoolean, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString } from "class-validator";
 import { NodeState, NodeType } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -14,6 +14,7 @@ export class CreateNodeDto {
   @IsOptional() @IsEnum(NodeType) nodeType?: NodeType;
   @IsOptional() @IsString() snmpCommunity?: string;
   @IsString() @IsNotEmpty() routeId!: string;
+  @IsOptional() @IsBoolean() hasPole?: boolean;
 }
 
 export class UpdateNodeDto {
@@ -26,6 +27,7 @@ export class UpdateNodeDto {
   @IsOptional() @IsEnum(NodeType) nodeType?: NodeType;
   @IsOptional() @IsString() snmpCommunity?: string;
   @IsOptional() @IsEnum(NodeState) operativeState?: NodeState;
+  @IsOptional() @IsBoolean() hasPole?: boolean;
 }
 
 @Injectable()
