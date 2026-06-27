@@ -34,13 +34,21 @@ enum UserRole {
 // ─── Geographic hierarchy ─────────────────────────────────────────────────────
 
 model City {
-  id         String    @id @default(uuid())
-  name       String
-  department String
-  state      EntityState @default(ACTIVE)
-  projects   Project[]
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id             String        @id @default(uuid())
+  name           String
+  type           GeoEntityType @default(MUNICIPALITY)
+  department     String?
+  daneCode       String?
+  population     Int?
+  areaSqKm       Float?
+  contractObject String?
+  logoUrl        String?
+  lat            Float?
+  lng            Float?
+  state          EntityState   @default(ACTIVE)
+  projects       Project[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 }
 
 model Project {
@@ -103,6 +111,7 @@ model Node {
   nodeType       NodeType       @default(OTHER)
   snmpCommunity  String?
   operativeState NodeState      @default(ONLINE)
+  hasPole        Boolean        @default(false)
   routeId        String
   route          Route          @relation(fields: [routeId], references: [id])
   cameras        Camera[]
@@ -262,6 +271,11 @@ enum LogSource {
 }
 
 // ─── Shared enums ─────────────────────────────────────────────────────────────
+
+enum GeoEntityType {
+  MUNICIPALITY
+  DEPARTMENT
+}
 
 enum EntityState {
   ACTIVE
