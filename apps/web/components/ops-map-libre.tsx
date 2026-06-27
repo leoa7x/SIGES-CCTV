@@ -12,6 +12,16 @@ export type NodeGeo = {
   operativeState: string;
 };
 
+export type CenterGeo = {
+  id: string;
+  name: string;
+  address: string | null;
+  contactName: string | null;
+  phone: string | null;
+  lat: number;
+  lng: number;
+};
+
 const OSM_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {
@@ -27,9 +37,11 @@ const OSM_STYLE: maplibregl.StyleSpecification = {
 
 export default function OpsMapLibre({
   nodes,
+  centers,
   onPlaceNode,
 }: {
   nodes: NodeGeo[];
+  centers?: CenterGeo[];
   onPlaceNode?: (lat: number, lng: number) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -39,6 +51,7 @@ export default function OpsMapLibre({
   // triggering the heavy nodes useEffect on every onPlaceNode change.
   const onPlaceNodeRef = useRef(onPlaceNode);
   useEffect(() => { onPlaceNodeRef.current = onPlaceNode; }, [onPlaceNode]);
+  const centerMarkersRef = useRef<maplibregl.Marker[]>([]);
 
   // Initialize map once
   useEffect(() => {
@@ -160,6 +173,45 @@ export default function OpsMapLibre({
       map.getCanvas().style.cursor = "";
     };
   }, [onPlaceNode, mapReady]);
+
+  // Render CMC markers as blue squares
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    // Remove previous markers
+    centerMarkersRef.current.forEach((m) => m.remove());
+    centerMarkersRef.current = [];
+
+    (centers ?? []).forEach((c) => {
+      const el = document.createElement("div");
+      el.style.cssText =
+        "width:14px;height:14px;background:#1D4ED8;border:2px solid #fff;border-radius:3px;cursor:pointer;";
+      el.title = c.name;
+
+      const popup = new maplibregl.Popup({ offset: 12, className: "ops-popup" }).setHTML(
+        `<div style="font:12px/1.6 Arial,sans-serif;padding:4px 2px;color:#e2e8f0;background:#0A2540;min-width:140px">` +
+        `<strong style="color:#93c5fd;display:block;margin-bottom:2px">CMC</strong>` +
+        `<strong style="color:#e2e8f0">${c.name}</strong>` +
+        (c.address ? `<br/><span style="color:#94a3b8">${c.address}</span>` : "") +
+        (c.contactName ? `<br/><span style="color:#94a3b8">${c.contactName}</span>` : "") +
+        (c.phone ? `<br/><span style="color:#94a3b8">${c.phone}</span>` : "") +
+        `</div>`,
+      );
+
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([c.lng, c.lat])
+        .setPopup(popup)
+        .addTo(map);
+
+      centerMarkersRef.current.push(marker);
+    });
+
+    return () => {
+      centerMarkersRef.current.forEach((m) => m.remove());
+      centerMarkersRef.current = [];
+    };
+  }, [centers, mapReady]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }

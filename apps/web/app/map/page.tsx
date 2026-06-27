@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback } from "react";
 import { OpsShell } from "../../components/ops-shell";
 import { useAuth } from "../../components/auth-provider";
 import { apiGet, apiPatch } from "../../lib/api";
-import type { NodeGeo } from "../../components/ops-map-libre";
+import type { NodeGeo, CenterGeo } from "../../components/ops-map-libre";
 
 const OpsMapLibre = dynamic(() => import("../../components/ops-map-libre"), {
   ssr: false,
@@ -27,17 +27,46 @@ type NodeItem = {
   operativeState: string;
 };
 
+type CenterApiItem = {
+  id: string;
+  name: string;
+  address: string | null;
+  contactName: string | null;
+  phone: string | null;
+  lat: number | null;
+  lng: number | null;
+};
+
 export default function MapPage() {
   const { accessToken } = useAuth();
   const [allNodes, setAllNodes] = useState<NodeItem[]>([]);
+  const [centers, setCenters] = useState<CenterGeo[]>([]);
   const [loading, setLoading] = useState(true);
   const [placingNode, setPlacingNode] = useState<NodeItem | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!accessToken) { setLoading(false); return; }
-    apiGet<NodeItem[]>("/nodes", accessToken)
-      .then(setAllNodes)
+    Promise.all([
+      apiGet<NodeItem[]>("/nodes", accessToken),
+      apiGet<CenterApiItem[]>("/monitoring-centers", accessToken),
+    ])
+      .then(([nodes, rawCenters]) => {
+        setAllNodes(nodes);
+        setCenters(
+          rawCenters
+            .filter((c) => c.lat != null && c.lng != null)
+            .map((c) => ({
+              id: c.id,
+              name: c.name,
+              address: c.address,
+              contactName: c.contactName,
+              phone: c.phone,
+              lat: c.lat as number,
+              lng: c.lng as number,
+            })),
+        );
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [accessToken]);
@@ -90,6 +119,7 @@ export default function MapPage() {
 
           <OpsMapLibre
             nodes={locatedNodes}
+            centers={centers}
             onPlaceNode={placingNode && !saving ? handlePlaceNode : undefined}
           />
         </div>
