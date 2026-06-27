@@ -8,12 +8,12 @@ import { apiGet, apiPatch, apiPost } from "../../../lib/api";
 
 type NodeItem = {
   id: string; code: string; name: string; ip: string | null;
-  nodeType: string; operativeState: string;
+  nodeType: string; operativeState: string; hasPole: boolean;
   route: { id: string; identifier: string; center: { name: string } };
 };
 type RouteRef = { id: string; identifier: string; center: { name: string } };
-type CreateForm = { code: string; name: string; ip: string; mac: string; nodeType: string; snmpCommunity: string; routeId: string };
-type EditForm = { name: string; ip: string; mac: string; nodeType: string; snmpCommunity: string; operativeState: string };
+type CreateForm = { code: string; name: string; ip: string; mac: string; nodeType: string; snmpCommunity: string; routeId: string; hasPole: boolean };
+type EditForm = { name: string; ip: string; mac: string; nodeType: string; snmpCommunity: string; operativeState: string; hasPole: boolean };
 
 const INPUT = "w-full rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-text focus:border-ops-blue focus:outline-none";
 const NODE_TYPES = ["SWITCH", "CABINET", "AMPLIFIER", "SPLITTER", "OTHER"];
@@ -33,8 +33,8 @@ export default function NodesPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<NodeItem | null>(null);
-  const [createForm, setCreateForm] = useState<CreateForm>({ code: "", name: "", ip: "", mac: "", nodeType: "SWITCH", snmpCommunity: "", routeId: "" });
-  const [editForm, setEditForm] = useState<EditForm>({ name: "", ip: "", mac: "", nodeType: "SWITCH", snmpCommunity: "", operativeState: "ONLINE" });
+  const [createForm, setCreateForm] = useState<CreateForm>({ code: "", name: "", ip: "", mac: "", nodeType: "SWITCH", snmpCommunity: "", routeId: "", hasPole: false });
+  const [editForm, setEditForm] = useState<EditForm>({ name: "", ip: "", mac: "", nodeType: "SWITCH", snmpCommunity: "", operativeState: "ONLINE", hasPole: false });
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -53,12 +53,12 @@ export default function NodesPage() {
 
   function openCreate() {
     setEditing(null);
-    setCreateForm({ code: "", name: "", ip: "", mac: "", nodeType: "SWITCH", snmpCommunity: "", routeId: routes[0]?.id ?? "" });
+    setCreateForm({ code: "", name: "", ip: "", mac: "", nodeType: "SWITCH", snmpCommunity: "", routeId: routes[0]?.id ?? "", hasPole: false });
     setModalOpen(true);
   }
   function openEdit(item: NodeItem) {
     setEditing(item);
-    setEditForm({ name: item.name, ip: item.ip ?? "", mac: "", nodeType: item.nodeType, snmpCommunity: "", operativeState: item.operativeState });
+    setEditForm({ name: item.name, ip: item.ip ?? "", mac: "", nodeType: item.nodeType, snmpCommunity: "", operativeState: item.operativeState, hasPole: item.hasPole });
     setModalOpen(true);
   }
   function closeModal() { setModalOpen(false); }
@@ -74,6 +74,7 @@ export default function NodesPage() {
           mac: editForm.mac || undefined, nodeType: editForm.nodeType,
           snmpCommunity: editForm.snmpCommunity || undefined,
           operativeState: editForm.operativeState,
+          hasPole: editForm.hasPole,
         });
       } else {
         await apiPost("/nodes", accessToken, {
@@ -82,6 +83,7 @@ export default function NodesPage() {
           nodeType: createForm.nodeType,
           snmpCommunity: createForm.snmpCommunity || undefined,
           routeId: createForm.routeId,
+          hasPole: createForm.hasPole,
         });
       }
       closeModal(); await load();
@@ -120,7 +122,12 @@ export default function NodesPage() {
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-ops-text">{item.code}</td>
                   <td className="px-4 py-3 text-ops-text">{item.name}</td>
-                  <td className="px-4 py-3 hidden sm:table-cell text-ops-muted">{item.nodeType}</td>
+                  <td className="px-4 py-3 hidden sm:table-cell text-ops-muted">
+                    {item.nodeType}
+                    {item.hasPole && (
+                      <span className="ml-1 rounded border border-ops-amber/30 bg-ops-amber/10 px-1 py-0.5 text-[9px] text-ops-amber">POSTE</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 hidden md:table-cell font-mono text-xs text-ops-dim">{item.ip ?? "—"}</td>
                   <td className="px-4 py-3 hidden md:table-cell text-[11px] text-ops-muted">{item.route.identifier} · {item.route.center.name}</td>
                   <td className="px-4 py-3 text-right">
@@ -167,6 +174,19 @@ export default function NodesPage() {
               onChange={(e) => editing ? setEditForm((f) => ({ ...f, snmpCommunity: e.target.value })) : setCreateForm((f) => ({ ...f, snmpCommunity: e.target.value }))}
               placeholder="public" />
           </div>
+          <label className="flex items-center gap-2 text-sm text-ops-muted">
+            <input
+              type="checkbox"
+              checked={editing ? editForm.hasPole : createForm.hasPole}
+              onChange={(e) =>
+                editing
+                  ? setEditForm((f) => ({ ...f, hasPole: e.target.checked }))
+                  : setCreateForm((f) => ({ ...f, hasPole: e.target.checked }))
+              }
+              className="rounded"
+            />
+            Montado en poste
+          </label>
           {!editing ? (
             <div className="space-y-1">
               <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Ruta</label>
