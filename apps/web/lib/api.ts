@@ -34,6 +34,16 @@ export async function apiPatch<T>(path: string, token: string, body: unknown): P
   return res.json() as Promise<T>;
 }
 
+export async function apiPostFile<T>(path: string, token: string, formData: FormData): Promise<T> {
+  const res = await fetch(`${getApiUrl()}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
 export function getApiUrl() {
   return API_URL;
 }
