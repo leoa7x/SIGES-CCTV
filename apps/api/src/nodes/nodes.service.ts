@@ -65,6 +65,7 @@ export class NodesService {
 
   findGeoJson() {
     return this.prisma.node.findMany({
+      where: { NOT: { lat: 0, lng: 0 } },
       select: { id: true, code: true, name: true, lat: true, lng: true, operativeState: true },
     });
   }
