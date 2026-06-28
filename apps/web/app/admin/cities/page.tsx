@@ -198,9 +198,9 @@ export default function CitiesPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell font-mono text-xs text-ops-muted">{item.daneCode ?? "—"}</td>
-                  <td className="px-4 py-3 hidden md:table-cell tabular-nums text-ops-muted">{item.counts.cameras}</td>
-                  <td className="px-4 py-3 hidden md:table-cell tabular-nums text-ops-muted">{item.counts.nodes}</td>
-                  <td className="px-4 py-3 hidden md:table-cell tabular-nums text-ops-muted">{item.counts.poles}</td>
+                  <td className="px-4 py-3 hidden md:table-cell tabular-nums text-ops-muted">{item.counts?.cameras ?? 0}</td>
+                  <td className="px-4 py-3 hidden md:table-cell tabular-nums text-ops-muted">{item.counts?.nodes ?? 0}</td>
+                  <td className="px-4 py-3 hidden md:table-cell tabular-nums text-ops-muted">{item.counts?.poles ?? 0}</td>
                   <td className="px-4 py-3">
                     <span className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${item.state === "ACTIVE" ? "border-ops-emerald/30 bg-ops-emerald/10 text-ops-emerald" : "border-ops-border bg-ops-surface text-ops-muted"}`}>
                       {item.state}
