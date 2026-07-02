@@ -29,6 +29,36 @@ export class FiberSegmentsService {
     });
   }
 
+  async findAllGeoJson() {
+    const segments = await this.prisma.fiberSegment.findMany({
+      include: {
+        nodeA: { select: { id: true, code: true, lat: true, lng: true, operativeState: true } },
+        nodeB: { select: { id: true, code: true, lat: true, lng: true, operativeState: true } },
+      },
+    });
+    return {
+      segments: segments.map((s) => ({
+        id: s.id,
+        state: s.state,
+        nodeA: {
+          id: s.nodeA.id,
+          code: s.nodeA.code,
+          lat: s.nodeA.lat,
+          lng: s.nodeA.lng,
+          operativeState: s.nodeA.operativeState,
+        },
+        nodeB: {
+          id: s.nodeB.id,
+          code: s.nodeB.code,
+          lat: s.nodeB.lat,
+          lng: s.nodeB.lng,
+          operativeState: s.nodeB.operativeState,
+        },
+        waypoints: s.waypoints as number[][],
+      })),
+    };
+  }
+
   findOne(id: string) {
     return this.prisma.fiberSegment.findUniqueOrThrow({
       where: { id },
