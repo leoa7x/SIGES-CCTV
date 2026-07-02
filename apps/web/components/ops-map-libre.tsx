@@ -31,6 +31,56 @@ export type FiberSegmentGeo = {
   waypoints: number[][];
 };
 
+const DASH_SEQ: number[][] = [
+  [0, 4, 3], [0.5, 4, 2.5], [1, 4, 2], [1.5, 4, 1.5],
+  [2, 4, 1], [2.5, 4, 0.5], [3, 4, 0],
+  [0, 0.5, 3, 3.5], [0, 1, 3, 3], [0, 1.5, 3, 2.5],
+  [0, 2, 3, 2], [0, 2.5, 3, 1.5], [0, 3, 3, 1], [0, 3.5, 3, 0.5],
+];
+
+function computeEffectiveState(seg: FiberSegmentGeo): "ONLINE" | "DEGRADED" | "OFFLINE" {
+  if (
+    seg.nodeA.operativeState === "OFFLINE" ||
+    seg.nodeB.operativeState === "OFFLINE" ||
+    seg.state === "CUT"
+  )
+    return "OFFLINE";
+  if (seg.nodeA.operativeState === "DEGRADED" || seg.nodeB.operativeState === "DEGRADED")
+    return "DEGRADED";
+  return "ONLINE";
+}
+
+function buildFiberGeoJson(segments: FiberSegmentGeo[]): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: segments
+      .filter(
+        (s) =>
+          !(s.nodeA.lat === 0 && s.nodeA.lng === 0) &&
+          !(s.nodeB.lat === 0 && s.nodeB.lng === 0)
+      )
+      .map((s) => ({
+        type: "Feature" as const,
+        geometry: {
+          type: "LineString" as const,
+          coordinates: [
+            [s.nodeA.lng, s.nodeA.lat],
+            ...(s.waypoints as [number, number][]),
+            [s.nodeB.lng, s.nodeB.lat],
+          ],
+        },
+        properties: {
+          id: s.id,
+          effectiveState: computeEffectiveState(s),
+          nodeAId: s.nodeA.id,
+          nodeBId: s.nodeB.id,
+          nodeACode: s.nodeA.code,
+          nodeBCode: s.nodeB.code,
+        },
+      })),
+  };
+}
+
 const OSM_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {
@@ -48,10 +98,22 @@ export default function OpsMapLibre({
   nodes,
   centers,
   onPlaceNode,
+  fiberSegments = [],
+  fiberDrawMode = false,
+  onFiberPoleClick,
+  onFiberMapClick,
+  onFiberDblClick,
+  drawingPreview,
 }: {
   nodes: NodeGeo[];
   centers?: CenterGeo[];
   onPlaceNode?: (lat: number, lng: number) => void;
+  fiberSegments?: FiberSegmentGeo[];
+  fiberDrawMode?: boolean;
+  onFiberPoleClick?: (nodeId: string, lat: number, lng: number) => void;
+  drawingPreview?: [number, number][];
+  onFiberMapClick?: (lat: number, lng: number) => void;
+  onFiberDblClick?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -61,6 +123,16 @@ export default function OpsMapLibre({
   const onPlaceNodeRef = useRef(onPlaceNode);
   useEffect(() => { onPlaceNodeRef.current = onPlaceNode; }, [onPlaceNode]);
   const centerMarkersRef = useRef<maplibregl.Marker[]>([]);
+
+  const animFrameRef = useRef<number | null>(null);
+  const fiberDrawModeRef = useRef(fiberDrawMode);
+  useEffect(() => { fiberDrawModeRef.current = fiberDrawMode; }, [fiberDrawMode]);
+  const onFiberPoleClickRef = useRef(onFiberPoleClick);
+  useEffect(() => { onFiberPoleClickRef.current = onFiberPoleClick; }, [onFiberPoleClick]);
+  const onFiberMapClickRef = useRef(onFiberMapClick);
+  useEffect(() => { onFiberMapClickRef.current = onFiberMapClick; }, [onFiberMapClick]);
+  const onFiberDblClickRef = useRef(onFiberDblClick);
+  useEffect(() => { onFiberDblClickRef.current = onFiberDblClick; }, [onFiberDblClick]);
 
   // Initialize map once
   useEffect(() => {
@@ -95,6 +167,7 @@ export default function OpsMapLibre({
           code: n.code,
           name: n.name,
           state: n.operativeState,
+          hasPole: n.hasPole ?? false,
         },
       })),
     };
@@ -128,6 +201,7 @@ export default function OpsMapLibre({
       map.on("click", "nodes-circle", (e) => {
         // Suppress popup while placement mode is active
         if (onPlaceNodeRef.current) return;
+        if (fiberDrawModeRef.current) return;
         const feat = e.features?.[0];
         if (!feat) return;
         const p = feat.properties as { code: string; name: string; state: string };
@@ -146,10 +220,12 @@ export default function OpsMapLibre({
 
       map.on("mouseenter", "nodes-circle", () => {
         if (onPlaceNodeRef.current) return;
+        if (fiberDrawModeRef.current) return;
         map.getCanvas().style.cursor = "pointer";
       });
       map.on("mouseleave", "nodes-circle", () => {
         if (onPlaceNodeRef.current) return;
+        if (fiberDrawModeRef.current) return;
         map.getCanvas().style.cursor = "";
       });
 
@@ -163,6 +239,200 @@ export default function OpsMapLibre({
       }
     }
   }, [nodes, mapReady]);
+
+  // Fiber layer setup — sources, layers, and animation loop
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    // Empty source — data is filled by the sibling effect below
+    map.addSource("fiber-segments", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    map.addSource("fiber-drawing", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+
+    const beforeId = map.getLayer("nodes-circle") ? "nodes-circle" : undefined;
+
+    // Pole halo — highlights hasPole nodes during drawing mode (hidden by default)
+    map.addLayer(
+      {
+        id: "nodes-pole-halo",
+        type: "circle",
+        source: "nodes",
+        filter: ["==", ["get", "hasPole"], true],
+        paint: {
+          "circle-radius": 14,
+          "circle-color": "rgba(0,0,0,0)",
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#ffffff",
+        },
+        layout: { visibility: "none" },
+      },
+      beforeId
+    );
+
+    map.addLayer(
+      {
+        id: "fiber-offline",
+        type: "line",
+        source: "fiber-segments",
+        filter: ["==", ["get", "effectiveState"], "OFFLINE"],
+        paint: { "line-color": "#f43f5e", "line-width": 4 },
+      },
+      beforeId
+    );
+
+    map.addLayer(
+      {
+        id: "fiber-degraded",
+        type: "line",
+        source: "fiber-segments",
+        filter: ["==", ["get", "effectiveState"], "DEGRADED"],
+        paint: { "line-color": "#f59e0b", "line-width": 3 },
+      },
+      beforeId
+    );
+
+    map.addLayer(
+      {
+        id: "fiber-online",
+        type: "line",
+        source: "fiber-segments",
+        filter: ["==", ["get", "effectiveState"], "ONLINE"],
+        paint: {
+          "line-color": "#10b981",
+          "line-width": 3,
+          "line-dasharray": DASH_SEQ[0],
+        },
+      },
+      beforeId
+    );
+
+    map.addLayer({
+      id: "fiber-drawing-line",
+      type: "line",
+      source: "fiber-drawing",
+      paint: {
+        "line-color": "#3b82f6",
+        "line-width": 2,
+        "line-dasharray": [4, 3],
+      },
+    });
+
+    // Animation loop — only mutates fiber-online paint, cheap when nothing is ONLINE
+    const liveMap = map;
+    let step = 0;
+    let lastTs = 0;
+    function tick(ts: number) {
+      if (ts - lastTs > 80) {
+        step = (step + 1) % DASH_SEQ.length;
+        if (liveMap.getLayer("fiber-online")) {
+          liveMap.setPaintProperty("fiber-online", "line-dasharray", DASH_SEQ[step]);
+        }
+        lastTs = ts;
+      }
+      animFrameRef.current = requestAnimationFrame(tick);
+    }
+    animFrameRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (animFrameRef.current !== null) {
+        cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = null;
+      }
+      ["fiber-drawing-line", "nodes-pole-halo", "fiber-online", "fiber-degraded", "fiber-offline"]
+        .forEach((id) => { if (map.getLayer(id)) map.removeLayer(id); });
+      ["fiber-drawing", "fiber-segments"]
+        .forEach((id) => { if (map.getSource(id)) map.removeSource(id); });
+    };
+  }, [mapReady]);
+
+  // Push new fiber GeoJSON whenever fiberSegments changes
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const src = map.getSource("fiber-segments") as maplibregl.GeoJSONSource | undefined;
+    if (src) src.setData(buildFiberGeoJson(fiberSegments));
+  }, [fiberSegments, mapReady]);
+
+  // Update drawing preview line
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const coords = drawingPreview ?? [];
+    const geojson: GeoJSON.FeatureCollection = {
+      type: "FeatureCollection",
+      features:
+        coords.length >= 2
+          ? [
+              {
+                type: "Feature",
+                geometry: { type: "LineString", coordinates: coords },
+                properties: {},
+              },
+            ]
+          : [],
+    };
+    const src = map.getSource("fiber-drawing") as maplibregl.GeoJSONSource | undefined;
+    if (src) src.setData(geojson);
+  }, [drawingPreview, mapReady]);
+
+  // Drawing mode: cursor, pole halos, click/dblclick handlers
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    // Toggle pole halo visibility
+    if (map.getLayer("nodes-pole-halo")) {
+      map.setLayoutProperty(
+        "nodes-pole-halo",
+        "visibility",
+        fiberDrawMode ? "visible" : "none"
+      );
+    }
+
+    if (!fiberDrawMode) {
+      map.getCanvas().style.cursor = "";
+      return;
+    }
+
+    map.getCanvas().style.cursor = "crosshair";
+
+    const handlePoleClick = (e: maplibregl.MapLayerMouseEvent) => {
+      e.preventDefault();
+      const feat = e.features?.[0];
+      if (!feat) return;
+      const p = feat.properties as { id: string };
+      const coords = (feat.geometry as GeoJSON.Point).coordinates;
+      onFiberPoleClickRef.current?.(p.id, coords[1], coords[0]);
+    };
+
+    const handleMapClick = (e: maplibregl.MapMouseEvent) => {
+      const hits = map.queryRenderedFeatures(e.point, { layers: ["nodes-circle"] });
+      if (hits.length > 0) return;
+      onFiberMapClickRef.current?.(e.lngLat.lat, e.lngLat.lng);
+    };
+
+    const handleDblClick = (e: maplibregl.MapMouseEvent) => {
+      e.preventDefault();
+      onFiberDblClickRef.current?.();
+    };
+
+    map.on("click", "nodes-circle", handlePoleClick);
+    map.on("click", handleMapClick);
+    map.on("dblclick", handleDblClick);
+
+    return () => {
+      map.off("click", "nodes-circle", handlePoleClick);
+      map.off("click", handleMapClick);
+      map.off("dblclick", handleDblClick);
+      map.getCanvas().style.cursor = "";
+    };
+  }, [fiberDrawMode, mapReady]);
 
   // Placement mode: crosshair cursor + capture one map click
   useEffect(() => {
