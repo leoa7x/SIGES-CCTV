@@ -10,6 +10,7 @@ export type NodeGeo = {
   lat: number;
   lng: number;
   operativeState: string;
+  hasPole?: boolean;
 };
 
 export type CenterGeo = {
@@ -20,6 +21,14 @@ export type CenterGeo = {
   phone: string | null;
   lat: number;
   lng: number;
+};
+
+export type FiberSegmentGeo = {
+  id: string;
+  state: "ACTIVE" | "CUT" | "DEGRADED" | "MAINTENANCE";
+  nodeA: { id: string; code: string; lat: number; lng: number; operativeState: string };
+  nodeB: { id: string; code: string; lat: number; lng: number; operativeState: string };
+  waypoints: number[][];
 };
 
 const OSM_STYLE: maplibregl.StyleSpecification = {
