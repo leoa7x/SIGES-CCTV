@@ -6,6 +6,7 @@
     "target": "ES2022",
     "outDir": "./dist",
     "rootDir": "./src",
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "incremental": true

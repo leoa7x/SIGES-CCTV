@@ -13,9 +13,15 @@ import { IncidentsModule } from "./incidents/incidents.module";
 import { LogbookModule } from "./logbook/logbook.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { FiberSegmentsModule } from "./fiber-segments/fiber-segments.module";
+import { FiberPointsModule } from "./fiber-points/fiber-points.module";
+import { FiberCablesModule } from "./fiber-cables/fiber-cables.module";
 import { EventsModule } from "./events/events.module";
+import { SplicesModule } from "./splices/splices.module";
 import { MonitorModule } from "./monitor/monitor.module";
 import { GatewayModule } from "./gateway/gateway.module";
+import { NodeAssetsModule } from "./node-assets/node-assets.module";
+import { NodeAnalyticsModule } from "./node-analytics/node-analytics.module";
+import { NodeDiscoveryModule } from "./node-discovery/node-discovery.module";
 
 @Module({
   imports: [
@@ -33,9 +39,15 @@ import { GatewayModule } from "./gateway/gateway.module";
     LogbookModule,
     DashboardModule,
     FiberSegmentsModule,
+    FiberPointsModule,
+    FiberCablesModule,
     EventsModule,
+    SplicesModule,
     MonitorModule,
     GatewayModule,
+    NodeAssetsModule,
+    NodeAnalyticsModule,
+    NodeDiscoveryModule,
   ],
 })
 export class AppModule {}

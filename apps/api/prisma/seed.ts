@@ -49,14 +49,235 @@ async function main() {
 
   const node = await prisma.node.upsert({
     where: { code: "NOD-001" },
-    update: {},
-    create: { code: "NOD-001", name: "Nodo Plaza Bolívar", lat: 4.5981, lng: -74.0758, address: "Plaza de Bolívar, Bogotá", routeId: route.id },
+    update: {
+      name: "Nodo Plaza Bolívar",
+      lat: 4.5981,
+      lng: -74.0758,
+      address: "Plaza de Bolívar, Bogotá",
+      ip: "192.168.1.10",
+      primaryIp: "192.168.1.10",
+      scanSubnetCidr: "192.168.1.0/24",
+      hasPole: true,
+      routeId: route.id,
+    },
+    create: {
+      code: "NOD-001",
+      name: "Nodo Plaza Bolívar",
+      lat: 4.5981,
+      lng: -74.0758,
+      address: "Plaza de Bolívar, Bogotá",
+      ip: "192.168.1.10",
+      primaryIp: "192.168.1.10",
+      scanSubnetCidr: "192.168.1.0/24",
+      routeId: route.id,
+      hasPole: true,
+    },
+  });
+
+  await prisma.analyticsCatalog.upsert({
+    where: { code: "LPR" },
+    update: { name: "LPR", scope: "BOTH" },
+    create: { code: "LPR", name: "LPR", scope: "BOTH" },
+  });
+  await prisma.analyticsCatalog.upsert({
+    where: { code: "RECONOCIMIENTO_FACIAL" },
+    update: { name: "Reconocimiento facial", scope: "BOTH" },
+    create: { code: "RECONOCIMIENTO_FACIAL", name: "Reconocimiento facial", scope: "BOTH" },
+  });
+  await prisma.analyticsCatalog.upsert({
+    where: { code: "CONTEO_PERSONAS" },
+    update: { name: "Conteo de personas", scope: "BOTH" },
+    create: { code: "CONTEO_PERSONAS", name: "Conteo de personas", scope: "BOTH" },
+  });
+  await prisma.analyticsCatalog.upsert({
+    where: { code: "INTRUSION" },
+    update: { name: "Intrusión", scope: "BOTH" },
+    create: { code: "INTRUSION", name: "Intrusión", scope: "BOTH" },
+  });
+  await prisma.analyticsCatalog.upsert({
+    where: { code: "CRUCE_LINEA" },
+    update: { name: "Cruce de línea", scope: "BOTH" },
+    create: { code: "CRUCE_LINEA", name: "Cruce de línea", scope: "BOTH" },
+  });
+  await prisma.analyticsCatalog.upsert({
+    where: { code: "LOITERING" },
+    update: { name: "Loitering", scope: "BOTH" },
+    create: { code: "LOITERING", name: "Loitering", scope: "BOTH" },
+  });
+  const otherAnalytics = await prisma.analyticsCatalog.upsert({
+    where: { code: "OTHER" },
+    update: { name: "Otra", scope: "BOTH", isCustom: true },
+    create: { code: "OTHER", name: "Otra", scope: "BOTH", isCustom: true },
+  });
+
+  const trunkPoint = await prisma.fiberPoint.upsert({
+    where: { id: "demo-fiber-point-node-001" },
+    update: {
+      name: node.name,
+      latitude: node.lat,
+      longitude: node.lng,
+      nodeId: node.id,
+      routeId: route.id,
+      kind: "NODE",
+    },
+    create: {
+      id: "demo-fiber-point-node-001",
+      routeId: route.id,
+      kind: "NODE",
+      name: node.name,
+      latitude: node.lat,
+      longitude: node.lng,
+      nodeId: node.id,
+    },
+  });
+
+  const splice = await prisma.spliceClosure.upsert({
+    where: { id: "demo-splice-001" },
+    update: {
+      routeId: route.id,
+      code: "EMP-001",
+      name: "Empalme Carrera 8",
+      closureType: "MUFLA",
+      latitude: 4.5991,
+      longitude: -74.0744,
+      trayCount: 2,
+      fiberCapacity: 24,
+    },
+    create: {
+      id: "demo-splice-001",
+      routeId: route.id,
+      code: "EMP-001",
+      name: "Empalme Carrera 8",
+      closureType: "MUFLA",
+      latitude: 4.5991,
+      longitude: -74.0744,
+      trayCount: 2,
+      fiberCapacity: 24,
+    },
+  });
+
+  const splicePoint = await prisma.fiberPoint.upsert({
+    where: { id: "demo-fiber-point-splice-001" },
+    update: {
+      routeId: route.id,
+      kind: "SPLICE",
+      name: splice.name,
+      latitude: splice.latitude,
+      longitude: splice.longitude,
+      spliceId: splice.id,
+    },
+    create: {
+      id: "demo-fiber-point-splice-001",
+      routeId: route.id,
+      kind: "SPLICE",
+      name: splice.name,
+      latitude: splice.latitude,
+      longitude: splice.longitude,
+      spliceId: splice.id,
+    },
+  });
+
+  const cable = await prisma.fiberCable.upsert({
+    where: { id: "demo-fiber-cable-001" },
+    update: {
+      routeId: route.id,
+      code: "CAB-TRONCAL-001",
+      kind: "TRONCAL",
+      fiberCount: 24,
+      originPointId: trunkPoint.id,
+      destinationPointId: splicePoint.id,
+    },
+    create: {
+      id: "demo-fiber-cable-001",
+      routeId: route.id,
+      code: "CAB-TRONCAL-001",
+      kind: "TRONCAL",
+      fiberCount: 24,
+      originPointId: trunkPoint.id,
+      destinationPointId: splicePoint.id,
+    },
+  });
+
+  await prisma.spliceCableLeg.upsert({
+    where: { id: "demo-splice-leg-in-001" },
+    update: {
+      spliceId: splice.id,
+      fiberCableId: cable.id,
+      direction: "IN",
+      fiberCount: 24,
+    },
+    create: {
+      id: "demo-splice-leg-in-001",
+      spliceId: splice.id,
+      fiberCableId: cable.id,
+      direction: "IN",
+      fiberCount: 24,
+    },
   });
 
   await prisma.camera.upsert({
     where: { code: "CAM-001" },
     update: {},
     create: { code: "CAM-001", name: "Cámara Norte - Plaza Bolívar", ip: "192.168.1.101", brand: "Hikvision", model: "DS-2CD2143G2-I", resolution: "4MP", nodeId: node.id },
+  });
+
+  const cameraAsset = await prisma.nodeAsset.upsert({
+    where: { mac: "00:11:22:33:44:55" },
+    update: {
+      nodeId: node.id,
+      assetType: "CAMARA_PTZ",
+      name: "PTZ Plaza Bolívar Norte",
+      ip: "192.168.1.101",
+      vendor: "Hikvision",
+      model: "DS-2CD2143G2-I",
+      hostname: "cam-norte",
+      source: "DISCOVERY_ENRICHED",
+    },
+    create: {
+      nodeId: node.id,
+      assetType: "CAMARA_PTZ",
+      name: "PTZ Plaza Bolívar Norte",
+      ip: "192.168.1.101",
+      mac: "00:11:22:33:44:55",
+      vendor: "Hikvision",
+      model: "DS-2CD2143G2-I",
+      hostname: "cam-norte",
+      source: "DISCOVERY_ENRICHED",
+    },
+  });
+
+  await prisma.nodeAnalyticsAssignment.upsert({
+    where: {
+      nodeId_analyticsCatalogId_customLabel: {
+        nodeId: node.id,
+        analyticsCatalogId: otherAnalytics.id,
+        customLabel: "Detección de aglomeraciones",
+      },
+    },
+    update: { isEnabled: true },
+    create: {
+      nodeId: node.id,
+      analyticsCatalogId: otherAnalytics.id,
+      customLabel: "Detección de aglomeraciones",
+      isEnabled: true,
+    },
+  });
+
+  await prisma.nodeAssetAnalyticsAssignment.upsert({
+    where: {
+      nodeAssetId_analyticsCatalogId_customLabel: {
+        nodeAssetId: cameraAsset.id,
+        analyticsCatalogId: otherAnalytics.id,
+        customLabel: "Seguimiento PTZ inteligente",
+      },
+    },
+    update: { isEnabled: true },
+    create: {
+      nodeAssetId: cameraAsset.id,
+      analyticsCatalogId: otherAnalytics.id,
+      customLabel: "Seguimiento PTZ inteligente",
+      isEnabled: true,
+    },
   });
 
   console.log("Seed complete.");

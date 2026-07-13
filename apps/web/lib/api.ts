@@ -34,6 +34,17 @@ export async function apiPatch<T>(path: string, token: string, body: unknown): P
   return res.json() as Promise<T>;
 }
 
+export async function apiDelete(path: string, token: string): Promise<void> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? `API ${res.status}`);
+  }
+}
+
 export async function apiPostFile<T>(path: string, token: string, formData: FormData): Promise<T> {
   const res = await fetch(`${getApiUrl()}${path}`, {
     method: "POST",

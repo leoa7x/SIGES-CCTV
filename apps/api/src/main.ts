@@ -3,12 +3,13 @@ import { ValidationPipe } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { IoAdapter } from "@nestjs/platform-socket.io";
 import { AppModule } from "./app.module";
+import { createCorsOriginResolver } from "./common/cors";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.enableCors({
-    origin: process.env.CORS_ORIGIN ?? "http://localhost:3001",
+    origin: createCorsOriginResolver(),
     credentials: true,
   });
 
@@ -25,7 +26,7 @@ async function bootstrap() {
   SwaggerModule.setup("docs", app, SwaggerModule.createDocument(app, config));
 
   const port = process.env.API_PORT ?? 4001;
-  await app.listen(port);
+  await app.listen(port, "0.0.0.0");
   console.log(`SIGES-CCTV API running on port ${port}`);
 }
 

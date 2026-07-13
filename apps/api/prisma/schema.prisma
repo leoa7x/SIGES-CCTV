@@ -18,6 +18,7 @@ model User {
   state          EntityState    @default(ACTIVE)
   incidents      Incident[]     @relation("AssignedIncidents")
   logbookEntries LogbookEntry[]
+  discoveryJobs  NodeDiscoveryJob[]
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 }
@@ -93,6 +94,9 @@ model Route {
   monitoringCenterId String
   center             MonitoringCenter @relation(fields: [monitoringCenterId], references: [id])
   nodes              Node[]
+  fiberCables        FiberCable[]
+  fiberPoints        FiberPoint[]
+  spliceClosures     SpliceClosure[]
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 }
@@ -104,27 +108,33 @@ enum RouteType {
 }
 
 model Node {
-  id             String         @id @default(uuid())
-  code           String         @unique
-  name           String
-  lat            Float
-  lng            Float
-  address        String?
-  ip             String?
-  mac            String?
-  nodeType       NodeType       @default(OTHER)
-  snmpCommunity  String?
-  operativeState NodeState      @default(ONLINE)
-  hasPole        Boolean        @default(false)
-  routeId        String
-  route          Route          @relation(fields: [routeId], references: [id])
-  cameras        Camera[]
-  fiberSegmentsA FiberSegment[] @relation("NodeA")
-  fiberSegmentsB FiberSegment[] @relation("NodeB")
-  logbookEntries LogbookEntry[]
-  incidents      Incident[]     @relation("NodeIncidents")
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  id                  String                    @id @default(uuid())
+  code                String                    @unique
+  name                String
+  lat                 Float
+  lng                 Float
+  address             String?
+  ip                  String?
+  primaryIp           String?
+  scanSubnetCidr      String?
+  mac                 String?
+  nodeType            NodeType                  @default(OTHER)
+  snmpCommunity       String?
+  operativeState      NodeState                 @default(ONLINE)
+  hasPole             Boolean                   @default(false)
+  routeId             String
+  route               Route                     @relation(fields: [routeId], references: [id])
+  cameras             Camera[]
+  fiberSegmentsA      FiberSegment[]            @relation("NodeA")
+  fiberSegmentsB      FiberSegment[]            @relation("NodeB")
+  fiberPoints         FiberPoint[]
+  logbookEntries      LogbookEntry[]
+  incidents           Incident[]                @relation("NodeIncidents")
+  assets              NodeAsset[]
+  discoveryJobs       NodeDiscoveryJob[]
+  analyticsAssignments NodeAnalyticsAssignment[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
 }
 
 enum NodeType {
@@ -140,6 +150,143 @@ enum NodeState {
   DEGRADED
   OFFLINE
   MAINTENANCE
+}
+
+enum NodeAssetType {
+  CAMARA_PTZ
+  CAMARA_FIJA
+  SWITCH
+  UPS
+  OTHER
+}
+
+enum NodeAssetSource {
+  MANUAL
+  DISCOVERY
+  DISCOVERY_ENRICHED
+}
+
+enum NodeDiscoveryStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum NodeDiscoveredDeviceStatus {
+  DISCOVERED
+  CONFIRMED
+  DISMISSED
+  MERGED
+}
+
+enum AnalyticsScope {
+  NODE
+  ASSET
+  BOTH
+}
+
+model NodeAsset {
+  id                   String                        @id @default(uuid())
+  nodeId               String
+  node                 Node                          @relation(fields: [nodeId], references: [id])
+  assetType            NodeAssetType
+  name                 String
+  ip                   String?
+  mac                  String?                       @unique
+  vendor               String?
+  model                String?
+  hostname             String?
+  operativeState       NodeState                     @default(ONLINE)
+  source               NodeAssetSource               @default(MANUAL)
+  lastSeenAt           DateTime?
+  notes                String?
+  discoveredDevices    NodeDiscoveredDevice[]
+  analyticsAssignments NodeAssetAnalyticsAssignment[]
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
+
+  @@unique([nodeId, ip])
+}
+
+model NodeDiscoveryJob {
+  id                String                 @id @default(uuid())
+  nodeId            String
+  node              Node                   @relation(fields: [nodeId], references: [id])
+  status            NodeDiscoveryStatus    @default(PENDING)
+  requestedByUserId String?
+  requestedByUser   User?                  @relation(fields: [requestedByUserId], references: [id])
+  targetIp          String?
+  targetSubnetCidr  String?
+  rawSummary        Json?
+  errorMessage      String?
+  discoveredDevices NodeDiscoveredDevice[]
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+}
+
+model NodeDiscoveredDevice {
+  id                  String                     @id @default(uuid())
+  nodeDiscoveryJobId  String
+  nodeDiscoveryJob    NodeDiscoveryJob           @relation(fields: [nodeDiscoveryJobId], references: [id])
+  candidateType       NodeAssetType?
+  name                String?
+  ip                  String?
+  mac                 String?
+  vendor              String?
+  model               String?
+  hostname            String?
+  discoveryConfidence Int                        @default(0)
+  status              NodeDiscoveredDeviceStatus @default(DISCOVERED)
+  matchedAssetId      String?
+  matchedAsset        NodeAsset?                 @relation(fields: [matchedAssetId], references: [id])
+  rawPayload          Json?
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+}
+
+model AnalyticsCatalog {
+  id                   String                        @id @default(uuid())
+  code                 String                        @unique
+  name                 String
+  scope                AnalyticsScope                @default(BOTH)
+  isCustom             Boolean                       @default(false)
+  nodeAssignments      NodeAnalyticsAssignment[]
+  assetAssignments     NodeAssetAnalyticsAssignment[]
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
+}
+
+model NodeAnalyticsAssignment {
+  id                 String            @id @default(uuid())
+  nodeId             String
+  node               Node              @relation(fields: [nodeId], references: [id])
+  analyticsCatalogId String
+  analyticsCatalog   AnalyticsCatalog  @relation(fields: [analyticsCatalogId], references: [id])
+  customLabel        String?
+  isEnabled          Boolean           @default(true)
+  notes              String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@unique([nodeId, analyticsCatalogId, customLabel])
+}
+
+model NodeAssetAnalyticsAssignment {
+  id                 String            @id @default(uuid())
+  nodeAssetId        String
+  nodeAsset          NodeAsset         @relation(fields: [nodeAssetId], references: [id])
+  analyticsCatalogId String
+  analyticsCatalog   AnalyticsCatalog  @relation(fields: [analyticsCatalogId], references: [id])
+  customLabel        String?
+  isEnabled          Boolean           @default(true)
+  notes              String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@unique([nodeAssetId, analyticsCatalogId, customLabel])
 }
 
 model FiberSegment {
@@ -160,6 +307,160 @@ enum FiberState {
   CUT
   DEGRADED
   MAINTENANCE
+}
+
+enum FiberCableKind {
+  TRONCAL
+  DERIVACION
+}
+
+enum FiberPointKind {
+  NODE
+  SPLICE
+}
+
+enum SpliceLegDirection {
+  IN
+  OUT
+}
+
+enum FiberConnectionBlockKind {
+  FUSION
+  RESERVE
+  PASS_THROUGH
+  SPLIT
+}
+
+enum FiberDocumentStatus {
+  DRAFT
+  PARTIAL
+  DOCUMENTED
+  VALIDATED
+}
+
+model FiberCable {
+  id                 String              @id @default(uuid())
+  routeId            String
+  route              Route               @relation(fields: [routeId], references: [id])
+  code               String
+  kind               FiberCableKind      @default(TRONCAL)
+  fiberCount         Int
+  state              EntityState         @default(ACTIVE)
+  documentStatus     FiberDocumentStatus @default(DRAFT)
+  originPointId      String
+  originPoint        FiberPoint          @relation("FiberCableOriginPoint", fields: [originPointId], references: [id])
+  destinationPointId String
+  destinationPoint   FiberPoint          @relation("FiberCableDestinationPoint", fields: [destinationPointId], references: [id])
+  parentCableId      String?
+  parentCable        FiberCable?         @relation("FiberCableParentChild", fields: [parentCableId], references: [id])
+  childCables        FiberCable[]        @relation("FiberCableParentChild")
+  sourceSpliceId     String?
+  sourceSplice       SpliceClosure?      @relation("SpliceSourceCable", fields: [sourceSpliceId], references: [id])
+  notes              String?
+  spliceLegs         SpliceCableLeg[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@unique([routeId, code])
+}
+
+model FiberPoint {
+  id                String         @id @default(uuid())
+  routeId           String
+  route             Route          @relation(fields: [routeId], references: [id])
+  kind              FiberPointKind
+  name              String
+  latitude          Float
+  longitude         Float
+  nodeId            String?
+  node              Node?          @relation(fields: [nodeId], references: [id])
+  spliceId          String?        @unique
+  splice            SpliceClosure? @relation(fields: [spliceId], references: [id])
+  originCables      FiberCable[]   @relation("FiberCableOriginPoint")
+  destinationCables FiberCable[]   @relation("FiberCableDestinationPoint")
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+}
+
+model SpliceClosure {
+  id             String              @id @default(uuid())
+  routeId        String
+  route          Route               @relation(fields: [routeId], references: [id])
+  code           String
+  name           String
+  closureType    String
+  latitude       Float
+  longitude      Float
+  trayCount      Int
+  fiberCapacity  Int
+  notes          String?
+  documentStatus FiberDocumentStatus @default(DRAFT)
+  point          FiberPoint?
+  cableLegs      SpliceCableLeg[]
+  blockInputs    SpliceBlockInput[]
+  connections    SpliceFiberConnection[]
+  sourceCables   FiberCable[]        @relation("SpliceSourceCable")
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@unique([routeId, code])
+}
+
+model SpliceCableLeg {
+  id                String                  @id @default(uuid())
+  spliceId          String
+  splice            SpliceClosure           @relation(fields: [spliceId], references: [id])
+  fiberCableId      String
+  fiberCable        FiberCable              @relation(fields: [fiberCableId], references: [id])
+  direction         SpliceLegDirection
+  bufferLabel       String?
+  fiberCount        Int
+  reservedFiberCount Int                    @default(0)
+  notes             String?
+  fromBlocks        SpliceBlockInput[]      @relation("BlockFromLeg")
+  toBlocks          SpliceBlockInput[]      @relation("BlockToLeg")
+  fromConnections   SpliceFiberConnection[] @relation("ConnectionFromLeg")
+  toConnections     SpliceFiberConnection[] @relation("ConnectionToLeg")
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+}
+
+model SpliceBlockInput {
+  id             String                   @id @default(uuid())
+  spliceId       String
+  splice         SpliceClosure            @relation(fields: [spliceId], references: [id])
+  fromLegId      String
+  fromLeg        SpliceCableLeg           @relation("BlockFromLeg", fields: [fromLegId], references: [id])
+  fromFiberStart Int
+  fromFiberEnd   Int
+  toLegId        String
+  toLeg          SpliceCableLeg           @relation("BlockToLeg", fields: [toLegId], references: [id])
+  toFiberStart   Int
+  toFiberEnd     Int
+  blockKind      FiberConnectionBlockKind
+  notes          String?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+}
+
+model SpliceFiberConnection {
+  id              String                   @id @default(uuid())
+  spliceId        String
+  splice          SpliceClosure            @relation(fields: [spliceId], references: [id])
+  fromLegId       String
+  fromLeg         SpliceCableLeg           @relation("ConnectionFromLeg", fields: [fromLegId], references: [id])
+  fromFiberNumber Int
+  toLegId         String
+  toLeg           SpliceCableLeg           @relation("ConnectionToLeg", fields: [toLegId], references: [id])
+  toFiberNumber   Int
+  connectionKind  FiberConnectionBlockKind
+  status          EntityState              @default(ACTIVE)
+  notes           String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  @@unique([spliceId, fromLegId, fromFiberNumber])
+  @@unique([spliceId, toLegId, toFiberNumber])
 }
 
 // ─── Cameras ──────────────────────────────────────────────────────────────────

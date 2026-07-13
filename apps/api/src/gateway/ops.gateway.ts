@@ -8,6 +8,7 @@ import {
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Server, Socket } from "socket.io";
 import { Kafka, Consumer } from "kafkajs";
+import { createCorsOriginResolver } from "../common/cors";
 
 interface StateChangePayload {
   entityType: string;
@@ -19,7 +20,7 @@ interface StateChangePayload {
 }
 
 @Injectable()
-@WebSocketGateway({ cors: { origin: process.env.CORS_ORIGIN ?? "http://localhost:3001" } })
+@WebSocketGateway({ cors: { origin: createCorsOriginResolver() } })
 export class OpsGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit, OnModuleDestroy {
   @WebSocketServer() server!: Server;
   private readonly logger = new Logger(OpsGateway.name);

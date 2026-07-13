@@ -9,4 +9,6 @@ dist/
 .DS_Store
 Thumbs.db
 *.log
+*.tsbuildinfo
 prisma/migrations/
+tools/LAN-Orangutan/

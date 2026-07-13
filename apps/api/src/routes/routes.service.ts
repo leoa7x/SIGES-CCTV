@@ -22,7 +22,7 @@ export class RoutesService {
   findAll(centerId?: string) {
     return this.prisma.route.findMany({
       where: centerId ? { monitoringCenterId: centerId } : undefined,
-      include: { center: true, _count: { select: { nodes: true } } },
+      include: { center: true, _count: { select: { nodes: true, fiberCables: true, spliceClosures: true } } },
       orderBy: { identifier: "asc" },
     });
   }
@@ -30,7 +30,41 @@ export class RoutesService {
   findOne(id: string) {
     return this.prisma.route.findUniqueOrThrow({
       where: { id },
-      include: { center: true, nodes: { include: { _count: { select: { cameras: true } } } } },
+      include: {
+        center: true,
+        nodes: { include: { _count: { select: { cameras: true } } } },
+        fiberPoints: {
+          include: {
+            node: { select: { id: true, code: true, name: true, lat: true, lng: true } },
+            splice: { select: { id: true, code: true, name: true, closureType: true, documentStatus: true } },
+          },
+          orderBy: { name: "asc" },
+        },
+        fiberCables: {
+          include: {
+            originPoint: true,
+            destinationPoint: true,
+            parentCable: { select: { id: true, code: true, kind: true } },
+            childCables: { select: { id: true, code: true, kind: true, documentStatus: true } },
+            sourceSplice: { select: { id: true, code: true, name: true } },
+            spliceLegs: { select: { id: true, direction: true, fiberCount: true, reservedFiberCount: true } },
+          },
+          orderBy: [{ kind: "asc" }, { code: "asc" }],
+        },
+        spliceClosures: {
+          include: {
+            point: true,
+            cableLegs: {
+              include: {
+                fiberCable: { select: { id: true, code: true, kind: true, fiberCount: true } },
+              },
+            },
+            blockInputs: true,
+            connections: true,
+          },
+          orderBy: { code: "asc" },
+        },
+      },
     });
   }
 

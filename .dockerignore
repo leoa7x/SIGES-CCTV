@@ -1,0 +1,10 @@
+node_modules
+apps/*/node_modules
+apps/*/.next
+apps/*/dist
+apps/*/*.tsbuildinfo
+.git
+.codex
+.agents
+docs
+npm-debug.log*

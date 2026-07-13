@@ -197,25 +197,37 @@ cp .env.example .env
 # editar valores de JWT_SECRET y MONITOR_API_TOKEN
 ```
 
-**2. Infraestructura**
+**2. Dependencias del workspace**
 ```bash
-docker compose up -d
+npm install
 ```
 
-**3. Base de datos**
+**3. Infraestructura compartida**
 ```bash
-npm run db:push --workspace=apps/api
-npm run db:seed --workspace=apps/api
+docker compose up -d postgres redis redpanda minio
+```
+
+**4. Base de datos**
+```bash
+npm run db:push
+npm run db:seed
 ```
 
 Credenciales iniciales: `admin@sigescctv.co` / `Admin1234!`
 
-**4. Apps (en terminales separadas)**
+**5. Desarrollo local (en terminales separadas)**
 ```bash
 npm run dev --workspace=apps/api     # API en :4001
 npm run dev --workspace=apps/web     # Web en :3001
 cd apps/monitor && go run .          # Monitor daemon
 ```
+
+**6. Stack completo en Docker**
+```bash
+docker compose up -d --build
+```
+
+Esto construye `apps/api` y `apps/web` desde el monorepo raíz usando el `package-lock.json` del workspace.
 
 ---
 
