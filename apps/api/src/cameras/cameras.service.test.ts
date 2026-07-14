@@ -36,6 +36,24 @@ test("findOne omits encrypted stream password but returns preview metadata", asy
   assert.equal((result as { streamTransport?: string }).streamTransport, "TCP");
 });
 
+test("findOne redacts legacy embedded stream credentials", async () => {
+  const prisma = {
+    camera: {
+      findUniqueOrThrow: async () => ({
+        id: "cam-1",
+        streamUrl: "rtsp://operator:super-secret@192.168.1.20:554/stream1",
+        streamPasswordEncrypted: null,
+        node: { id: "node-1" },
+      }),
+    },
+  };
+  const service = new (CamerasService as any)(prisma, new CameraSecretService()) as CamerasService;
+
+  const result = await service.findOne("cam-1");
+
+  assert.equal((result as { streamUrl?: string }).streamUrl, "rtsp://192.168.1.20:554/stream1");
+});
+
 test("create encrypts stream passwords before persistence", async () => {
   let createData: Record<string, unknown> | undefined;
   const prisma = {
@@ -59,4 +77,44 @@ test("create encrypts stream passwords before persistence", async () => {
   assert.equal(createData?.streamPassword, undefined);
   assert.notEqual(createData?.streamPasswordEncrypted, "super-secret");
   assert.equal(secretService.decrypt(createData?.streamPasswordEncrypted as string), "super-secret");
+});
+
+test("create strips embedded RTSP credentials and encrypts the password separately", async () => {
+  let createData: Record<string, unknown> | undefined;
+  const prisma = {
+    camera: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        createData = data;
+        return { id: "cam-1", ...data };
+      },
+    },
+  };
+  const secretService = new CameraSecretService();
+  const service = new (CamerasService as any)(prisma, secretService) as CamerasService;
+
+  await service.create({
+    code: "CAM-001",
+    name: "Camara Norte",
+    nodeId: "node-1",
+    ip: "192.168.1.20",
+    streamUrl: "rtsp://operator:super-secret@192.168.1.20:554/stream1",
+  } as never);
+
+  assert.equal(createData?.streamUrl, "rtsp://192.168.1.20:554/stream1");
+  assert.equal(createData?.streamUsername, "operator");
+  assert.equal(secretService.decrypt(createData?.streamPasswordEncrypted as string), "super-secret");
+});
+
+test("create rejects non-RTSP preview URLs and targets that do not match the camera IP", async () => {
+  const prisma = { camera: { create: async () => ({ id: "cam-1" }) } };
+  const service = new (CamerasService as any)(prisma, new CameraSecretService()) as CamerasService;
+
+  await assert.rejects(
+    () => service.create({ code: "CAM-001", name: "Camara Norte", nodeId: "node-1", streamUrl: "http://192.168.1.20/live" } as never),
+    /RTSP/,
+  );
+  await assert.rejects(
+    () => service.create({ code: "CAM-001", name: "Camara Norte", nodeId: "node-1", ip: "192.168.1.20", streamUrl: "rtsp://192.168.1.21/live" } as never),
+    /camera IP/,
+  );
 });

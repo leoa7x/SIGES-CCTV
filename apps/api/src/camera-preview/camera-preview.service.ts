@@ -9,12 +9,12 @@ const PREVIEW_TTL_MS = 60_000;
 @Injectable()
 export class CameraPreviewService {
   private readonly sessions = new Map<string, PreviewSession>();
+  private readonly expiryTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly cameras: CamerasService,
     @Inject("CameraPreviewAdapter")
     private readonly adapter: CameraPreviewAdapter,
-    private readonly now: () => number = Date.now,
   ) {}
 
   async startPreview(cameraId: string, userId: string): Promise<PreviewStartResponse> {
@@ -23,9 +23,10 @@ export class CameraPreviewService {
       cameraId,
       userId,
       status: "starting",
-      expiresAt: new Date(this.now() + PREVIEW_TTL_MS),
+      expiresAt: new Date(Date.now() + PREVIEW_TTL_MS),
     };
     this.sessions.set(session.sessionId, session);
+    this.scheduleExpiry(session);
 
     try {
       await this.adapter.start(session, await this.cameras.getPreviewConnection(cameraId));
@@ -45,7 +46,6 @@ export class CameraPreviewService {
 
   getPreviewStatus(sessionId: string, userId: string): PreviewStatusResponse {
     const session = this.getOwnedSession(sessionId, userId);
-    this.expire(session);
     if (session.status === "starting" || session.status === "live") {
       if (!this.adapter.getStream(sessionId)) this.markStreamUnavailable(session);
     }
@@ -59,8 +59,6 @@ export class CameraPreviewService {
 
   getMediaStream(sessionId: string, userId: string): NodeJS.ReadableStream {
     const session = this.getOwnedSession(sessionId, userId);
-    this.expire(session);
-    if (session.status === "expired") throw new NotFoundException("Preview session has expired");
     if (session.status === "failed") throw new NotFoundException("Preview session is unavailable");
 
     const stream = this.adapter.getStream(sessionId);
@@ -79,15 +77,19 @@ export class CameraPreviewService {
     return session;
   }
 
-  private expire(session: PreviewSession): void {
-    if (session.status !== "expired" && this.now() >= session.expiresAt.getTime()) {
-      session.status = "expired";
-      void this.adapter.stop(session.sessionId);
-    }
+  private scheduleExpiry(session: PreviewSession): void {
+    const timer = setTimeout(() => {
+      void this.stop(session);
+    }, PREVIEW_TTL_MS);
+    timer.unref();
+    this.expiryTimers.set(session.sessionId, timer);
   }
 
   private async stop(session: PreviewSession): Promise<void> {
-    if (session.status !== "expired") session.status = "expired";
+    const timer = this.expiryTimers.get(session.sessionId);
+    if (timer) clearTimeout(timer);
+    this.expiryTimers.delete(session.sessionId);
+    this.sessions.delete(session.sessionId);
     await this.adapter.stop(session.sessionId);
   }
 

@@ -64,6 +64,7 @@ export class CamerasService {
     if (!camera.previewEnabled || !camera.streamUrl) {
       throw new BadRequestException("Camera is not configured for live preview");
     }
+    this.validatePreviewUrl(camera.streamUrl, camera.ip);
     return {
       streamUrl: camera.streamUrl,
       streamUsername: camera.streamUsername,
@@ -75,10 +76,13 @@ export class CamerasService {
 
   async create(dto: CreateCameraDto) {
     const { nodeId, streamPassword, ...rest } = dto;
+    const stream = this.normalizeStreamUrl(rest.streamUrl, rest.ip, rest.streamUsername, streamPassword);
     const camera = await this.prisma.camera.create({
       data: {
         ...rest,
-        streamPasswordEncrypted: streamPassword ? this.secretService.encrypt(streamPassword) : undefined,
+        streamUrl: stream.streamUrl,
+        streamUsername: stream.streamUsername,
+        streamPasswordEncrypted: stream.streamPassword ? this.secretService.encrypt(stream.streamPassword) : undefined,
         node: { connect: { id: nodeId } },
       },
     });
@@ -87,11 +91,14 @@ export class CamerasService {
 
   async update(id: string, dto: UpdateCameraDto) {
     const { streamPassword, ...rest } = dto;
+    const stream = this.normalizeStreamUrl(rest.streamUrl, rest.ip, rest.streamUsername, streamPassword);
     const camera = await this.prisma.camera.update({
       where: { id },
       data: {
         ...rest,
-        streamPasswordEncrypted: streamPassword ? this.secretService.encrypt(streamPassword) : undefined,
+        streamUrl: stream.streamUrl,
+        streamUsername: stream.streamUsername,
+        streamPasswordEncrypted: stream.streamPassword ? this.secretService.encrypt(stream.streamPassword) : undefined,
       } as Parameters<typeof this.prisma.camera.update>[0]["data"],
     });
     return this.toSafeCamera(camera);
@@ -101,6 +108,56 @@ export class CamerasService {
     camera: T,
   ): Omit<T, "streamPasswordEncrypted" | "streamPassword"> {
     const { streamPasswordEncrypted: _, streamPassword: __, ...safe } = camera as T & { streamPassword?: unknown };
-    return safe;
+    const streamUrl = (safe as { streamUrl?: string }).streamUrl;
+    return { ...safe, streamUrl: this.redactStreamUrl(streamUrl) } as Omit<T, "streamPasswordEncrypted" | "streamPassword">;
+  }
+
+  private normalizeStreamUrl(
+    streamUrl: string | undefined,
+    ip: string | undefined,
+    streamUsername: string | undefined,
+    streamPassword: string | undefined,
+  ) {
+    if (!streamUrl) return { streamUrl, streamUsername, streamPassword };
+
+    const url = this.validatePreviewUrl(streamUrl, ip);
+    const embeddedUsername = url.username ? decodeURIComponent(url.username) : undefined;
+    const embeddedPassword = url.password ? decodeURIComponent(url.password) : undefined;
+    url.username = "";
+    url.password = "";
+    return {
+      streamUrl: url.toString(),
+      streamUsername: streamUsername ?? embeddedUsername,
+      streamPassword: streamPassword ?? embeddedPassword,
+    };
+  }
+
+  private validatePreviewUrl(streamUrl: string, ip?: string | null): URL {
+    let url: URL;
+    try {
+      url = new URL(streamUrl);
+    } catch {
+      throw new BadRequestException("Camera preview URL must be a valid RTSP URL");
+    }
+    if (url.protocol !== "rtsp:" && url.protocol !== "rtsps:") {
+      throw new BadRequestException("Camera preview URL must use RTSP or RTSPS");
+    }
+    if (!url.hostname) throw new BadRequestException("Camera preview URL must include a host");
+    if (ip && url.hostname.toLowerCase() !== ip.toLowerCase()) {
+      throw new BadRequestException("Camera preview URL host must match the configured camera IP");
+    }
+    return url;
+  }
+
+  private redactStreamUrl(streamUrl: string | undefined): string | undefined {
+    if (!streamUrl) return streamUrl;
+    try {
+      const url = new URL(streamUrl);
+      url.username = "";
+      url.password = "";
+      return url.toString();
+    } catch {
+      return streamUrl.replace(/^(rtsps?:\/\/)[^@/?#]*@/i, "$1");
+    }
   }
 }
