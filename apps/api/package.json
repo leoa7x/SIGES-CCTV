@@ -9,6 +9,8 @@
     "test:cors": "ts-node --project tsconfig.json src/common/cors.test.ts",
     "test:discovery": "ts-node --project tsconfig.json src/node-discovery/node-discovery.utils.test.ts",
     "test:network-telemetry": "ts-node --project tsconfig.json src/network-telemetry/network-telemetry.service.test.ts",
+    "test:observability": "ts-node --project tsconfig.json src/observability/observability.service.test.ts",
+    "test:routes-crud": "ts-node --project tsconfig.json src/routes/routes-crud.test.ts",
     "test:splices": "ts-node --project tsconfig.json src/splices/expand-blocks.test.ts",
     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "db:push": "dotenv -e ../../.env -- prisma db push",
