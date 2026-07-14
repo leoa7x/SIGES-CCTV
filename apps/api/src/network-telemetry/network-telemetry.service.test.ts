@@ -260,3 +260,79 @@ test("getNodeAssets serializes byte counters", async () => {
   assert.equal(result[0]?.bytesOut, "987");
   assert.doesNotThrow(() => JSON.stringify(result));
 });
+
+test("getNodeSummary upserts NODE_SILENT when the latest snapshot is missing", async () => {
+  const { service, upserts } = createService({
+    networkTelemetrySnapshot: { findFirst: async () => null },
+    networkTelemetryAlert: {
+      count: async () => 1,
+      upsert: async (args: unknown) => {
+        upserts.push(args);
+        return { id: "alert-1" };
+      },
+    },
+  });
+
+  await service.getNodeSummary("node-1");
+
+  assert.equal(upserts.length, 1);
+  const alert = upserts[0] as { where: { nodeId_kind_title: { kind: string; title: string } }; create: { severity: string; detail: string; firstSeenAt: Date }; update: { isActive: boolean; resolvedAt: null } };
+  assert.equal(alert.where.nodeId_kind_title.kind, "NODE_SILENT");
+  assert.equal(alert.where.nodeId_kind_title.title, "Nodo sin snapshots recientes");
+  assert.equal(alert.create.severity, "CRITICAL");
+  assert.equal(alert.create.detail, "No se recibió telemetría reciente para el nodo dentro de la ventana esperada.");
+  assert.ok(alert.create.firstSeenAt instanceof Date);
+  assert.deepEqual(alert.update, { isActive: true, resolvedAt: null, lastSeenAt: alert.create.firstSeenAt });
+});
+
+test("getNodeAlerts includes NODE_SILENT when no recent snapshot exists", async () => {
+  const { service, upserts } = createService({
+    networkTelemetrySnapshot: { findFirst: async () => null },
+    networkTelemetryAlert: {
+      findMany: async () => [{ kind: "NODE_SILENT" }],
+      upsert: async (args: unknown) => {
+        upserts.push(args);
+        return { id: "alert-1" };
+      },
+    },
+  });
+
+  const result = await service.getNodeAlerts("node-1");
+
+  assert.equal(result[0]?.kind, "NODE_SILENT");
+  assert.equal(upserts.length, 1);
+});
+
+test("getNodeAlerts upserts ASSET_SILENT for an official asset without a recent sample", async () => {
+  const { service, upserts } = createService({
+    networkTelemetrySnapshot: {
+      findFirst: async () => ({ id: "snap-1", capturedAt: new Date() }),
+    },
+    nodeAsset: {
+      findMany: async () => [{ id: "asset-1", name: "Camara norte" }],
+    },
+    networkTelemetryAssetSample: {
+      findMany: async () => [],
+    },
+    networkTelemetryAlert: {
+      findMany: async () => [{ kind: "ASSET_SILENT" }],
+      upsert: async (args: unknown) => {
+        upserts.push(args);
+        return { id: "alert-1" };
+      },
+    },
+  });
+
+  const result = await service.getNodeAlerts("node-1");
+
+  assert.equal(result[0]?.kind, "ASSET_SILENT");
+  assert.equal(upserts.length, 1);
+  const alert = upserts[0] as { where: { nodeId_kind_title: { kind: string; title: string } }; create: { nodeAssetId: string; severity: string; detail: string }; update: { isActive: boolean; resolvedAt: null } };
+  assert.equal(alert.where.nodeId_kind_title.kind, "ASSET_SILENT");
+  assert.equal(alert.where.nodeId_kind_title.title, "Activo sin telemetría reciente Camara norte");
+  assert.equal(alert.create.nodeAssetId, "asset-1");
+  assert.equal(alert.create.severity, "WARNING");
+  assert.equal(alert.create.detail, "El activo oficial no tuvo muestras de telemetría dentro de la ventana esperada.");
+  assert.deepEqual(alert.update.isActive, true);
+  assert.equal(alert.update.resolvedAt, null);
+});

@@ -7,6 +7,11 @@ import {
 } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
+import {
+  deriveNodeSilentAlert,
+  deriveSilentAssetAlerts,
+  TELEMETRY_SILENCE_WINDOW_MS,
+} from "./network-telemetry.alerts";
 import { IngestNetworkTelemetryDto } from "./network-telemetry.ingest.dto";
 
 @Injectable()
@@ -27,6 +32,7 @@ export class NetworkTelemetryService {
       where: { nodeId },
       orderBy: { capturedAt: "desc" },
     });
+    await this.deriveSilentAlerts(nodeId, snapshot?.capturedAt ?? null);
     const alertCount = await this.prisma.networkTelemetryAlert.count({
       where: { nodeId, isActive: true },
     });
@@ -82,6 +88,11 @@ export class NetworkTelemetryService {
   }
 
   async getNodeAlerts(nodeId: string) {
+    const snapshot = await this.prisma.networkTelemetrySnapshot.findFirst({
+      where: { nodeId },
+      orderBy: { capturedAt: "desc" },
+    });
+    await this.deriveSilentAlerts(nodeId, snapshot?.capturedAt ?? null);
     return this.prisma.networkTelemetryAlert.findMany({
       where: { nodeId, isActive: true },
       orderBy: [{ severity: "desc" }, { lastSeenAt: "desc" }],
@@ -209,5 +220,37 @@ export class NetworkTelemetryService {
           resolvedAt: null,
         },
       }));
+  }
+
+  private async deriveSilentAlerts(nodeId: string, latestCapturedAt: Date | null) {
+    const now = new Date();
+    const nodeSilentAlert = deriveNodeSilentAlert(nodeId, latestCapturedAt, now);
+    if (nodeSilentAlert) {
+      await this.prisma.networkTelemetryAlert.upsert(nodeSilentAlert);
+      return;
+    }
+
+    const cutoff = new Date(now.getTime() - TELEMETRY_SILENCE_WINDOW_MS);
+    const [assets, recentSamples] = await Promise.all([
+      this.prisma.nodeAsset.findMany({
+        where: { nodeId },
+        select: { id: true, name: true },
+      }),
+      this.prisma.networkTelemetryAssetSample.findMany({
+        where: {
+          nodeId,
+          nodeAssetId: { not: null },
+          snapshot: { capturedAt: { gte: cutoff } },
+        },
+        select: { nodeAssetId: true },
+      }),
+    ]);
+    const visibleAssetIds = new Set(
+      recentSamples.flatMap((sample) => sample.nodeAssetId ? [sample.nodeAssetId] : []),
+    );
+
+    for (const alert of deriveSilentAssetAlerts(nodeId, assets, visibleAssetIds, now)) {
+      await this.prisma.networkTelemetryAlert.upsert(alert);
+    }
   }
 }
