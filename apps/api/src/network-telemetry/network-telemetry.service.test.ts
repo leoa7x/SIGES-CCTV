@@ -218,3 +218,45 @@ test("ingestSnapshot upserts unmatched alerts with the Prisma compound selector"
     },
   });
 });
+
+test("getNodeTimeseries serializes byte counters", async () => {
+  const { service } = createService({
+    networkTelemetrySnapshot: {
+      findMany: async () => [{
+        capturedAt: new Date("2026-07-13T20:01:00.000Z"),
+        totalBytesIn: 123n,
+        totalBytesOut: 456n,
+        activeHosts: 1,
+        activeFlows: 2,
+      }],
+    },
+  });
+
+  const result = await service.getNodeTimeseries("node-1");
+
+  assert.equal(result[0]?.totalBytesIn, "123");
+  assert.equal(result[0]?.totalBytesOut, "456");
+  assert.doesNotThrow(() => JSON.stringify(result));
+});
+
+test("getNodeAssets serializes byte counters", async () => {
+  const { service } = createService({
+    networkTelemetrySnapshot: {
+      findFirst: async () => ({ id: "snap-1" }),
+    },
+    networkTelemetryAssetSample: {
+      findMany: async () => [{
+        id: "sample-1",
+        bytesIn: 789n,
+        bytesOut: 987n,
+        nodeAsset: { id: "asset-1" },
+      }],
+    },
+  });
+
+  const result = await service.getNodeAssets("node-1");
+
+  assert.equal(result[0]?.bytesIn, "789");
+  assert.equal(result[0]?.bytesOut, "987");
+  assert.doesNotThrow(() => JSON.stringify(result));
+});

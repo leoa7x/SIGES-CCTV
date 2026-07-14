@@ -44,7 +44,7 @@ export class NetworkTelemetryService {
   }
 
   async getNodeTimeseries(nodeId: string) {
-    return this.prisma.networkTelemetrySnapshot.findMany({
+    const snapshots = await this.prisma.networkTelemetrySnapshot.findMany({
       where: { nodeId },
       orderBy: { capturedAt: "asc" },
       take: 60,
@@ -56,6 +56,11 @@ export class NetworkTelemetryService {
         activeFlows: true,
       },
     });
+    return snapshots.map((snapshot) => ({
+      ...snapshot,
+      totalBytesIn: snapshot.totalBytesIn.toString(),
+      totalBytesOut: snapshot.totalBytesOut.toString(),
+    }));
   }
 
   async getNodeAssets(nodeId: string) {
@@ -64,11 +69,16 @@ export class NetworkTelemetryService {
       orderBy: { capturedAt: "desc" },
     });
     if (!snapshot) return [];
-    return this.prisma.networkTelemetryAssetSample.findMany({
+    const assets = await this.prisma.networkTelemetryAssetSample.findMany({
       where: { snapshotId: snapshot.id },
       include: { nodeAsset: true },
       orderBy: [{ bytesOut: "desc" }, { bytesIn: "desc" }],
     });
+    return assets.map((asset) => ({
+      ...asset,
+      bytesIn: asset.bytesIn.toString(),
+      bytesOut: asset.bytesOut.toString(),
+    }));
   }
 
   async getNodeAlerts(nodeId: string) {
