@@ -37,3 +37,11 @@
 - Expanded focused coverage for official-IP fallback, discovery MAC precedence with newest-first ordering, unmatched alert creation, and the Prisma compound selector payload.
 - Ran `npm run test:network-telemetry --workspace=apps/api`: PASS, 5 tests, 0 failures.
 - Ran `npm run build --workspace=apps/api`: PASS.
+
+## Review Fix 2
+
+- Discovery fallback now applies an explicit 24-hour `createdAt` cutoff calculated from each telemetry snapshot's `capturedAt`, for both MAC and IP lookups. Correlation priority remains official MAC, official IP, discovery MAC, discovery IP, then unmatched.
+- Snapshot creation, correlated sample insertion, and alert upserts now run in one interactive Prisma transaction. Node validation remains before the write transaction.
+- Added focused coverage for stale discovery MAC and IP records and transaction use; existing correlation and alert tests remain covered.
+- Ran `npm run test:network-telemetry --workspace=apps/api`: PASS, 8 tests, 0 failures.
+- Ran `npm run build --workspace=apps/api`: PASS.

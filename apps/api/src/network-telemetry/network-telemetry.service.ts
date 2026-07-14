@@ -15,62 +15,68 @@ export class NetworkTelemetryService {
 
   async ingestSnapshot(dto: IngestNetworkTelemetryDto) {
     const node = await this.prisma.node.findUniqueOrThrow({ where: { id: dto.nodeId } });
+    const capturedAt = new Date(dto.capturedAt);
 
-    const snapshot = await this.prisma.networkTelemetrySnapshot.create({
-      data: {
-        nodeId: node.id,
-        collectorId: dto.collectorId,
-        capturedAt: new Date(dto.capturedAt),
-        windowSeconds: dto.windowSeconds,
-        totalBytesIn: BigInt(dto.totals.bytesIn),
-        totalBytesOut: BigInt(dto.totals.bytesOut),
-        activeHosts: dto.totals.activeHosts,
-        activeFlows: dto.totals.activeFlows,
-        topProtocolsJson: dto.protocols as unknown as Prisma.InputJsonValue,
-        topDestinationsJson: dto.destinations as unknown as Prisma.InputJsonValue,
-      },
+    return this.prisma.$transaction(async (transaction) => {
+      const snapshot = await transaction.networkTelemetrySnapshot.create({
+        data: {
+          nodeId: node.id,
+          collectorId: dto.collectorId,
+          capturedAt,
+          windowSeconds: dto.windowSeconds,
+          totalBytesIn: BigInt(dto.totals.bytesIn),
+          totalBytesOut: BigInt(dto.totals.bytesOut),
+          activeHosts: dto.totals.activeHosts,
+          activeFlows: dto.totals.activeFlows,
+          topProtocolsJson: dto.protocols as unknown as Prisma.InputJsonValue,
+          topDestinationsJson: dto.destinations as unknown as Prisma.InputJsonValue,
+        },
+      });
+
+      const rows = [];
+      for (const asset of dto.assets) {
+        rows.push(await this.correlateAssetSample(transaction, dto.nodeId, snapshot.id, capturedAt, asset));
+      }
+
+      if (rows.length > 0) {
+        await transaction.networkTelemetryAssetSample.createMany({ data: rows });
+      }
+
+      const alerts = this.deriveSnapshotAlerts(dto, rows);
+      for (const alert of alerts) {
+        await transaction.networkTelemetryAlert.upsert(alert);
+      }
+
+      return { snapshotId: snapshot.id, samplesStored: rows.length, alertsUpserted: alerts.length };
     });
-
-    const rows = [];
-    for (const asset of dto.assets) {
-      rows.push(await this.correlateAssetSample(dto.nodeId, snapshot.id, asset));
-    }
-
-    if (rows.length > 0) {
-      await this.prisma.networkTelemetryAssetSample.createMany({ data: rows });
-    }
-
-    const alerts = this.deriveSnapshotAlerts(dto, rows);
-    for (const alert of alerts) {
-      await this.prisma.networkTelemetryAlert.upsert(alert);
-    }
-
-    return { snapshotId: snapshot.id, samplesStored: rows.length, alertsUpserted: alerts.length };
   }
 
   private async correlateAssetSample(
+    prisma: Prisma.TransactionClient,
     nodeId: string,
     snapshotId: string,
+    capturedAt: Date,
     asset: IngestNetworkTelemetryDto["assets"][number],
   ) {
     const officialByMac = asset.mac
-      ? await this.prisma.nodeAsset.findFirst({ where: { nodeId, mac: asset.mac } })
+      ? await prisma.nodeAsset.findFirst({ where: { nodeId, mac: asset.mac } })
       : null;
 
     const officialByIp = !officialByMac && asset.ip
-      ? await this.prisma.nodeAsset.findFirst({ where: { nodeId, ip: asset.ip } })
+      ? await prisma.nodeAsset.findFirst({ where: { nodeId, ip: asset.ip } })
       : null;
 
+    const discoveryCutoff = new Date(capturedAt.getTime() - 24 * 60 * 60 * 1000);
     const discoveryByMac = !officialByMac && !officialByIp && asset.mac
-      ? await this.prisma.nodeDiscoveredDevice.findFirst({
-        where: { mac: asset.mac, nodeDiscoveryJob: { nodeId } },
+      ? await prisma.nodeDiscoveredDevice.findFirst({
+        where: { mac: asset.mac, createdAt: { gte: discoveryCutoff }, nodeDiscoveryJob: { nodeId } },
         orderBy: { createdAt: "desc" },
       })
       : null;
 
     const discoveryByIp = !officialByMac && !officialByIp && !discoveryByMac && asset.ip
-      ? await this.prisma.nodeDiscoveredDevice.findFirst({
-        where: { ip: asset.ip, nodeDiscoveryJob: { nodeId } },
+      ? await prisma.nodeDiscoveredDevice.findFirst({
+        where: { ip: asset.ip, createdAt: { gte: discoveryCutoff }, nodeDiscoveryJob: { nodeId } },
         orderBy: { createdAt: "desc" },
       })
       : null;

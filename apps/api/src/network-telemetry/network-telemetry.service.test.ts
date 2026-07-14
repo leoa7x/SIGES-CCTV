@@ -17,7 +17,7 @@ const baseDto = {
 function createService(overrides: Record<string, unknown> = {}) {
   const persistedSamples: Array<{ ip?: string; mac?: string; nodeAssetId?: string | null; classificationSource?: string }> = [];
   const upserts: unknown[] = [];
-  const calls = { official: [] as unknown[], discovery: [] as unknown[] };
+  const calls = { official: [] as unknown[], discovery: [] as unknown[], transactions: 0 };
 
   const prisma = {
     node: { findUniqueOrThrow: async () => ({ id: "node-1" }) },
@@ -46,7 +46,10 @@ function createService(overrides: Record<string, unknown> = {}) {
         return { id: "alert-1" };
       },
     },
-    $transaction: async (operations: Promise<unknown>[]) => Promise.all(operations),
+    $transaction: async <T>(callback: (transaction: unknown) => Promise<T>) => {
+      calls.transactions += 1;
+      return callback(prisma);
+    },
     ...overrides,
   };
 
@@ -68,6 +71,17 @@ test("ingestSnapshot correlates asset samples to official assets by MAC first", 
   assert.equal(result.snapshotId, "snap-1");
   assert.equal(persistedSamples[0]?.nodeAssetId, "asset-1");
   assert.equal(calls.discovery.length, 0);
+});
+
+test("ingestSnapshot persists snapshot data inside a transaction", async () => {
+  const { service, calls } = createService();
+
+  await service.ingestSnapshot({
+    ...baseDto,
+    assets: [],
+  });
+
+  assert.equal(calls.transactions, 1);
 });
 
 test("ingestSnapshot falls back to an official IP match when the MAC does not match", async () => {
@@ -95,7 +109,7 @@ test("ingestSnapshot falls back to an official IP match when the MAC does not ma
   assert.equal(calls.discovery.length, 0);
 });
 
-test("ingestSnapshot prioritizes newest discovery MAC before discovery IP", async () => {
+test("ingestSnapshot prioritizes recent discovery MAC before discovery IP", async () => {
   const discoveryCalls: unknown[] = [];
   const { service, persistedSamples } = createService({
     nodeDiscoveredDevice: {
@@ -114,9 +128,49 @@ test("ingestSnapshot prioritizes newest discovery MAC before discovery IP", asyn
   assert.equal(persistedSamples[0]?.nodeAssetId, null);
   assert.equal(persistedSamples[0]?.classificationSource, "DISCOVERY");
   assert.deepEqual(discoveryCalls, [{
-    where: { mac: "AA:BB", nodeDiscoveryJob: { nodeId: "node-1" } },
+    where: {
+      mac: "AA:BB",
+      createdAt: { gte: new Date("2026-07-12T20:01:00.000Z") },
+      nodeDiscoveryJob: { nodeId: "node-1" },
+    },
     orderBy: { createdAt: "desc" },
   }]);
+});
+
+test("ingestSnapshot ignores stale discovery MAC records", async () => {
+  const { service, persistedSamples } = createService({
+    nodeDiscoveredDevice: {
+      findFirst: async ({ where }: { where: { createdAt?: { gte: Date } } }) =>
+        where.createdAt?.gte.getTime() === new Date("2026-07-12T20:01:00.000Z").getTime()
+          ? null
+          : ({ id: "stale-discovered-mac" }),
+    },
+  });
+
+  await service.ingestSnapshot({
+    ...baseDto,
+    assets: [{ mac: "AA:BB", bytesIn: 10, bytesOut: 20, flowCount: 1, lastSeenAt: "2026-07-13T20:00:58.000Z" }],
+  });
+
+  assert.equal(persistedSamples[0]?.classificationSource, "UNMATCHED");
+});
+
+test("ingestSnapshot ignores stale discovery IP records", async () => {
+  const { service, persistedSamples } = createService({
+    nodeDiscoveredDevice: {
+      findFirst: async ({ where }: { where: { createdAt?: { gte: Date } } }) =>
+        where.createdAt?.gte.getTime() === new Date("2026-07-12T20:01:00.000Z").getTime()
+          ? null
+          : ({ id: "stale-discovered-ip" }),
+    },
+  });
+
+  await service.ingestSnapshot({
+    ...baseDto,
+    assets: [{ ip: "10.0.0.8", bytesIn: 10, bytesOut: 20, flowCount: 1, lastSeenAt: "2026-07-13T20:00:58.000Z" }],
+  });
+
+  assert.equal(persistedSamples[0]?.classificationSource, "UNMATCHED");
 });
 
 test("ingestSnapshot creates an unmatched traffic alert", async () => {
