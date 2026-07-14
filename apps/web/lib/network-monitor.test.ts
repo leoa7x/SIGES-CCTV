@@ -12,21 +12,21 @@ import {
 } from "./network-monitor";
 import type { GrafanaEmbedDescriptor } from "./api";
 
-test("builds a safe iframe src from an API descriptor", () => {
+test("builds a safe iframe src from a network command API descriptor", () => {
   const descriptor: GrafanaEmbedDescriptor = {
-    title: "Observabilidad del nodo",
-    dashboard: "node-observability",
-    url: "http://grafana.local/d-solo/node-observability",
-    params: { "var-nodeId": "node-1", from: "now-6h" },
+    title: "Comando de red",
+    dashboard: "network-command-view",
+    url: "http://grafana.local/d-solo/network-command-view",
+    params: { from: "now-6h", to: "now" },
   };
 
   const result = buildGrafanaEmbedModel(descriptor);
 
-  assert.equal(result.title, "Observabilidad del nodo");
+  assert.equal(result.title, "Comando de red");
   assert.notEqual(result.src, null);
   if (result.src) {
-    assert.match(result.src, /var-nodeId=node-1/);
     assert.match(result.src, /from=now-6h/);
+    assert.match(result.src, /to=now/);
   }
 });
 

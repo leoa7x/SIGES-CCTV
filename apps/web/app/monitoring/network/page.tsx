@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OpsShell } from "../../../components/ops-shell";
+import { GrafanaPanelEmbed } from "../../../components/grafana-panel-embed";
 import { useAuth } from "../../../components/auth-provider";
-import { apiGet, apiPost } from "../../../lib/api";
+import { apiGet, apiPost, type GrafanaEmbedDescriptor } from "../../../lib/api";
 import {
+  buildGrafanaEmbedModel,
   buildNetworkMonitorModel,
   formatTelemetryBytes,
   isCurrentNetworkDetailRequest,
@@ -217,8 +219,10 @@ export default function NetworkMonitoringPage() {
   const [telemetryTimeseries, setTelemetryTimeseries] = useState<NetworkTelemetryPoint[]>([]);
   const [telemetryAssets, setTelemetryAssets] = useState<NetworkTelemetryAssetView[]>([]);
   const [telemetryAlerts, setTelemetryAlerts] = useState<NetworkTelemetryAlert[]>([]);
+  const [networkEmbedDescriptor, setNetworkEmbedDescriptor] = useState<GrafanaEmbedDescriptor | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [loadingNetworkEmbed, setLoadingNetworkEmbed] = useState(false);
   const [runningDiscovery, setRunningDiscovery] = useState(false);
   const [resolvingDiscoveryId, setResolvingDiscoveryId] = useState("");
   const [filter, setFilter] = useState("");
@@ -240,6 +244,10 @@ export default function NetworkMonitoringPage() {
 
   const latestJob = detail?.discoveryJobs[0] ?? null;
   const model = useMemo(() => buildNetworkMonitorModel(nodes, detail), [nodes, detail]);
+  const networkEmbed = useMemo(
+    () => networkEmbedDescriptor ? buildGrafanaEmbedModel(networkEmbedDescriptor) : null,
+    [networkEmbedDescriptor],
+  );
 
   const loadNodes = useCallback(async () => {
     if (!accessToken) return;
@@ -299,6 +307,30 @@ export default function NetworkMonitoringPage() {
 
   useEffect(() => { void loadNodes(); }, [loadNodes]);
   useEffect(() => { if (selectedNodeId) void loadDetail(selectedNodeId); }, [selectedNodeId, loadDetail]);
+  useEffect(() => {
+    if (!accessToken) {
+      setNetworkEmbedDescriptor(null);
+      setLoadingNetworkEmbed(false);
+      return;
+    }
+
+    let cancelled = false;
+    setNetworkEmbedDescriptor(null);
+    setLoadingNetworkEmbed(true);
+
+    void apiGet<GrafanaEmbedDescriptor>("/observability/embed/network-command-view", accessToken)
+      .then((descriptor) => {
+        if (!cancelled) setNetworkEmbedDescriptor(descriptor);
+      })
+      .catch(() => {
+        if (!cancelled) setNetworkEmbedDescriptor(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingNetworkEmbed(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [accessToken]);
 
   async function handleRunDiscovery() {
     if (!accessToken || !detail) return;
@@ -393,6 +425,12 @@ export default function NetworkMonitoringPage() {
           <StatCard label="Pendientes" value={model.observability.pendingDiscoveries} sub="por confirmar" />
           <StatCard label="Último discovery" value={model.observability.latestDiscoveryLabel} sub={detail?.scanSubnetCidr ?? "sin subnet"} />
         </div>
+
+        <GrafanaPanelEmbed
+          title={networkEmbed?.title ?? "Comando de red"}
+          src={networkEmbed?.src ?? null}
+          loading={loadingNetworkEmbed}
+        />
 
         <div className="grid gap-6 xl:grid-cols-[1fr_1.6fr] xl:items-start">
           <section className={`${PANEL_HUD} xl:sticky xl:top-6`}>
