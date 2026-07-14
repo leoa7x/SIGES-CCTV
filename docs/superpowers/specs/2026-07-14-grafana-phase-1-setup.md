@@ -33,6 +33,7 @@ only for variables that are optional in a panel query.
 | `projectId` | `SELECT DISTINCT project_id AS __value, project_name AS __text FROM telemetry_global_health_view ORDER BY 2` |
 | `cityId` | `SELECT DISTINCT city_id AS __value, city_name AS __text FROM telemetry_global_health_view ORDER BY 2` |
 | `severity` | `SELECT DISTINCT alert_severity AS __value, alert_severity AS __text FROM telemetry_alerts_view ORDER BY 1` |
+| `assetType` | `SELECT DISTINCT node_asset_type AS __value, node_asset_type AS __text FROM telemetry_asset_activity_view WHERE node_asset_type IS NOT NULL ORDER BY 1` |
 | `classificationSource` | `SELECT DISTINCT classification_source AS __value, classification_source AS __text FROM telemetry_asset_activity_view ORDER BY 1` |
 
 Use `${nodeId:sqlstring}` and the equivalent format for other variables in SQL.
@@ -61,8 +62,11 @@ ORDER BY time;
 ```
 
 Use `telemetry_asset_activity_view` for asset activity and unmatched traffic.
-Filter asset panels by `classification_source`; `UNMATCHED` is the unmatched
-traffic indicator. Use `telemetry_alerts_view` for active alerts:
+Filter asset and silent-asset panels by both `classification_source` and
+`node_asset_type`. `UNMATCHED` is the unmatched traffic indicator. Apply the
+optional `assetType` variable with a predicate such as
+`('${assetType}' = '__all' OR node_asset_type = ${assetType:sqlstring})`. Use
+`telemetry_alerts_view` for active alerts:
 
 ```sql
 SELECT
