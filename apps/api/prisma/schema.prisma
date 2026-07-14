@@ -133,6 +133,9 @@ model Node {
   assets              NodeAsset[]
   discoveryJobs       NodeDiscoveryJob[]
   analyticsAssignments NodeAnalyticsAssignment[]
+  telemetrySnapshots  NetworkTelemetrySnapshot[]
+  telemetrySamples    NetworkTelemetryAssetSample[]
+  telemetryAlerts     NetworkTelemetryAlert[]
   createdAt           DateTime                  @default(now())
   updatedAt           DateTime                  @updatedAt
 }
@@ -186,6 +189,25 @@ enum AnalyticsScope {
   BOTH
 }
 
+enum NetworkTelemetryClassificationSource {
+  OFFICIAL
+  DISCOVERY
+  UNMATCHED
+}
+
+enum NetworkTelemetryAlertKind {
+  NODE_SILENT
+  ASSET_SILENT
+  UNMATCHED_TRAFFIC
+  NEW_DESTINATION
+}
+
+enum NetworkTelemetryAlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
 model NodeAsset {
   id                   String                        @id @default(uuid())
   nodeId               String
@@ -203,6 +225,8 @@ model NodeAsset {
   notes                String?
   discoveredDevices    NodeDiscoveredDevice[]
   analyticsAssignments NodeAssetAnalyticsAssignment[]
+  telemetrySamples    NetworkTelemetryAssetSample[]
+  telemetryAlerts     NetworkTelemetryAlert[]
   createdAt            DateTime                      @default(now())
   updatedAt            DateTime                      @updatedAt
 
@@ -288,6 +312,74 @@ model NodeAssetAnalyticsAssignment {
 
   @@unique([nodeAssetId, analyticsCatalogId, customLabel])
 }
+
+model NetworkTelemetrySnapshot {
+  id                  String                        @id @default(uuid())
+  nodeId              String
+  node                Node                          @relation(fields: [nodeId], references: [id])
+  collectorId         String
+  capturedAt          DateTime
+  windowSeconds       Int
+  totalBytesIn        BigInt
+  totalBytesOut       BigInt
+  activeHosts         Int
+  activeFlows         Int
+  alertCount          Int                           @default(0)
+  topProtocolsJson    Json
+  topDestinationsJson Json
+  assetSamples        NetworkTelemetryAssetSample[]
+  alerts              NetworkTelemetryAlert[]
+  createdAt           DateTime                      @default(now())
+
+  @@index([nodeId, capturedAt])
+}
+
+model NetworkTelemetryAssetSample {
+  id                   String                               @id @default(uuid())
+  snapshotId           String
+  snapshot             NetworkTelemetrySnapshot             @relation(fields: [snapshotId], references: [id])
+  nodeId               String
+  node                 Node                                 @relation(fields: [nodeId], references: [id])
+  nodeAssetId          String?
+  nodeAsset            NodeAsset?                           @relation(fields: [nodeAssetId], references: [id])
+  ip                   String?
+  mac                  String?
+  hostname             String?
+  bytesIn              BigInt
+  bytesOut             BigInt
+  flowCount            Int
+  lastSeenAt           DateTime
+  classificationSource NetworkTelemetryClassificationSource
+  createdAt            DateTime                             @default(now())
+
+  @@index([nodeId, createdAt])
+  @@index([nodeAssetId])
+}
+
+model NetworkTelemetryAlert {
+  id           String                        @id @default(uuid())
+  nodeId       String
+  node         Node                          @relation(fields: [nodeId], references: [id])
+  snapshotId   String?
+  snapshot     NetworkTelemetrySnapshot?     @relation(fields: [snapshotId], references: [id])
+  nodeAssetId  String?
+  nodeAsset    NodeAsset?                    @relation(fields: [nodeAssetId], references: [id])
+  kind         NetworkTelemetryAlertKind
+  severity     NetworkTelemetryAlertSeverity
+  title        String
+  detail       String
+  metadataJson Json?
+  firstSeenAt  DateTime
+  lastSeenAt   DateTime
+  isActive     Boolean                       @default(true)
+  resolvedAt   DateTime?
+  createdAt    DateTime                      @default(now())
+  updatedAt    DateTime                      @updatedAt
+
+  @@index([nodeId, isActive])
+  @@index([kind, isActive])
+}
+
 
 model FiberSegment {
   id        String     @id @default(uuid())
