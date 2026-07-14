@@ -34,7 +34,7 @@ The future GIS flow depends on nodes having coordinates and cameras being associ
 
 ### Option 1: Direct MJPEG preview from a SIGES-owned bridge
 
-The API starts a short-lived preview process for a camera and exposes the preview as an authenticated MJPEG or chunked HTTP stream that the browser can render in an `img` or lightweight viewer.
+The API starts a short-lived preview process for a camera and exposes the preview as an authenticated MJPEG HTTP stream. Because the browser client must send the JWT in an `Authorization` header, the web client fetches the protected response, extracts JPEG frames from the multipart byte stream, and renders each frame from a browser-local object URL.
 
 Pros:
 
@@ -123,7 +123,7 @@ The first implementation should treat the preview engine as an adapter behind a 
 - `getPreviewStatus(sessionId)`
 - `stopPreview(sessionId)`
 
-The initial adapter can emit MJPEG or another simple browser-consumable live stream. A future adapter can switch to WebRTC or WebSocket delivery while keeping these same API semantics.
+The initial adapter emits MJPEG over the protected media route. The web client consumes that route with an authenticated `fetch` and frame extraction rather than relying on an unauthenticated `<img src>` request. A future adapter can switch to WebRTC or WebSocket delivery while keeping the preview session semantics.
 
 ## API Design
 
@@ -154,7 +154,7 @@ Protected by the existing JWT auth:
 - `POST /cameras/preview/:sessionId/stop`
   - closes the preview session early
 
-The returned `viewerUrl` should point to a server-controlled authenticated media route. The frontend should never build the raw camera stream URL itself.
+The returned `viewerUrl` points to a server-controlled authenticated media route. The frontend never builds the raw camera stream URL. Since an `<img>` request cannot attach the Bearer token used by this application, the frontend fetches `viewerUrl` with `Authorization: Bearer <token>`, reads the MJPEG response body, extracts JPEG frames, and displays them from short-lived object URLs.
 
 ## Frontend Design
 
@@ -180,7 +180,7 @@ When the operator clicks `Probar señal`:
 1. the form validates the required stream fields
 2. the frontend requests `preview/start`
 3. the UI enters `conectando`
-4. the preview panel loads the returned `viewerUrl`
+4. the preview client fetches the returned `viewerUrl` with the access token and renders extracted JPEG frames
 5. the UI polls preview status until `live` or `failed`
 
 When the modal closes or the camera selection changes, the frontend should explicitly stop the active preview session.
@@ -204,6 +204,8 @@ This keeps node coordinates as the navigation anchor while cameras remain the me
 - bind preview sessions to the authenticated user
 - expire preview sessions aggressively
 - ensure preview routes are authenticated and non-cacheable
+- send `Cache-Control: no-store, private` on preview start, status, stop, and media responses
+- do not expose the protected media URL through a browser request that cannot carry the JWT header
 
 Because this system will manage CCTV credentials, secret handling is not optional infrastructure work; it is part of the feature.
 
@@ -248,6 +250,7 @@ The API should return short stable error codes and a concise message. The fronte
 - keep the preview module separate from future recording/NVR features
 - avoid coupling preview startup to camera create; operators must be able to save first and test later
 - define the media adapter behind an interface from the start so the transport can evolve without data migration
+- consume the current MJPEG media route through authenticated `fetch` and client-side JPEG frame extraction
 - do not attempt PTZ or playback in this phase
 
 ## Success Criteria

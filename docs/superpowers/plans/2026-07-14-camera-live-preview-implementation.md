@@ -586,13 +586,13 @@ git commit -m "feat: add live preview to camera form"
   - documented environment variable `CAMERA_SECRET_KEY`
   - verified API and UI contract for later GIS reuse
 
-- [ ] **Step 1: Add environment documentation for preview secrets**
+- [x] **Step 1: Add environment documentation for preview secrets**
 
 ```env
 CAMERA_SECRET_KEY=change_me_for_camera_stream_credentials
 ```
 
-- [ ] **Step 2: Run database and backend verification**
+- [x] **Step 2: Run database and backend verification**
 
 Run:
 
@@ -604,7 +604,7 @@ npm run test:camera-preview --workspace=apps/api
 
 Expected: Prisma schema sync completes and both backend test suites pass.
 
-- [ ] **Step 3: Run web verification**
+- [x] **Step 3: Run web verification**
 
 Run:
 
@@ -632,7 +632,9 @@ Expected manual checks:
 - close the modal and confirm the session is stopped
 - reopen the same camera and confirm preview can be started again
 
-- [ ] **Step 5: Commit**
+The implemented browser flow consumes the protected MJPEG `viewerUrl` with an authenticated `fetch`, extracts JPEG frames from the response body, and renders them from object URLs. It does not use a bare `<img src>` request because that request cannot carry the JWT `Authorization` header. Preview start, status, stop, and media routes are JWT-authenticated and return `Cache-Control: no-store, private`.
+
+- [x] **Step 5: Commit**
 
 ```bash
 git add .env.example docs/superpowers/specs/2026-07-14-camera-live-preview-design.md docs/superpowers/plans/2026-07-14-camera-live-preview-implementation.md
