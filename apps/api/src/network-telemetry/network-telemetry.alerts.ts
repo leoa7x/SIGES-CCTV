@@ -68,7 +68,7 @@ export function deriveSilentAssetAlerts(
       nodeAssetId: asset.id,
       kind: NetworkTelemetryAlertKind.ASSET_SILENT,
       severity: NetworkTelemetryAlertSeverity.WARNING,
-      title: `Activo sin telemetría reciente ${asset.name}`,
+      title: `Activo sin telemetría reciente ${asset.id}`,
       detail: "El activo oficial no tuvo muestras de telemetría dentro de la ventana esperada.",
       firstSeenAt: now,
       lastSeenAt: now,

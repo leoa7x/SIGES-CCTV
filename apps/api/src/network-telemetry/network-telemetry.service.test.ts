@@ -360,12 +360,43 @@ test("getNodeAlerts upserts ASSET_SILENT for an official asset without a recent 
   assert.equal(upserts.length, 1);
   const alert = upserts[0] as { where: { nodeId_kind_title: { kind: string; title: string } }; create: { nodeAssetId: string; severity: string; detail: string }; update: { isActive: boolean; resolvedAt: null } };
   assert.equal(alert.where.nodeId_kind_title.kind, "ASSET_SILENT");
-  assert.equal(alert.where.nodeId_kind_title.title, "Activo sin telemetría reciente Camara norte");
+  assert.equal(alert.where.nodeId_kind_title.title, "Activo sin telemetría reciente asset-1");
   assert.equal(alert.create.nodeAssetId, "asset-1");
   assert.equal(alert.create.severity, "WARNING");
   assert.equal(alert.create.detail, "El activo oficial no tuvo muestras de telemetría dentro de la ventana esperada.");
   assert.deepEqual(alert.update.isActive, true);
   assert.equal(alert.update.resolvedAt, null);
+});
+
+test("getNodeAlerts keeps one ASSET_SILENT alert identity when a silent asset is renamed", async () => {
+  let assetName = "Camara norte";
+  const activeAlertKeys = new Set<string>();
+  const { service } = createService({
+    networkTelemetrySnapshot: {
+      findFirst: async () => ({ id: "snap-1", capturedAt: new Date() }),
+    },
+    nodeAsset: {
+      findMany: async () => [{ id: "asset-1", name: assetName }],
+    },
+    networkTelemetryAssetSample: {
+      findMany: async () => [],
+    },
+    networkTelemetryAlert: {
+      findMany: async () => [],
+      updateMany: async () => ({ count: 0 }),
+      upsert: async ({ where }: { where: { nodeId_kind_title: { nodeId: string; kind: string; title: string } } }) => {
+        const selector = where.nodeId_kind_title;
+        activeAlertKeys.add(`${selector.nodeId}:${selector.kind}:${selector.title}`);
+        return { id: "alert-1" };
+      },
+    },
+  });
+
+  await service.getNodeAlerts("node-1");
+  assetName = "Camara principal";
+  await service.getNodeAlerts("node-1");
+
+  assert.deepEqual([...activeAlertKeys], ["node-1:ASSET_SILENT:Activo sin telemetría reciente asset-1"]);
 });
 
 test("getNodeAlerts resolves an active ASSET_SILENT alert when its asset becomes visible", async () => {
