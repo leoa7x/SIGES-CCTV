@@ -30,6 +30,25 @@ test("builds a safe iframe src from an API descriptor", () => {
   }
 });
 
+test("buildGrafanaEmbedModel lets descriptor params override base query values", () => {
+  const descriptor: GrafanaEmbedDescriptor = {
+    title: "Observabilidad del nodo",
+    dashboard: "node-observability",
+    url: "http://grafana.local/d-solo/node-observability?var-nodeId=All&from=old",
+    params: { "var-nodeId": "node-1", from: "now-6h" },
+  };
+
+  const result = buildGrafanaEmbedModel(descriptor);
+
+  assert.notEqual(result.src, null);
+  if (result.src) {
+    assert.match(result.src, /var-nodeId=node-1/);
+    assert.match(result.src, /from=now-6h/);
+    assert.doesNotMatch(result.src, /var-nodeId=All/);
+    assert.doesNotMatch(result.src, /from=old/);
+  }
+});
+
 test("buildGrafanaEmbedModel returns null for malformed URLs", () => {
   const descriptor: GrafanaEmbedDescriptor = {
     title: "Observabilidad",

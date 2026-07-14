@@ -2,7 +2,7 @@ Status: DONE
 
 Commits created:
 - `e3453ec feat(web): add grafana embed component`
-- `pending fix(web): honor grafana embed params and safety tests`
+- `184deaf fix(web): honor grafana embed params and safety tests`
 
 Changed files:
 - `apps/web/components/grafana-panel-embed.tsx`
