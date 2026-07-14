@@ -303,6 +303,36 @@ test("getNodeAlerts includes NODE_SILENT when no recent snapshot exists", async 
   assert.equal(upserts.length, 1);
 });
 
+test("getNodeSummary resolves an active NODE_SILENT alert when telemetry resumes", async () => {
+  const resolutions: unknown[] = [];
+  const { service } = createService({
+    networkTelemetrySnapshot: {
+      findFirst: async () => ({ id: "snap-1", capturedAt: new Date() }),
+    },
+    nodeAsset: {
+      findMany: async () => [],
+    },
+    networkTelemetryAssetSample: {
+      findMany: async () => [],
+    },
+    networkTelemetryAlert: {
+      count: async () => 0,
+      updateMany: async (args: unknown) => {
+        resolutions.push(args);
+        return { count: 1 };
+      },
+    },
+  });
+
+  await service.getNodeSummary("node-1");
+
+  assert.equal(resolutions.length, 1);
+  const resolution = resolutions[0] as { where: { nodeId: string; kind: string; isActive: boolean }; data: { isActive: boolean; resolvedAt: Date } };
+  assert.deepEqual(resolution.where, { nodeId: "node-1", kind: "NODE_SILENT", isActive: true });
+  assert.equal(resolution.data.isActive, false);
+  assert.ok(resolution.data.resolvedAt instanceof Date);
+});
+
 test("getNodeAlerts upserts ASSET_SILENT for an official asset without a recent sample", async () => {
   const { service, upserts } = createService({
     networkTelemetrySnapshot: {
@@ -320,6 +350,7 @@ test("getNodeAlerts upserts ASSET_SILENT for an official asset without a recent 
         upserts.push(args);
         return { id: "alert-1" };
       },
+      updateMany: async () => ({ count: 0 }),
     },
   });
 
@@ -335,4 +366,39 @@ test("getNodeAlerts upserts ASSET_SILENT for an official asset without a recent 
   assert.equal(alert.create.detail, "El activo oficial no tuvo muestras de telemetría dentro de la ventana esperada.");
   assert.deepEqual(alert.update.isActive, true);
   assert.equal(alert.update.resolvedAt, null);
+});
+
+test("getNodeAlerts resolves an active ASSET_SILENT alert when its asset becomes visible", async () => {
+  const resolutions: unknown[] = [];
+  const { service } = createService({
+    networkTelemetrySnapshot: {
+      findFirst: async () => ({ id: "snap-1", capturedAt: new Date() }),
+    },
+    nodeAsset: {
+      findMany: async () => [{ id: "asset-1", name: "Camara norte" }],
+    },
+    networkTelemetryAssetSample: {
+      findMany: async () => [{ nodeAssetId: "asset-1" }],
+    },
+    networkTelemetryAlert: {
+      findMany: async () => [],
+      updateMany: async (args: unknown) => {
+        resolutions.push(args);
+        return { count: 1 };
+      },
+    },
+  });
+
+  await service.getNodeAlerts("node-1");
+
+  assert.equal(resolutions.length, 2);
+  const assetResolution = resolutions[1] as { where: { nodeId: string; nodeAssetId: { in: string[] }; kind: string; isActive: boolean }; data: { isActive: boolean; resolvedAt: Date } };
+  assert.deepEqual(assetResolution.where, {
+    nodeId: "node-1",
+    nodeAssetId: { in: ["asset-1"] },
+    kind: "ASSET_SILENT",
+    isActive: true,
+  });
+  assert.equal(assetResolution.data.isActive, false);
+  assert.ok(assetResolution.data.resolvedAt instanceof Date);
 });

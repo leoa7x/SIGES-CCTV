@@ -230,6 +230,18 @@ export class NetworkTelemetryService {
       return;
     }
 
+    await this.prisma.networkTelemetryAlert.updateMany({
+      where: {
+        nodeId,
+        kind: NetworkTelemetryAlertKind.NODE_SILENT,
+        isActive: true,
+      },
+      data: {
+        isActive: false,
+        resolvedAt: now,
+      },
+    });
+
     const cutoff = new Date(now.getTime() - TELEMETRY_SILENCE_WINDOW_MS);
     const [assets, recentSamples] = await Promise.all([
       this.prisma.nodeAsset.findMany({
@@ -248,6 +260,21 @@ export class NetworkTelemetryService {
     const visibleAssetIds = new Set(
       recentSamples.flatMap((sample) => sample.nodeAssetId ? [sample.nodeAssetId] : []),
     );
+
+    if (visibleAssetIds.size > 0) {
+      await this.prisma.networkTelemetryAlert.updateMany({
+        where: {
+          nodeId,
+          nodeAssetId: { in: [...visibleAssetIds] },
+          kind: NetworkTelemetryAlertKind.ASSET_SILENT,
+          isActive: true,
+        },
+        data: {
+          isActive: false,
+          resolvedAt: now,
+        },
+      });
+    }
 
     for (const alert of deriveSilentAssetAlerts(nodeId, assets, visibleAssetIds, now)) {
       await this.prisma.networkTelemetryAlert.upsert(alert);
