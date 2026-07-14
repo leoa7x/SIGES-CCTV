@@ -264,6 +264,8 @@ test("getNodeAssets serializes byte counters", async () => {
 test("getNodeSummary upserts NODE_SILENT when the latest snapshot is missing", async () => {
   const { service, upserts } = createService({
     networkTelemetrySnapshot: { findFirst: async () => null },
+    nodeAsset: { findMany: async () => [] },
+    networkTelemetryAssetSample: { findMany: async () => [] },
     networkTelemetryAlert: {
       count: async () => 1,
       upsert: async (args: unknown) => {
@@ -288,6 +290,8 @@ test("getNodeSummary upserts NODE_SILENT when the latest snapshot is missing", a
 test("getNodeAlerts includes NODE_SILENT when no recent snapshot exists", async () => {
   const { service, upserts } = createService({
     networkTelemetrySnapshot: { findFirst: async () => null },
+    nodeAsset: { findMany: async () => [] },
+    networkTelemetryAssetSample: { findMany: async () => [] },
     networkTelemetryAlert: {
       findMany: async () => [{ kind: "NODE_SILENT" }],
       upsert: async (args: unknown) => {
@@ -301,6 +305,35 @@ test("getNodeAlerts includes NODE_SILENT when no recent snapshot exists", async 
 
   assert.equal(result[0]?.kind, "NODE_SILENT");
   assert.equal(upserts.length, 1);
+});
+
+test("getNodeAlerts upserts NODE_SILENT and ASSET_SILENT during a node-wide outage", async () => {
+  const { service, upserts } = createService({
+    networkTelemetrySnapshot: {
+      findFirst: async () => ({ id: "snap-1", capturedAt: new Date(0) }),
+    },
+    nodeAsset: {
+      findMany: async () => [{ id: "asset-1", name: "Camara norte" }],
+    },
+    networkTelemetryAssetSample: {
+      findMany: async () => [],
+    },
+    networkTelemetryAlert: {
+      findMany: async () => [],
+      upsert: async (args: unknown) => {
+        upserts.push(args);
+        return { id: "alert-1" };
+      },
+      updateMany: async () => ({ count: 0 }),
+    },
+  });
+
+  await service.getNodeAlerts("node-1");
+
+  assert.deepEqual(
+    upserts.map((alert) => (alert as { where: { nodeId_kind_title: { kind: string } } }).where.nodeId_kind_title.kind),
+    ["NODE_SILENT", "ASSET_SILENT"],
+  );
 });
 
 test("getNodeSummary resolves an active NODE_SILENT alert when telemetry resumes", async () => {

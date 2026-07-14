@@ -227,20 +227,19 @@ export class NetworkTelemetryService {
     const nodeSilentAlert = deriveNodeSilentAlert(nodeId, latestCapturedAt, now);
     if (nodeSilentAlert) {
       await this.prisma.networkTelemetryAlert.upsert(nodeSilentAlert);
-      return;
+    } else {
+      await this.prisma.networkTelemetryAlert.updateMany({
+        where: {
+          nodeId,
+          kind: NetworkTelemetryAlertKind.NODE_SILENT,
+          isActive: true,
+        },
+        data: {
+          isActive: false,
+          resolvedAt: now,
+        },
+      });
     }
-
-    await this.prisma.networkTelemetryAlert.updateMany({
-      where: {
-        nodeId,
-        kind: NetworkTelemetryAlertKind.NODE_SILENT,
-        isActive: true,
-      },
-      data: {
-        isActive: false,
-        resolvedAt: now,
-      },
-    });
 
     const cutoff = new Date(now.getTime() - TELEMETRY_SILENCE_WINDOW_MS);
     const [assets, recentSamples] = await Promise.all([
