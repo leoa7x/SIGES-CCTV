@@ -30,3 +30,27 @@ Review fix 2:
 Verification:
 - Command: `npm run test:network-telemetry --workspace=apps/api`
 - Result: passed with 16/16 tests.
+
+Review fix 3:
+- ASSET_SILENT ahora tambien se deriva durante outage del nodo.
+- Se agrego regresion para nodo silencioso + activo oficial sin muestras recientes.
+
+Verification:
+- Command: `npm run test:network-telemetry --workspace=apps/api`
+- Result: passed with 17/17 tests.
+
+Review fix 4:
+- Los nodeId inexistentes ahora devuelven summary por defecto o lista vacia antes de derivar alertas silenciosas.
+- Se agrego regresion para unknown nodes y cobertura directa de ASSET_SILENT desde summary.
+
+Verification:
+- Command: `npm run test:network-telemetry --workspace=apps/api`
+- Result: passed with 19/19 tests.
+
+Review fix 5:
+- Las ASSET_SILENT activas ahora se resuelven si el activo ya no pertenece al nodo.
+- Se agrego regresion para alertas silenciosas huerfanas.
+
+Verification:
+- Command: `npm run test:network-telemetry --workspace=apps/api`
+- Result: passed with 20/20 tests.
