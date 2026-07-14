@@ -16,7 +16,7 @@ test("builds a safe iframe src from a network command API descriptor", () => {
   const descriptor: GrafanaEmbedDescriptor = {
     title: "Comando de red",
     dashboard: "network-command-view",
-    url: "http://grafana.local/d-solo/network-command-view",
+    url: "http://grafana.local/d/network-command-view",
     params: { from: "now-6h", to: "now" },
   };
 
@@ -34,7 +34,7 @@ test("buildGrafanaEmbedModel lets descriptor params override base query values",
   const descriptor: GrafanaEmbedDescriptor = {
     title: "Observabilidad del nodo",
     dashboard: "node-observability",
-    url: "http://grafana.local/d-solo/node-observability?var-nodeId=All&from=old",
+    url: "http://grafana.local/d/node-observability?var-nodeId=All&from=old",
     params: { "var-nodeId": "node-1", from: "now-6h" },
   };
 

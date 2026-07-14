@@ -1,0 +1,16 @@
+apiVersion: 1
+
+datasources:
+  - name: SIGES PostgreSQL
+    uid: siges-postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    user: siges
+    secureJsonData:
+      password: siges_pass_change_me
+    jsonData:
+      database: siges_cctv
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false

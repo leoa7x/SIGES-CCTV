@@ -66,3 +66,35 @@ test("normalizeDiscoveredDevices maps raw Orangutan-like payloads into temporary
     },
   ]);
 });
+
+test("normalizeDiscoveredDevices infers candidate type from model, vendor and hostname heuristics", () => {
+  const devices = normalizeDiscoveredDevices([
+    {
+      ip: "192.168.20.10",
+      mac: "10:20:30:40:50:60",
+      vendor: "Hikvision",
+      hostname: "equipo-borde",
+      model: "DS-2DE4425IW-DE",
+    },
+    {
+      ip: "192.168.20.2",
+      mac: "00:11:22:33:44:55",
+      vendor: "Cisco",
+      hostname: "switch-core-zona-1",
+    },
+    {
+      ip: "192.168.20.30",
+      mac: "AA:AA:AA:AA:AA:AA",
+      hostname: "ups-nodo-sur",
+    },
+  ]);
+
+  assert.equal(devices[0]?.candidateType, "CAMARA_PTZ");
+  assert.equal(devices[0]?.discoveryConfidence, 85);
+
+  assert.equal(devices[1]?.candidateType, "SWITCH");
+  assert.equal(devices[1]?.discoveryConfidence, 80);
+
+  assert.equal(devices[2]?.candidateType, "UPS");
+  assert.equal(devices[2]?.discoveryConfidence, 60);
+});

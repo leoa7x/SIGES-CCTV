@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ConflictException, Injectable } from "@nestjs/common";
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from "class-validator";
 import { RouteType } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -75,5 +75,41 @@ export class RoutesService {
 
   update(id: string, dto: UpdateRouteDto) {
     return this.prisma.route.update({ where: { id }, data: dto as Parameters<typeof this.prisma.route.update>[0]["data"] });
+  }
+
+  async remove(id: string) {
+    const route = await this.prisma.route.findUniqueOrThrow({
+      where: { id },
+      include: { _count: { select: { nodes: true } } },
+    });
+
+    if (route._count.nodes > 0) {
+      throw new ConflictException(`No se puede eliminar la ruta ${route.identifier} porque todavía tiene nodos asociados.`);
+    }
+
+    const spliceIds = (await this.prisma.spliceClosure.findMany({
+      where: { routeId: id },
+      select: { id: true },
+    })).map((splice) => splice.id);
+
+    await this.prisma.$transaction([
+      ...(spliceIds.length
+        ? [
+            this.prisma.spliceBlockInput.deleteMany({ where: { spliceId: { in: spliceIds } } }),
+            this.prisma.spliceFiberConnection.deleteMany({ where: { spliceId: { in: spliceIds } } }),
+            this.prisma.spliceCableLeg.deleteMany({ where: { spliceId: { in: spliceIds } } }),
+          ]
+        : []),
+      this.prisma.fiberCable.updateMany({
+        where: { routeId: id },
+        data: { parentCableId: null, sourceSpliceId: null },
+      }),
+      this.prisma.fiberCable.deleteMany({ where: { routeId: id } }),
+      this.prisma.fiberPoint.deleteMany({ where: { routeId: id } }),
+      this.prisma.spliceClosure.deleteMany({ where: { routeId: id } }),
+      this.prisma.route.delete({ where: { id } }),
+    ]);
+
+    return { ok: true };
   }
 }

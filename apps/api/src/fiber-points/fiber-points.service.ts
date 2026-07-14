@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ConflictException, Injectable } from "@nestjs/common";
 import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateIf } from "class-validator";
 import { FiberPointKind } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -57,5 +57,25 @@ export class FiberPointsService {
       where: { id },
       data: dto as Parameters<typeof this.prisma.fiberPoint.update>[0]["data"],
     });
+  }
+
+  async remove(id: string) {
+    const point = await this.prisma.fiberPoint.findUniqueOrThrow({
+      where: { id },
+      include: {
+        _count: { select: { originCables: true, destinationCables: true } },
+      },
+    });
+
+    if (point.spliceId) {
+      throw new ConflictException(`No se puede eliminar el punto ${point.name} porque está asociado a un empalme.`);
+    }
+
+    if (point._count.originCables > 0 || point._count.destinationCables > 0) {
+      throw new ConflictException(`No se puede eliminar el punto ${point.name} porque todavía está siendo usado por cables.`);
+    }
+
+    await this.prisma.fiberPoint.delete({ where: { id } });
+    return { ok: true };
   }
 }

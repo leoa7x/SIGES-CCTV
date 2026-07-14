@@ -1,0 +1,657 @@
+diff --git a/.superpowers/sdd/task-5-report.md b/.superpowers/sdd/task-5-report.md
+new file mode 100644
+index 0000000..e699f7d
+--- /dev/null
++++ b/.superpowers/sdd/task-5-report.md
+@@ -0,0 +1,32 @@
++Status: DONE
++
++Commit created: `3e3b3f1 feat(api): derive network telemetry silent alerts`
++
++Changed files:
++- `apps/api/src/network-telemetry/network-telemetry.alerts.ts`
++- `apps/api/src/network-telemetry/network-telemetry.service.ts`
++- `apps/api/src/network-telemetry/network-telemetry.service.test.ts`
++
++Verification:
++- Command: `npm run test:network-telemetry --workspace=apps/api`
++- Result: passed with 13/13 tests.
++
++Concern:
++- Unrelated existing worktree changes remain untouched.
++
++Review fix:
++- Fresh telemetry now resolves active NODE_SILENT alerts.
++- Visible assets now resolve active ASSET_SILENT alerts.
++- Added recovery-path tests.
++
++Verification:
++- Command: `npm run test:network-telemetry --workspace=apps/api`
++- Result: passed with 15/15 tests.
++
++Review fix 2:
++- ASSET_SILENT ahora usa una identidad estable basada en asset.id.
++- Se agrego una regresion para rename de activo silencioso.
++
++Verification:
++- Command: `npm run test:network-telemetry --workspace=apps/api`
++- Result: passed with 16/16 tests.
+diff --git a/apps/api/src/network-telemetry/network-telemetry.alerts.ts b/apps/api/src/network-telemetry/network-telemetry.alerts.ts
+new file mode 100644
+index 0000000..9b31fcd
+--- /dev/null
++++ b/apps/api/src/network-telemetry/network-telemetry.alerts.ts
+@@ -0,0 +1,77 @@
++import {
++  NetworkTelemetryAlertKind,
++  NetworkTelemetryAlertSeverity,
++} from "@prisma/client";
++
++export const TELEMETRY_SILENCE_WINDOW_MS = 120_000;
++
++type OfficialAsset = {
++  id: string;
++  name: string;
++};
++
++function toUpsertAlert(create: {
++  nodeId: string;
++  nodeAssetId?: string;
++  kind: NetworkTelemetryAlertKind;
++  severity: NetworkTelemetryAlertSeverity;
++  title: string;
++  detail: string;
++  firstSeenAt: Date;
++  lastSeenAt: Date;
++  isActive: boolean;
++}) {
++  return {
++    where: {
++      nodeId_kind_title: {
++        nodeId: create.nodeId,
++        kind: create.kind,
++        title: create.title,
++      },
++    },
++    create,
++    update: {
++      lastSeenAt: create.lastSeenAt,
++      isActive: true,
++      resolvedAt: null,
++    },
++  };
++}
++
++export function deriveNodeSilentAlert(nodeId: string, latestCapturedAt: Date | null, now: Date) {
++  if (latestCapturedAt && now.getTime() - latestCapturedAt.getTime() <= TELEMETRY_SILENCE_WINDOW_MS) {
++    return null;
++  }
++
++  return toUpsertAlert({
++    nodeId,
++    kind: NetworkTelemetryAlertKind.NODE_SILENT,
++    severity: NetworkTelemetryAlertSeverity.CRITICAL,
++    title: "Nodo sin snapshots recientes",
++    detail: "No se recibió telemetría reciente para el nodo dentro de la ventana esperada.",
++    firstSeenAt: now,
++    lastSeenAt: now,
++    isActive: true,
++  });
++}
++
++export function deriveSilentAssetAlerts(
++  nodeId: string,
++  assets: OfficialAsset[],
++  visibleAssetIds: Set<string>,
++  now: Date,
++) {
++  return assets
++    .filter((asset) => !visibleAssetIds.has(asset.id))
++    .map((asset) => toUpsertAlert({
++      nodeId,
++      nodeAssetId: asset.id,
++      kind: NetworkTelemetryAlertKind.ASSET_SILENT,
++      severity: NetworkTelemetryAlertSeverity.WARNING,
++      title: `Activo sin telemetría reciente ${asset.id}`,
++      detail: "El activo oficial no tuvo muestras de telemetría dentro de la ventana esperada.",
++      firstSeenAt: now,
++      lastSeenAt: now,
++      isActive: true,
++    }));
++}
+diff --git a/apps/api/src/network-telemetry/network-telemetry.service.test.ts b/apps/api/src/network-telemetry/network-telemetry.service.test.ts
+index de01996..d49b2c8 100644
+--- a/apps/api/src/network-telemetry/network-telemetry.service.test.ts
++++ b/apps/api/src/network-telemetry/network-telemetry.service.test.ts
+@@ -13,21 +13,24 @@ const baseDto = {
+   protocols: [],
+   destinations: [],
+ };
+ 
+ function createService(overrides: Record<string, unknown> = {}) {
+   const persistedSamples: Array<{ ip?: string; mac?: string; nodeAssetId?: string | null; classificationSource?: string }> = [];
+   const upserts: unknown[] = [];
+   const calls = { official: [] as unknown[], discovery: [] as unknown[], transactions: 0 };
+ 
+   const prisma = {
+-    node: { findUniqueOrThrow: async () => ({ id: "node-1" }) },
++    node: {
++      findUnique: async () => ({ id: "node-1" }),
++      findUniqueOrThrow: async () => ({ id: "node-1" }),
++    },
+     nodeAsset: {
+       findFirst: async (args: unknown) => {
+         calls.official.push(args);
+         return null;
+       },
+     },
+     nodeDiscoveredDevice: {
+       findFirst: async (args: unknown) => {
+         calls.discovery.push(args);
+         return null;
+@@ -253,10 +256,322 @@ test("getNodeAssets serializes byte counters", async () => {
+       }],
+     },
+   });
+ 
+   const result = await service.getNodeAssets("node-1");
+ 
+   assert.equal(result[0]?.bytesIn, "789");
+   assert.equal(result[0]?.bytesOut, "987");
+   assert.doesNotThrow(() => JSON.stringify(result));
+ });
++
++test("getNodeSummary and getNodeAlerts tolerate unknown node IDs without deriving alerts", async () => {
++  let upsertCalls = 0;
++  const { service } = createService({
++    node: { findUnique: async () => null },
++    networkTelemetrySnapshot: { findFirst: async () => null },
++    networkTelemetryAlert: {
++      count: async () => 0,
++      findMany: async () => [],
++      upsert: async () => {
++        upsertCalls += 1;
++        throw new Error("Foreign key constraint failed");
++      },
++    },
++  });
++
++  const summary = await service.getNodeSummary("missing-node");
++  const alerts = await service.getNodeAlerts("missing-node");
++
++  assert.deepEqual(summary, {
++    snapshotId: null,
++    capturedAt: null,
++    totalBytesIn: "0",
++    totalBytesOut: "0",
++    activeHosts: 0,
++    activeFlows: 0,
++    alertCount: 0,
++    topProtocols: [],
++    topDestinations: [],
++  });
++  assert.deepEqual(alerts, []);
++  assert.equal(upsertCalls, 0);
++});
++
++test("getNodeSummary upserts NODE_SILENT when the latest snapshot is missing", async () => {
++  const { service, upserts } = createService({
++    networkTelemetrySnapshot: { findFirst: async () => null },
++    nodeAsset: { findMany: async () => [] },
++    networkTelemetryAssetSample: { findMany: async () => [] },
++    networkTelemetryAlert: {
++      count: async () => 1,
++      updateMany: async () => ({ count: 0 }),
++      upsert: async (args: unknown) => {
++        upserts.push(args);
++        return { id: "alert-1" };
++      },
++    },
++  });
++
++  await service.getNodeSummary("node-1");
++
++  assert.equal(upserts.length, 1);
++  const alert = upserts[0] as { where: { nodeId_kind_title: { kind: string; title: string } }; create: { severity: string; detail: string; firstSeenAt: Date }; update: { isActive: boolean; resolvedAt: null } };
++  assert.equal(alert.where.nodeId_kind_title.kind, "NODE_SILENT");
++  assert.equal(alert.where.nodeId_kind_title.title, "Nodo sin snapshots recientes");
++  assert.equal(alert.create.severity, "CRITICAL");
++  assert.equal(alert.create.detail, "No se recibió telemetría reciente para el nodo dentro de la ventana esperada.");
++  assert.ok(alert.create.firstSeenAt instanceof Date);
++  assert.deepEqual(alert.update, { isActive: true, resolvedAt: null, lastSeenAt: alert.create.firstSeenAt });
++});
++
++test("getNodeSummary derives ASSET_SILENT for an official asset without a recent sample", async () => {
++  const { service, upserts } = createService({
++    networkTelemetrySnapshot: {
++      findFirst: async () => ({ id: "snap-1", capturedAt: new Date() }),
++    },
++    nodeAsset: {
++      findMany: async () => [{ id: "asset-1", name: "Camara norte" }],
++    },
++    networkTelemetryAssetSample: {
++      findMany: async () => [],
++    },
++    networkTelemetryAlert: {
++      count: async () => 0,
++      updateMany: async () => ({ count: 0 }),
++      upsert: async (args: unknown) => {
++        upserts.push(args);
++        return { id: "alert-1" };
++      },
++    },
++  });
++
++  await service.getNodeSummary("node-1");
++
++  assert.equal(upserts.length, 1);
++  const alert = upserts[0] as { where: { nodeId_kind_title: { kind: string; title: string } } };
++  assert.deepEqual(alert.where.nodeId_kind_title, {
++    nodeId: "node-1",
++    kind: "ASSET_SILENT",
++    title: "Activo sin telemetría reciente asset-1",
++  });
++});
++
++test("getNodeAlerts includes NODE_SILENT when no recent snapshot exists", async () => {
++  const { service, upserts } = createService({
++    networkTelemetrySnapshot: { findFirst: async () => null },
++    nodeAsset: { findMany: async () => [] },
++    networkTelemetryAssetSample: { findMany: async () => [] },
++    networkTelemetryAlert: {
++      findMany: async () => [{ kind: "NODE_SILENT" }],
++      updateMany: async () => ({ count: 0 }),
++      upsert: async (args: unknown) => {
++        upserts.push(args);
++        return { id: "alert-1" };
++      },
++    },
++  });
++
++  const result = await service.getNodeAlerts("node-1");
++
++  assert.equal(result[0]?.kind, "NODE_SILENT");
++  assert.equal(upserts.length, 1);
++});
++
++test("getNodeAlerts upserts NODE_SILENT and ASSET_SILENT during a node-wide outage", async () => {
++  const { service, upserts } = createService({
++    networkTelemetrySnapshot: {
++      findFirst: async () => ({ id: "snap-1", capturedAt: new Date(0) }),
++    },
++    nodeAsset: {
++      findMany: async () => [{ id: "asset-1", name: "Camara norte" }],
++    },
++    networkTelemetryAssetSample: {
++      findMany: async () => [],
++    },
++    networkTelemetryAlert: {
++      findMany: async () => [],
++      upsert: async (args: unknown) => {
++        upserts.push(args);
++        return { id: "alert-1" };
++      },
++      updateMany: async () => ({ count: 0 }),
++    },
++  });
++
++  await service.getNodeAlerts("node-1");
++
++  assert.deepEqual(
++    upserts.map((alert) => (alert as { where: { nodeId_kind_title: { kind: string } } }).where.nodeId_kind_title.kind),
++    ["NODE_SILENT", "ASSET_SILENT"],
++  );
++});
++
++test("getNodeSummary resolves an active NODE_SILENT alert when telemetry resumes", async () => {
++  const resolutions: unknown[] = [];
++  const { service } = createService({
++    networkTelemetrySnapshot: {
++      findFirst: async () => ({ id: "snap-1", capturedAt: new Date() }),
++    },
++    nodeAsset: {
++      findMany: async () => [],
++    },
++    networkTelemetryAssetSample: {
++      findMany: async () => [],
++    },
++    networkTelemetryAlert: {
++      count: async () => 0,
++      updateMany: async (args: unknown) => {
++        resolutions.push(args);
++        return { count: 1 };
++      },
++    },
++  });
++
++  await service.getNodeSummary("node-1");
++
++  assert.equal(resolutions.length, 2);
++  const resolution = resolutions[0] as { where: { nodeId: string; kind: string; isActive: boolean }; data: { isActive: boolean; resolvedAt: Date } };
++  assert.deepEqual(resolution.where, { nodeId: "node-1", kind: "NODE_SILENT", isActive: true });
++  assert.equal(resolution.data.isActive, false);
++  assert.ok(resolution.data.resolvedAt instanceof Date);
++});
++
++test("getNodeAlerts upserts ASSET_SILENT for an official asset without a recent sample", async () => {
++  const { service, upserts } = createService({
++    networkTelemetrySnapshot: {
++      findFirst: async () => ({ id: "snap-1", capturedAt: new Date() }),
++    },
++    nodeAsset: {
++      findMany: async () => [{ id: "asset-1", name: "Camara norte" }],
++    },
++    networkTelemetryAssetSample: {
++      findMany: async () => [],
++    },
++    networkTelemetryAlert: {
++      findMany: async () => [{ kind: "ASSET_SILENT" }],
++      upsert: async (args: unknown) => {
++        upserts.push(args);
++        return { id: "alert-1" };
++      },
++      updateMany: async () => ({ count: 0 }),
++    },
++  });
++
++  const result = await service.getNodeAlerts("node-1");
++
++  assert.equal(result[0]?.kind, "ASSET_SILENT");
++  assert.equal(upserts.length, 1);
++  const alert = upserts[0] as { where: { nodeId_kind_title: { kind: string; title: string } }; create: { nodeAssetId: string; severity: string; detail: string }; update: { isActive: boolean; resolvedAt: null } };
++  assert.equal(alert.where.nodeId_kind_title.kind, "ASSET_SILENT");
++  assert.equal(alert.where.nodeId_kind_title.title, "Activo sin telemetría reciente asset-1");
++  assert.equal(alert.create.nodeAssetId, "asset-1");
++  assert.equal(alert.create.severity, "WARNING");
++  assert.equal(alert.create.detail, "El activo oficial no tuvo muestras de telemetría dentro de la ventana esperada.");
++  assert.deepEqual(alert.update.isActive, true);
++  assert.equal(alert.update.resolvedAt, null);
++});
++
++test("getNodeAlerts keeps one ASSET_SILENT alert identity when a silent asset is renamed", async () => {
++  let assetName = "Camara norte";
++  const activeAlertKeys = new Set<string>();
++  const { service } = createService({
++    networkTelemetrySnapshot: {
++      findFirst: async () => ({ id: "snap-1", capturedAt: new Date() }),
++    },
++    nodeAsset: {
++      findMany: async () => [{ id: "asset-1", name: assetName }],
++    },
++    networkTelemetryAssetSample: {
++      findMany: async () => [],
++    },
++    networkTelemetryAlert: {
++      findMany: async () => [],
++      updateMany: async () => ({ count: 0 }),
++      upsert: async ({ where }: { where: { nodeId_kind_title: { nodeId: string; kind: string; title: string } } }) => {
++        const selector = where.nodeId_kind_title;
++        activeAlertKeys.add(`${selector.nodeId}:${selector.kind}:${selector.title}`);
++        return { id: "alert-1" };
++      },
++    },
++  });
++
++  await service.getNodeAlerts("node-1");
++  assetName = "Camara principal";
++  await service.getNodeAlerts("node-1");
++
++  assert.deepEqual([...activeAlertKeys], ["node-1:ASSET_SILENT:Activo sin telemetría reciente asset-1"]);
++});
++
++test("getNodeAlerts resolves an active ASSET_SILENT alert when its asset becomes visible", async () => {
++  const resolutions: unknown[] = [];
++  const { service } = createService({
++    networkTelemetrySnapshot: {
++      findFirst: async () => ({ id: "snap-1", capturedAt: new Date() }),
++    },
++    nodeAsset: {
++      findMany: async () => [{ id: "asset-1", name: "Camara norte" }],
++    },
++    networkTelemetryAssetSample: {
++      findMany: async () => [{ nodeAssetId: "asset-1" }],
++    },
++    networkTelemetryAlert: {
++      findMany: async () => [],
++      updateMany: async (args: unknown) => {
++        resolutions.push(args);
++        return { count: 1 };
++      },
++    },
++  });
++
++  await service.getNodeAlerts("node-1");
++
++  assert.equal(resolutions.length, 3);
++  const assetResolution = resolutions[1] as { where: { nodeId: string; nodeAssetId: { in: string[] }; kind: string; isActive: boolean }; data: { isActive: boolean; resolvedAt: Date } };
++  assert.deepEqual(assetResolution.where, {
++    nodeId: "node-1",
++    nodeAssetId: { in: ["asset-1"] },
++    kind: "ASSET_SILENT",
++    isActive: true,
++  });
++  assert.equal(assetResolution.data.isActive, false);
++  assert.ok(assetResolution.data.resolvedAt instanceof Date);
++});
++
++test("getNodeAlerts resolves an active ASSET_SILENT alert for an asset no longer on the node", async () => {
++  const resolutions: unknown[] = [];
++  const { service } = createService({
++    networkTelemetrySnapshot: {
++      findFirst: async () => ({ id: "snap-1", capturedAt: new Date() }),
++    },
++    nodeAsset: {
++      findMany: async () => [{ id: "asset-current", name: "Camara norte" }],
++    },
++    networkTelemetryAssetSample: {
++      findMany: async () => [],
++    },
++    networkTelemetryAlert: {
++      findMany: async () => [],
++      updateMany: async (args: unknown) => {
++        resolutions.push(args);
++        return { count: 1 };
++      },
++      upsert: async () => ({ id: "alert-1" }),
++    },
++  });
++
++  await service.getNodeAlerts("node-1");
++
++  assert.equal(resolutions.length, 2);
++  const staleAssetResolution = resolutions[1] as {
++    where: { nodeId: string; nodeAssetId: { notIn: string[] }; kind: string; isActive: boolean };
++    data: { isActive: boolean; resolvedAt: Date };
++  };
++  assert.deepEqual(staleAssetResolution.where, {
++    nodeId: "node-1",
++    nodeAssetId: { notIn: ["asset-current"] },
++    kind: "ASSET_SILENT",
++    isActive: true,
++  });
++  assert.equal(staleAssetResolution.data.isActive, false);
++  assert.ok(staleAssetResolution.data.resolvedAt instanceof Date);
++});
+diff --git a/apps/api/src/network-telemetry/network-telemetry.service.ts b/apps/api/src/network-telemetry/network-telemetry.service.ts
+index a0bc3d6..9af0e80 100644
+--- a/apps/api/src/network-telemetry/network-telemetry.service.ts
++++ b/apps/api/src/network-telemetry/network-telemetry.service.ts
+@@ -1,39 +1,59 @@
+ import { Injectable, UnauthorizedException } from "@nestjs/common";
+ import {
+   NetworkTelemetryAlertKind,
+   NetworkTelemetryAlertSeverity,
+   NetworkTelemetryClassificationSource,
+   Prisma,
+ } from "@prisma/client";
+ 
+ import { PrismaService } from "../prisma/prisma.service";
++import {
++  deriveNodeSilentAlert,
++  deriveSilentAssetAlerts,
++  TELEMETRY_SILENCE_WINDOW_MS,
++} from "./network-telemetry.alerts";
+ import { IngestNetworkTelemetryDto } from "./network-telemetry.ingest.dto";
+ 
+ @Injectable()
+ export class NetworkTelemetryService {
+   constructor(private prisma: PrismaService) {}
+ 
+   async ingestWithCollectorAuth(authorization: string | undefined, dto: IngestNetworkTelemetryDto) {
+     const expected = process.env.NETWORK_TELEMETRY_INGEST_TOKEN;
+     const received = authorization?.replace(/^Bearer\s+/i, "");
+     if (!expected || received !== expected) {
+       throw new UnauthorizedException("Invalid collector token");
+     }
+     return this.ingestSnapshot(dto);
+   }
+ 
+   async getNodeSummary(nodeId: string) {
++    if (!await this.nodeExists(nodeId)) {
++      return {
++        snapshotId: null,
++        capturedAt: null,
++        totalBytesIn: "0",
++        totalBytesOut: "0",
++        activeHosts: 0,
++        activeFlows: 0,
++        alertCount: 0,
++        topProtocols: [],
++        topDestinations: [],
++      };
++    }
++
+     const snapshot = await this.prisma.networkTelemetrySnapshot.findFirst({
+       where: { nodeId },
+       orderBy: { capturedAt: "desc" },
+     });
++    await this.deriveSilentAlerts(nodeId, snapshot?.capturedAt ?? null);
+     const alertCount = await this.prisma.networkTelemetryAlert.count({
+       where: { nodeId, isActive: true },
+     });
+     return {
+       snapshotId: snapshot?.id ?? null,
+       capturedAt: snapshot?.capturedAt ?? null,
+       totalBytesIn: snapshot?.totalBytesIn?.toString() ?? "0",
+       totalBytesOut: snapshot?.totalBytesOut?.toString() ?? "0",
+       activeHosts: snapshot?.activeHosts ?? 0,
+       activeFlows: snapshot?.activeFlows ?? 0,
+@@ -75,20 +95,27 @@ export class NetworkTelemetryService {
+       orderBy: [{ bytesOut: "desc" }, { bytesIn: "desc" }],
+     });
+     return assets.map((asset) => ({
+       ...asset,
+       bytesIn: asset.bytesIn.toString(),
+       bytesOut: asset.bytesOut.toString(),
+     }));
+   }
+ 
+   async getNodeAlerts(nodeId: string) {
++    if (!await this.nodeExists(nodeId)) return [];
++
++    const snapshot = await this.prisma.networkTelemetrySnapshot.findFirst({
++      where: { nodeId },
++      orderBy: { capturedAt: "desc" },
++    });
++    await this.deriveSilentAlerts(nodeId, snapshot?.capturedAt ?? null);
+     return this.prisma.networkTelemetryAlert.findMany({
+       where: { nodeId, isActive: true },
+       orderBy: [{ severity: "desc" }, { lastSeenAt: "desc" }],
+     });
+   }
+ 
+   async ingestSnapshot(dto: IngestNetworkTelemetryDto) {
+     const node = await this.prisma.node.findUniqueOrThrow({ where: { id: dto.nodeId } });
+     const capturedAt = new Date(dto.capturedAt);
+ 
+@@ -203,11 +230,90 @@ export class NetworkTelemetryService {
+           lastSeenAt: new Date(dto.capturedAt),
+           isActive: true,
+         },
+         update: {
+           lastSeenAt: new Date(dto.capturedAt),
+           isActive: true,
+           resolvedAt: null,
+         },
+       }));
+   }
++
++  private async nodeExists(nodeId: string) {
++    return (await this.prisma.node.findUnique({
++      where: { id: nodeId },
++      select: { id: true },
++    })) !== null;
++  }
++
++  private async deriveSilentAlerts(nodeId: string, latestCapturedAt: Date | null) {
++    const now = new Date();
++    const nodeSilentAlert = deriveNodeSilentAlert(nodeId, latestCapturedAt, now);
++    if (nodeSilentAlert) {
++      await this.prisma.networkTelemetryAlert.upsert(nodeSilentAlert);
++    } else {
++      await this.prisma.networkTelemetryAlert.updateMany({
++        where: {
++          nodeId,
++          kind: NetworkTelemetryAlertKind.NODE_SILENT,
++          isActive: true,
++        },
++        data: {
++          isActive: false,
++          resolvedAt: now,
++        },
++      });
++    }
++
++    const cutoff = new Date(now.getTime() - TELEMETRY_SILENCE_WINDOW_MS);
++    const [assets, recentSamples] = await Promise.all([
++      this.prisma.nodeAsset.findMany({
++        where: { nodeId },
++        select: { id: true, name: true },
++      }),
++      this.prisma.networkTelemetryAssetSample.findMany({
++        where: {
++          nodeId,
++          nodeAssetId: { not: null },
++          snapshot: { capturedAt: { gte: cutoff } },
++        },
++        select: { nodeAssetId: true },
++      }),
++    ]);
++    const visibleAssetIds = new Set(
++      recentSamples.flatMap((sample) => sample.nodeAssetId ? [sample.nodeAssetId] : []),
++    );
++    const currentAssetIds = assets.map((asset) => asset.id);
++
++    if (visibleAssetIds.size > 0) {
++      await this.prisma.networkTelemetryAlert.updateMany({
++        where: {
++          nodeId,
++          nodeAssetId: { in: [...visibleAssetIds] },
++          kind: NetworkTelemetryAlertKind.ASSET_SILENT,
++          isActive: true,
++        },
++        data: {
++          isActive: false,
++          resolvedAt: now,
++        },
++      });
++    }
++
++    await this.prisma.networkTelemetryAlert.updateMany({
++      where: {
++        nodeId,
++        nodeAssetId: { notIn: currentAssetIds },
++        kind: NetworkTelemetryAlertKind.ASSET_SILENT,
++        isActive: true,
++      },
++      data: {
++        isActive: false,
++        resolvedAt: now,
++      },
++    });
++
++    for (const alert of deriveSilentAssetAlerts(nodeId, assets, visibleAssetIds, now)) {
++      await this.prisma.networkTelemetryAlert.upsert(alert);
++    }
++  }
+ }

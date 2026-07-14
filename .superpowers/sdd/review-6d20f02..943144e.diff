@@ -1,0 +1,169 @@
+# Review package: 6d20f02f24fff1d8a0eaae9e135c3cf1cc7af8a7..943144eafd1ae862fc77d1adad491014e65756a4
+
+## Commits
+943144e feat(web): refresh network monitor workspace shell
+
+## Files changed
+ apps/web/app/monitoring/network/page.tsx | 67 +++++++++++++++++++-------------
+ 1 file changed, 39 insertions(+), 28 deletions(-)
+
+## Diff
+diff --git a/apps/web/app/monitoring/network/page.tsx b/apps/web/app/monitoring/network/page.tsx
+index fd24443..f309ce8 100644
+--- a/apps/web/app/monitoring/network/page.tsx
++++ b/apps/web/app/monitoring/network/page.tsx
+@@ -420,115 +420,126 @@ export default function NetworkMonitoringPage() {
+           </div>
+           <GrafanaPanelEmbed
+             title={networkEmbed?.title ?? "Comando de red"}
+             src={networkEmbed?.src ?? null}
+             loading={loadingNetworkEmbed}
+           />
+         </section>
+ 
+         <div className="grid gap-6 xl:grid-cols-[1fr_1.6fr] xl:items-start">
+           <section className={`${PANEL_HUD} xl:sticky xl:top-6`}>
+-            <div className="mb-4 flex items-center justify-between gap-3">
++            <div className="mb-4 flex items-center justify-between gap-3 border-b border-ops-border/80 pb-4">
+               <div>
+-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-blue/80">Scanner Inventory</p>
++                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-blue/80">Node Command List</p>
+                 <p className="mt-1 text-sm font-semibold text-ops-text">Nodos monitoreados</p>
+-                <p className="text-xs text-ops-muted">Vista compacta y filtrable tipo Orangutan.</p>
++                <p className="text-xs text-ops-muted">Selecciona un nodo para abrir su contexto operativo.</p>
+               </div>
+-              <span className="rounded-full border border-ops-border px-2 py-1 text-[10px] text-ops-muted">{filteredNodes.length}</span>
++              <span className="rounded-full border border-ops-blue/30 bg-ops-blue/10 px-2.5 py-1 font-mono text-[10px] text-ops-blue">{filteredNodes.length}</span>
+             </div>
+             <input
+               className={`${INPUT} mb-3`}
+               value={filter}
+               onChange={(event) => setFilter(event.target.value)}
+               placeholder="Buscar por nodo, ruta o CMC…"
+             />
+             {loading ? (
+               <div className="flex justify-center py-12"><div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" /></div>
+             ) : (
+               <div className="max-h-[68vh] space-y-2 overflow-y-auto pr-1">
+                 {filteredNodes.map((node) => (
+                   <button
+                     key={node.id}
+                     type="button"
+                     onClick={() => setSelectedNodeId(node.id)}
+-                    className={`w-full rounded-ops border p-3 text-left transition-colors ${
++                    className={`group relative w-full overflow-hidden rounded-ops border p-3 text-left transition-colors ${
+                       node.id === selectedNodeId
+-                        ? "border-ops-blue bg-[linear-gradient(180deg,rgba(29,78,216,0.12),rgba(15,23,42,0.7))] shadow-ops-glow-blue"
++                        ? "border-ops-blue bg-[linear-gradient(90deg,rgba(29,78,216,0.24),rgba(15,23,42,0.84)_45%,rgba(2,6,23,0.96))] shadow-ops-glow-blue"
+                         : "border-ops-border bg-[linear-gradient(180deg,rgba(15,23,42,0.76),rgba(2,6,23,0.96))] hover:border-ops-blue/40"
+                     }`}
+                   >
++                    {node.id === selectedNodeId && <span className="absolute inset-y-0 left-0 w-1 bg-ops-blue" />}
+                     <div className="flex items-start justify-between gap-3">
+-                      <div>
+-                        <p className="font-mono text-xs text-ops-blue">{node.code}</p>
+-                        <p className="text-sm font-medium text-ops-text">{node.name}</p>
+-                        <p className="text-[11px] text-ops-muted">{node.route.identifier} · {node.route.center.name}</p>
++                      <div className="min-w-0">
++                        <div className="flex items-center gap-2">
++                          <p className="font-mono text-[10px] font-semibold tracking-[0.16em] text-ops-blue">{node.code}</p>
++                          {node.id === selectedNodeId && <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-ops-blue">Activo</span>}
++                        </div>
++                        <p className="truncate text-sm font-semibold text-ops-text">{node.name}</p>
++                        <p className="truncate text-[11px] text-ops-muted">{node.route.identifier} · {node.route.center.name}</p>
+                       </div>
+-                      <span className={`rounded-full border px-2 py-0.5 text-[10px] ${stateBadge(node.operativeState)}`}>
++                      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${stateBadge(node.operativeState)}`}>
+                         {node.operativeState}
+                       </span>
+                     </div>
+-                    <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-ops-dim">
++                    <div className="mt-3 flex items-center gap-2 border-t border-ops-border/70 pt-2 text-[10px] text-ops-dim">
+                       <span>{node._count.assets} activos</span>
++                      <span className="text-ops-border">/</span>
+                       <span>{node._count.discoveryJobs} scans</span>
++                      <span className="text-ops-border">/</span>
+                       <span>{node._count.analyticsAssignments} analíticas</span>
+                     </div>
+-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/30">
++                    <div className="mt-2 h-1 overflow-hidden rounded-full bg-black/30">
+                       <div
+                         className={`${node.operativeState === "ONLINE" ? "bg-ops-emerald" : node.operativeState === "DEGRADED" ? "bg-ops-amber" : "bg-ops-rose"} h-full rounded-full`}
+                         style={{ width: `${node._count.assets === 0 ? 18 : Math.min(100, 28 + node._count.assets * 11)}%` }}
+                       />
+                     </div>
+                   </button>
+                 ))}
+               </div>
+             )}
+           </section>
+ 
+           <section className="space-y-4">
+             {!detail ? (
+               <div className={PANEL}>
+                 <p className="text-sm text-ops-muted">Selecciona un nodo para abrir el monitor operativo.</p>
+               </div>
+             ) : (
+               <>
+                 <div className={PANEL_HUD}>
+                   <div className="flex flex-wrap items-start justify-between gap-4">
+-                    <div>
+-                      <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-blue/80">Active Monitoring Context</p>
+-                      <h2 className="mt-1 text-xl font-semibold text-ops-text">{detail.code} · {detail.name}</h2>
+-                      <p className="text-sm text-ops-muted">
++                    <div className="min-w-0">
++                      <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-blue/80">Selected Node Command</p>
++                      <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
++                        <h2 className="text-2xl font-semibold tracking-tight text-ops-text">{detail.name}</h2>
++                        <span className="font-mono text-xs font-semibold tracking-[0.16em] text-ops-blue">{detail.code}</span>
++                      </div>
++                      <p className="mt-1 text-sm text-ops-muted">
+                         {detail.route.identifier} · {detail.route.center.name} · IP {detail.primaryIp ?? "sin definir"}
+                       </p>
+-                      <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-ops-muted">
+-                        <span className={`rounded-full border px-2 py-1 ${stateBadge(detail.operativeState)}`}>{detail.operativeState}</span>
+-                        <span className="rounded-full border border-ops-border px-2 py-1">Subnet {detail.scanSubnetCidr ?? "sin CIDR"}</span>
+-                        <span className="rounded-full border border-ops-border px-2 py-1">{detail.assets.length} activos oficiales</span>
++                      <div className="mt-4 flex flex-wrap gap-2 text-[10px] font-medium uppercase tracking-[0.08em] text-ops-muted">
++                        <span className={`rounded-full border px-2.5 py-1 ${stateBadge(detail.operativeState)}`}>{detail.operativeState}</span>
++                        <span className="rounded-full border border-ops-border bg-black/20 px-2.5 py-1">Subnet {detail.scanSubnetCidr ?? "sin CIDR"}</span>
++                        <span className="rounded-full border border-ops-border bg-black/20 px-2.5 py-1">{detail.assets.length} activos oficiales</span>
+                       </div>
+                     </div>
+-                    <div className="flex items-center gap-3">
+-                      {loadingDetail && <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" />}
++                    <div className="flex items-center gap-3 rounded-ops border border-ops-border bg-black/20 p-2">
++                      {loadingDetail && <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" aria-label="Actualizando detalle del nodo" />}
+                       <button
+                         type="button"
+                         onClick={() => void handleRunDiscovery()}
+                         disabled={runningDiscovery}
+-                        className="rounded-ops bg-ops-blue px-4 py-2 text-sm font-semibold text-white hover:bg-ops-blue/80 disabled:opacity-50"
++                        className="rounded-ops bg-ops-blue px-4 py-2 text-sm font-semibold text-white shadow-ops-glow-blue hover:bg-ops-blue/80 disabled:opacity-50"
+                       >
+                         {runningDiscovery ? "Escaneando…" : "Escanear ahora"}
+                       </button>
+                     </div>
+                   </div>
+                 </div>
+ 
+-                <div className="flex flex-wrap gap-2">
+-                  <button type="button" className={tabClass(tab === "inventario")} onClick={() => setTab("inventario")}>Inventario</button>
+-                  <button type="button" className={tabClass(tab === "trafico")} onClick={() => setTab("trafico")}>Tráfico / Observabilidad</button>
+-                  <button type="button" className={tabClass(tab === "alertas")} onClick={() => setTab("alertas")}>Alertas</button>
++                <div className="border-y border-ops-border bg-black/20 px-3 py-2">
++                  <div className="flex flex-wrap gap-2" role="tablist" aria-label="Vistas operativas del nodo">
++                    <button type="button" role="tab" aria-selected={tab === "inventario"} className={tabClass(tab === "inventario")} onClick={() => setTab("inventario")}>Inventario</button>
++                    <button type="button" role="tab" aria-selected={tab === "trafico"} className={tabClass(tab === "trafico")} onClick={() => setTab("trafico")}>Tráfico / Observabilidad</button>
++                    <button type="button" role="tab" aria-selected={tab === "alertas"} className={tabClass(tab === "alertas")} onClick={() => setTab("alertas")}>Alertas</button>
++                  </div>
+                 </div>
+ 
+                 {tab === "inventario" && (
+                   <div className="grid gap-4 xl:grid-cols-[1.25fr_0.95fr]">
+                     <div className={PANEL_GRID}>
+                       <div className="mb-3 flex items-center justify-between">
+                         <div>
+                           <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-blue/80">Correlated Inventory</p>
+                           <p className="mt-1 text-sm font-semibold text-ops-text">Inventario correlacionado</p>
+                           <p className="text-xs text-ops-muted">Oficiales + discovery pendiente en una tabla operacional densa.</p>

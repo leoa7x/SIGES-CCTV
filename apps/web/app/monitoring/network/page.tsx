@@ -210,6 +210,16 @@ function formatDate(value?: string | null) {
   return new Intl.DateTimeFormat("es-CO", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
 }
 
+const CLASSIFICATION_LABELS: Record<string, string> = {
+  OFFICIAL: "Oficial",
+  DISCOVERY: "Discovery",
+  UNMATCHED: "Sin correlación",
+};
+
+function classificationLabel(source: string) {
+  return CLASSIFICATION_LABELS[source] ?? source;
+}
+
 export default function NetworkMonitoringPage() {
   const { accessToken } = useAuth();
   const [nodes, setNodes] = useState<MonitorNodeListItem[]>([]);
@@ -440,7 +450,6 @@ export default function NetworkMonitoringPage() {
           <section className={`${PANEL_HUD} xl:sticky xl:top-6`}>
             <div className="mb-4 flex items-center justify-between gap-3 border-b border-ops-border/80 pb-4">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-blue/80">Node Command List</p>
                 <p className="mt-1 text-sm font-semibold text-ops-text">Nodos monitoreados</p>
                 <p className="text-xs text-ops-muted">Selecciona un nodo para abrir su contexto operativo.</p>
               </div>
@@ -510,7 +519,7 @@ export default function NetworkMonitoringPage() {
                 <div className={PANEL_HUD}>
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-blue/80">Selected Node Command</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-blue/80">Nodo seleccionado</p>
                       <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
                         <h2 className="text-2xl font-semibold tracking-tight text-ops-text">{detail.name}</h2>
                         <span className="font-mono text-xs font-semibold tracking-[0.16em] text-ops-blue">{detail.code}</span>
@@ -560,7 +569,7 @@ export default function NetworkMonitoringPage() {
                         className={`${INPUT} mb-3`}
                         value={inventoryFilter}
                         onChange={(event) => setInventoryFilter(event.target.value)}
-                        placeholder="Buscar por nombre, tipo, IP, MAC o vendor…"
+                        placeholder="Buscar por nombre, tipo, IP, MAC o fabricante…"
                       />
                       <div className="max-h-[60vh] overflow-y-auto rounded-ops border border-ops-border">
                         <table className="w-full text-sm">
@@ -571,7 +580,7 @@ export default function NetworkMonitoringPage() {
                               <th className="px-4 py-3">Tipo</th>
                               <th className="px-4 py-3">IP</th>
                               <th className="px-4 py-3">MAC</th>
-                              <th className="px-4 py-3">Vendor</th>
+                              <th className="px-4 py-3">Fabricante</th>
                               <th className="px-4 py-3">Estado</th>
                             </tr>
                           </thead>
@@ -622,7 +631,7 @@ export default function NetworkMonitoringPage() {
                               <div>
                                 <p className="text-sm font-medium text-ops-text">{device.name || device.hostname || device.ip || "Dispositivo descubierto"}</p>
                                 <p className="text-xs text-ops-muted">
-                                  {(device.candidateType ?? "SIN_CLASIFICAR")} · {device.ip ?? "sin IP"} · {device.vendor ?? "sin vendor"}
+                                  {(device.candidateType ?? "Sin clasificar")} · {device.ip ?? "sin IP"} · {device.vendor ?? "sin fabricante"}
                                 </p>
                               </div>
                               <div className="flex items-center gap-2">
@@ -749,7 +758,7 @@ export default function NetworkMonitoringPage() {
                         {observabilityAssets.length > 0 ? (
                           <MiniBarChart
                             items={["OFFICIAL", "DISCOVERY", "UNMATCHED"].map((source) => ({
-                              label: source,
+                              label: classificationLabel(source),
                               value: observabilityAssets.filter((asset) => asset.classificationSource === source).length,
                             }))}
                             colorClass="bg-ops-rose"
@@ -809,9 +818,9 @@ export default function NetworkMonitoringPage() {
                             <div className="flex items-center justify-between gap-3">
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-medium text-ops-text">{asset.nodeAsset?.name ?? asset.hostname ?? asset.ip ?? asset.mac ?? "Host observado"}</p>
-                                <p className="truncate text-xs text-ops-muted">{asset.nodeAsset?.assetType ?? "SIN_CORRELACION"} · {asset.ip ?? "sin IP"} · {asset.mac ?? "sin MAC"}</p>
+                                <p className="truncate text-xs text-ops-muted">{asset.nodeAsset?.assetType ?? "Sin correlación"} · {asset.ip ?? "sin IP"} · {asset.mac ?? "sin MAC"}</p>
                               </div>
-                              <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] ${asset.classificationSource === "OFFICIAL" ? "border-ops-emerald/30 bg-ops-emerald/10 text-ops-emerald" : asset.classificationSource === "DISCOVERY" ? "border-ops-blue/30 bg-ops-blue/10 text-ops-blue" : "border-ops-amber/30 bg-ops-amber/10 text-ops-amber"}`}>{asset.classificationSource}</span>
+                              <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] ${asset.classificationSource === "OFFICIAL" ? "border-ops-emerald/30 bg-ops-emerald/10 text-ops-emerald" : asset.classificationSource === "DISCOVERY" ? "border-ops-blue/30 bg-ops-blue/10 text-ops-blue" : "border-ops-amber/30 bg-ops-amber/10 text-ops-amber"}`}>{classificationLabel(asset.classificationSource)}</span>
                             </div>
                             <div className="mt-3">
                               <div className="mb-1 flex items-center justify-between text-[11px] text-ops-dim">

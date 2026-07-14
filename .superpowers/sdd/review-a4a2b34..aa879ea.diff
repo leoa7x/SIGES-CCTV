@@ -1,0 +1,422 @@
+# Review package: a4a2b345d1b62d508f5b2afe84d457dc54bf96bb..aa879ea9aa9d18d47d02cb864286080419ca6bd2
+
+## Commits
+aa879ea feat(web): polish network monitor modules
+
+## Files changed
+ apps/web/app/monitoring/network/page.tsx | 211 +++++++++++++++++++++++--------
+ 1 file changed, 156 insertions(+), 55 deletions(-)
+
+## Diff
+diff --git a/apps/web/app/monitoring/network/page.tsx b/apps/web/app/monitoring/network/page.tsx
+index 903ec42..3d11b0c 100644
+--- a/apps/web/app/monitoring/network/page.tsx
++++ b/apps/web/app/monitoring/network/page.tsx
+@@ -219,20 +219,21 @@ export default function NetworkMonitoringPage() {
+   const [telemetryTimeseries, setTelemetryTimeseries] = useState<NetworkTelemetryPoint[]>([]);
+   const [telemetryAssets, setTelemetryAssets] = useState<NetworkTelemetryAssetView[]>([]);
+   const [telemetryAlerts, setTelemetryAlerts] = useState<NetworkTelemetryAlert[]>([]);
+   const [networkEmbedDescriptor, setNetworkEmbedDescriptor] = useState<GrafanaEmbedDescriptor | null>(null);
+   const [loading, setLoading] = useState(true);
+   const [loadingDetail, setLoadingDetail] = useState(false);
+   const [loadingNetworkEmbed, setLoadingNetworkEmbed] = useState(false);
+   const [runningDiscovery, setRunningDiscovery] = useState(false);
+   const [resolvingDiscoveryId, setResolvingDiscoveryId] = useState("");
+   const [filter, setFilter] = useState("");
++  const [inventoryFilter, setInventoryFilter] = useState("");
+   const [tab, setTab] = useState<"inventario" | "trafico" | "alertas">("inventario");
+   const selectedNodeIdRef = useRef(selectedNodeId);
+   const detailRequestIdRef = useRef(0);
+ 
+   selectedNodeIdRef.current = selectedNodeId;
+ 
+   const filteredNodes = useMemo(() => {
+     const q = filter.trim().toLowerCase();
+     if (!q) return nodes;
+     return nodes.filter((node) =>
+@@ -241,20 +242,30 @@ export default function NetworkMonitoringPage() {
+       node.route.identifier.toLowerCase().includes(q) ||
+       node.route.center.name.toLowerCase().includes(q));
+   }, [filter, nodes]);
+ 
+   const latestJob = detail?.discoveryJobs[0] ?? null;
+   const model = useMemo(() => buildNetworkMonitorModel(nodes, detail), [nodes, detail]);
+   const networkEmbed = useMemo(
+     () => networkEmbedDescriptor ? buildGrafanaEmbedModel(networkEmbedDescriptor) : null,
+     [networkEmbedDescriptor],
+   );
++  const filteredInventory = useMemo(() => {
++    const q = inventoryFilter.trim().toLowerCase();
++    if (!q) return model.inventory;
++    return model.inventory.filter((row) =>
++      row.name.toLowerCase().includes(q) ||
++      row.type.toLowerCase().includes(q) ||
++      row.ip.toLowerCase().includes(q) ||
++      row.mac.toLowerCase().includes(q) ||
++      row.vendor.toLowerCase().includes(q));
++  }, [model.inventory, inventoryFilter]);
+ 
+   const loadNodes = useCallback(async () => {
+     if (!accessToken) return;
+     setLoading(true);
+     try {
+       const response = await apiGet<MonitorNodeListItem[]>("/nodes", accessToken);
+       setNodes(response);
+       if (!selectedNodeId && response[0]?.id) {
+         setSelectedNodeId(response[0].id);
+       }
+@@ -533,71 +544,84 @@ export default function NetworkMonitoringPage() {
+                     <button type="button" className={tabClass(tab === "trafico")} onClick={() => setTab("trafico")}>Tráfico / Observabilidad</button>
+                     <button type="button" className={tabClass(tab === "alertas")} onClick={() => setTab("alertas")}>Alertas</button>
+                   </div>
+                 </div>
+ 
+                 {tab === "inventario" && (
+                   <div className="grid gap-4 xl:grid-cols-[1.25fr_0.95fr]">
+                     <div className={PANEL_GRID}>
+                       <div className="mb-3 flex items-center justify-between">
+                         <div>
+-                          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-blue/80">Correlated Inventory</p>
+-                          <p className="mt-1 text-sm font-semibold text-ops-text">Inventario correlacionado</p>
+-                          <p className="text-xs text-ops-muted">Oficiales + discovery pendiente en una tabla operacional densa.</p>
++                          <p className="text-sm font-semibold text-ops-text">Inventario correlacionado</p>
++                          <p className="text-xs text-ops-muted">Equipos oficiales + hallazgos de discovery pendientes de confirmar.</p>
+                         </div>
+-                        <span className="rounded-full border border-ops-border px-2 py-1 text-[10px] text-ops-muted">{model.inventory.length}</span>
++                        <span className="rounded-full border border-ops-border px-2 py-1 text-[10px] text-ops-muted">{filteredInventory.length} / {model.inventory.length}</span>
+                       </div>
+-                      <div className="overflow-hidden rounded-ops border border-ops-border">
++                      <input
++                        className={`${INPUT} mb-3`}
++                        value={inventoryFilter}
++                        onChange={(event) => setInventoryFilter(event.target.value)}
++                        placeholder="Buscar por nombre, tipo, IP, MAC o vendor…"
++                      />
++                      <div className="max-h-[60vh] overflow-y-auto rounded-ops border border-ops-border">
+                         <table className="w-full text-sm">
+                           <thead>
+-                            <tr className="border-b border-ops-border bg-black/20 text-left text-[10px] font-semibold uppercase tracking-[0.22em] text-ops-muted">
++                            <tr className="sticky top-0 z-10 border-b border-ops-border bg-black/80 text-left text-[10px] font-semibold uppercase tracking-[0.22em] text-ops-muted">
+                               <th className="px-4 py-3">Fuente</th>
+                               <th className="px-4 py-3">Nombre</th>
+                               <th className="px-4 py-3">Tipo</th>
+                               <th className="px-4 py-3">IP</th>
+                               <th className="px-4 py-3">MAC</th>
+                               <th className="px-4 py-3">Vendor</th>
+                               <th className="px-4 py-3">Estado</th>
+                             </tr>
+                           </thead>
+                           <tbody className="divide-y divide-ops-border">
+-                            {model.inventory.map((row) => (
++                            {filteredInventory.map((row) => (
+                               <tr key={row.id} className="bg-ops-surface/70 transition hover:bg-ops-surface">
+                                 <td className="px-4 py-3 text-xs text-ops-muted">
+                                   <span className={`rounded-full border px-2 py-1 ${row.source === "OFFICIAL" ? "border-ops-emerald/30 bg-ops-emerald/10 text-ops-emerald" : "border-ops-blue/30 bg-ops-blue/10 text-ops-blue"}`}>
+                                     {row.source === "OFFICIAL" ? "Oficial" : `Discovery ${row.confidenceLabel}`}
+                                   </span>
+                                 </td>
+                                 <td className="px-4 py-3 text-ops-text">{row.name}</td>
+                                 <td className="px-4 py-3 text-ops-muted">{row.type}</td>
+                                 <td className="px-4 py-3 font-mono text-xs text-ops-muted">{row.ip}</td>
+                                 <td className="px-4 py-3 font-mono text-xs text-ops-muted">{row.mac}</td>
+                                 <td className="px-4 py-3 text-ops-muted">{row.vendor}</td>
+                                 <td className="px-4 py-3 text-ops-muted">
+                                   <span className={`rounded-full border px-2 py-1 text-[10px] ${stateBadge(row.state)}`}>{row.state}</span>
+                                 </td>
+                               </tr>
+                             ))}
+                             {model.inventory.length === 0 && (
+                               <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-ops-muted">Sin inventario operativo todavía.</td></tr>
+                             )}
++                            {model.inventory.length > 0 && filteredInventory.length === 0 && (
++                              <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-ops-muted">Sin resultados para “{inventoryFilter}”.</td></tr>
++                            )}
+                           </tbody>
+                         </table>
+                       </div>
+                     </div>
+ 
+-                    <div className={`${PANEL_HUD} space-y-3`}>
+-                      <div>
+-                        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-blue/80">Discovery Queue</p>
+-                        <p className="mt-1 text-sm font-semibold text-ops-text">Pendientes del último discovery</p>
+-                        <p className="text-xs text-ops-muted">Cola operativa tipo scanner: confirmar o descartar antes de incorporarlo.</p>
++                    <div className={PANEL_HUD}>
++                      <div className="mb-3 flex items-center justify-between gap-3">
++                        <div>
++                          <p className="text-sm font-semibold text-ops-text">Pendientes del último escaneo</p>
++                          <p className="text-xs text-ops-muted">Confirma o descarta cada equipo antes de incorporarlo al inventario.</p>
++                        </div>
++                        <span className="rounded-full border border-ops-border px-2 py-1 text-[10px] text-ops-muted">
++                          {latestJob?.discoveredDevices.filter((device) => device.status === "DISCOVERED").length ?? 0}
++                        </span>
+                       </div>
++                      <div className="max-h-[55vh] space-y-3 overflow-y-auto pr-1">
+                       {latestJob?.discoveredDevices.filter((device) => device.status === "DISCOVERED").length ? (
+                         latestJob.discoveredDevices.filter((device) => device.status === "DISCOVERED").map((device) => (
+                           <div key={device.id} className="rounded-ops border border-ops-border bg-[linear-gradient(180deg,rgba(15,23,42,0.8),rgba(2,6,23,0.96))] p-3">
+                             <div className="flex flex-wrap items-start justify-between gap-3">
+                               <div>
+                                 <p className="text-sm font-medium text-ops-text">{device.name || device.hostname || device.ip || "Dispositivo descubierto"}</p>
+                                 <p className="text-xs text-ops-muted">
+                                   {(device.candidateType ?? "SIN_CLASIFICAR")} · {device.ip ?? "sin IP"} · {device.vendor ?? "sin vendor"}
+                                 </p>
+                               </div>
+@@ -618,33 +642,33 @@ export default function NetworkMonitoringPage() {
+                                 >
+                                   Descartar
+                                 </button>
+                               </div>
+                             </div>
+                           </div>
+                         ))
+                       ) : (
+                         <p className="text-sm text-ops-muted">No hay dispositivos pendientes de confirmar en el último scan.</p>
+                       )}
++                      </div>
+                     </div>
+                   </div>
+                 )}
+ 
+                 {tab === "trafico" && (
+                   <div className="space-y-4">
+                     <div className="grid gap-4 xl:grid-cols-[1.3fr_0.9fr]">
+                       <div className={PANEL_HUD}>
+                         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                           <div>
+-                            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-blue/80">Network Pulse</p>
+-                            <p className="mt-1 text-sm font-semibold text-ops-text">Pulso operativo del nodo</p>
+-                            <p className="text-xs text-ops-muted">Resumen visual estilo consola para disponibilidad, clasificación y capacidad de correlación.</p>
++                            <p className="text-sm font-semibold text-ops-text">Actividad reciente del nodo</p>
++                            <p className="text-xs text-ops-muted">Bytes de entrada/salida, hosts y flujos activos en las últimas capturas.</p>
+                           </div>
+                           <span className="rounded-full border border-ops-border px-2 py-1 text-[10px] text-ops-muted">
+                             {detail?.code} · {detail?.route.identifier}
+                           </span>
+                         </div>
+                         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                           {telemetryPulseCards.map((card, index) => (
+                             <TelemetryStrip
+                               key={card.label}
+                               title={card.label}
+@@ -657,23 +681,22 @@ export default function NetworkMonitoringPage() {
+                                   ? Number(point.totalBytesOut)
+                                   : index === 2
+                                     ? point.activeHosts
+                                     : point.activeFlows)}
+                             />
+                           ))}
+                         </div>
+                       </div>
+ 
+                       <div className={PANEL_GRID}>
+-                        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-blue/80">Signal Matrix</p>
+-                        <p className="mt-1 text-sm font-semibold text-ops-text">Estado rápido de telemetría</p>
+-                        <p className="mb-4 text-xs text-ops-muted">Bloque compacto para leer cobertura de datos antes de entrar a detalle.</p>
++                        <p className="text-sm font-semibold text-ops-text">Estado rápido de telemetría</p>
++                        <p className="mb-4 text-xs text-ops-muted">Cobertura de datos antes de entrar al detalle completo.</p>
+                         <SignalMatrix
+                           items={[
+                             { label: "Última captura", value: formatDate(telemetrySummary?.capturedAt), tone: "text-ops-text" },
+                             { label: "Alertas activas", value: String(telemetrySummary?.alertCount ?? 0), tone: "text-ops-amber" },
+                             { label: "Hosts visibles", value: String(telemetrySummary?.activeHosts ?? 0), tone: "text-ops-emerald" },
+                             { label: "Flows activos", value: String(telemetrySummary?.activeFlows ?? 0), tone: "text-ops-blue" },
+                           ]}
+                         />
+                       </div>
+                     </div>
+@@ -730,79 +753,157 @@ export default function NetworkMonitoringPage() {
+                               value: observabilityAssets.filter((asset) => asset.classificationSource === source).length,
+                             }))}
+                             colorClass="bg-ops-rose"
+                           />
+                         ) : (
+                           <p className="text-sm text-ops-muted">Todavía no hay hosts observados por telemetría.</p>
+                         )}
+                       </div>
+                     </div>
+ 
++                    <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
++                      <div className={PANEL_GRID}>
++                        <div className="mb-4 flex items-start justify-between gap-3">
++                          <div>
++                            <p className="text-sm font-semibold text-ops-text">Tendencia de discovery</p>
++                            <p className="text-xs text-ops-muted">Resultado de los escaneos recientes para contextualizar la cobertura observada.</p>
++                          </div>
++                          <span className="rounded-full border border-ops-border bg-black/20 px-2 py-1 text-[10px] text-ops-muted">{model.charts.discoveryTrend.length}</span>
++                        </div>
++                        {model.charts.discoveryTrend.length > 0 ? (
++                          <DiscoveryTrendChart items={model.charts.discoveryTrend} />
++                        ) : (
++                          <p className="text-sm text-ops-muted">Todavía no hay ejecuciones de discovery para comparar.</p>
++                        )}
++                      </div>
++
++                      <div className={PANEL_GRID}>
++                        <div className="mb-4 flex items-start justify-between gap-3">
++                          <div>
++                            <p className="text-sm font-semibold text-ops-text">Lectura de cobertura</p>
++                            <p className="text-xs text-ops-muted">La clasificación permite distinguir activos oficiales, hallazgos y hosts aún sin correlación.</p>
++                          </div>
++                          <span className="rounded-full border border-ops-border bg-black/20 px-2 py-1 text-[10px] text-ops-muted">SIGES</span>
++                        </div>
++                        <SignalMatrix
++                          items={[
++                            { label: "Activos oficiales", value: String(observabilityAssets.filter((asset) => asset.classificationSource === "OFFICIAL").length), tone: "text-ops-emerald" },
++                            { label: "Hallazgos discovery", value: String(observabilityAssets.filter((asset) => asset.classificationSource === "DISCOVERY").length), tone: "text-ops-blue" },
++                            { label: "Sin correlación", value: String(observabilityAssets.filter((asset) => asset.classificationSource === "UNMATCHED").length), tone: "text-ops-amber" },
++                            { label: "Último snapshot", value: formatDate(telemetrySummary?.capturedAt), tone: "text-ops-text" },
++                          ]}
++                        />
++                      </div>
++                    </div>
++
+                     <div className={PANEL_HUD}>
+-                        <p className="text-sm font-semibold text-ops-text">Actividad operativa del nodo</p>
+-                        <p className="mb-4 text-xs text-ops-muted">Hosts y volumen observados en el último snapshot de telemetría.</p>
+-                        <div className="grid gap-3 xl:grid-cols-2">
+-                          {observabilityAssets.map((asset) => (
+-                            <div key={asset.id} className="rounded-ops border border-ops-border bg-[linear-gradient(180deg,rgba(15,23,42,0.72),rgba(2,6,23,0.96))] p-3">
+-                              <div className="flex items-center justify-between gap-3">
+-                                <div>
+-                                  <p className="text-sm font-medium text-ops-text">{asset.nodeAsset?.name ?? asset.hostname ?? asset.ip ?? asset.mac ?? "Host observado"}</p>
+-                                  <p className="text-xs text-ops-muted">{asset.nodeAsset?.assetType ?? "SIN_CORRELACION"} · {asset.ip ?? "sin IP"} · {asset.mac ?? "sin MAC"}</p>
+-                                </div>
+-                                <span className="rounded-full border border-ops-blue/30 bg-ops-blue/10 px-2 py-1 text-[10px] text-ops-blue">{asset.classificationSource}</span>
++                      <div className="mb-4 flex items-center justify-between gap-3">
++                        <div>
++                          <p className="text-sm font-semibold text-ops-text">Actividad operativa del nodo</p>
++                          <p className="text-xs text-ops-muted">Hosts y volumen observados en el último snapshot de telemetría.</p>
++                        </div>
++                        <span className="rounded-full border border-ops-border bg-black/20 px-2 py-1 text-[10px] text-ops-muted">{observabilityAssets.length} hosts</span>
++                      </div>
++                      <div className="grid max-h-[70vh] gap-3 overflow-y-auto pr-1 xl:grid-cols-2">
++                        {observabilityAssets.map((asset) => (
++                          <div key={asset.id} className="rounded-ops border border-ops-border bg-[linear-gradient(180deg,rgba(15,23,42,0.72),rgba(2,6,23,0.96))] p-3">
++                            <div className="flex items-center justify-between gap-3">
++                              <div className="min-w-0">
++                                <p className="truncate text-sm font-medium text-ops-text">{asset.nodeAsset?.name ?? asset.hostname ?? asset.ip ?? asset.mac ?? "Host observado"}</p>
++                                <p className="truncate text-xs text-ops-muted">{asset.nodeAsset?.assetType ?? "SIN_CORRELACION"} · {asset.ip ?? "sin IP"} · {asset.mac ?? "sin MAC"}</p>
+                               </div>
+-                              <div className="mt-3">
+-                                <div className="mb-1 flex items-center justify-between text-[11px] text-ops-dim">
+-                                  <span>Tráfico total</span>
+-                                  <span>{formatTelemetryBytes(Number(asset.bytesIn) + Number(asset.bytesOut))}</span>
+-                                </div>
+-                                <div className="h-2 overflow-hidden rounded-full bg-black/30">
+-                                  <div
+-                                    className="h-full rounded-full bg-ops-emerald"
+-                                    style={{ width: `${Math.max(8, Math.round((Number(asset.bytesOut) / Math.max(1, Number(asset.bytesIn) + Number(asset.bytesOut))) * 100))}%` }}
+-                                  />
+-                                </div>
++                              <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] ${asset.classificationSource === "OFFICIAL" ? "border-ops-emerald/30 bg-ops-emerald/10 text-ops-emerald" : asset.classificationSource === "DISCOVERY" ? "border-ops-blue/30 bg-ops-blue/10 text-ops-blue" : "border-ops-amber/30 bg-ops-amber/10 text-ops-amber"}`}>{asset.classificationSource}</span>
++                            </div>
++                            <div className="mt-3">
++                              <div className="mb-1 flex items-center justify-between text-[11px] text-ops-dim">
++                                <span>Tráfico total</span>
++                                <span>{formatTelemetryBytes(Number(asset.bytesIn) + Number(asset.bytesOut))}</span>
+                               </div>
+-                              <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] text-ops-dim">
+-                                <span className="rounded border border-ops-border px-2 py-1">IN {formatTelemetryBytes(asset.bytesIn)}</span>
+-                                <span className="rounded border border-ops-border px-2 py-1">OUT {formatTelemetryBytes(asset.bytesOut)}</span>
+-                                <span className="rounded border border-ops-border px-2 py-1">{asset.flowCount} flows</span>
++                              <div className="h-2 overflow-hidden rounded-full bg-black/30">
++                                <div
++                                  className="h-full rounded-full bg-ops-emerald"
++                                  style={{ width: `${Math.max(8, Math.round((Number(asset.bytesOut) / Math.max(1, Number(asset.bytesIn) + Number(asset.bytesOut))) * 100))}%` }}
++                                />
+                               </div>
+-                              <p className="mt-2 text-[11px] text-ops-dim">Última actividad visible: {formatDate(asset.lastSeenAt)}</p>
+                             </div>
+-                          ))}
+-                          {observabilityAssets.length === 0 && <p className="text-sm text-ops-muted">Este nodo aún no reporta hosts en telemetría.</p>}
+-                        </div>
++                            <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] text-ops-dim">
++                              <span className="rounded border border-ops-border bg-black/20 px-2 py-1">IN {formatTelemetryBytes(asset.bytesIn)}</span>
++                              <span className="rounded border border-ops-border bg-black/20 px-2 py-1">OUT {formatTelemetryBytes(asset.bytesOut)}</span>
++                              <span className="rounded border border-ops-border bg-black/20 px-2 py-1">{asset.flowCount} flows</span>
++                            </div>
++                            <p className="mt-2 text-[11px] text-ops-dim">Última actividad visible: {formatDate(asset.lastSeenAt)}</p>
++                          </div>
++                        ))}
++                        {observabilityAssets.length === 0 && <p className="text-sm text-ops-muted">Este nodo aún no reporta hosts en telemetría.</p>}
++                      </div>
+                     </div>
+                   </div>
+                 )}
+ 
+                 {tab === "alertas" && (
+-                  <div className="space-y-4">
++                  <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+                     <div className={PANEL_HUD}>
+-                      <p className="text-sm font-semibold text-ops-text">Alertas operativas</p>
+-                      <p className="mb-4 text-xs text-ops-muted">Alertas activas derivadas de los snapshots de telemetría del nodo.</p>
+-                      <div className="space-y-3">
++                      <div className="mb-4 flex items-start justify-between gap-3">
++                        <div>
++                          <p className="text-sm font-semibold text-ops-text">Alertas de telemetría</p>
++                          <p className="text-xs text-ops-muted">Incidentes activos derivados de los snapshots de SIGES para este nodo.</p>
++                        </div>
++                        <span className="rounded-full border border-ops-border bg-black/20 px-2 py-1 text-[10px] text-ops-muted">{telemetryAlerts.length} activas</span>
++                      </div>
++                      <div className="space-y-2">
+                         {telemetryAlerts.map((alert) => (
+                           <div key={alert.id} className={`rounded-ops border p-3 ${ALERT_STYLES[telemetryAlertLevel(alert.severity)]}`}>
+-                            <p className="text-sm font-semibold">{alert.title}</p>
+-                            <p className="mt-1 text-xs opacity-90">{alert.detail}</p>
+-                            <p className="mt-2 text-[10px] opacity-75">Última detección: {formatDate(alert.lastSeenAt)}</p>
++                            <div className="flex items-start justify-between gap-3">
++                              <div>
++                                <p className="text-sm font-semibold">{alert.title}</p>
++                                <p className="mt-1 text-xs opacity-90">{alert.detail}</p>
++                              </div>
++                              <span className="rounded-full border border-current/30 bg-black/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">{alert.severity}</span>
++                            </div>
++                            <p className="mt-2 border-t border-current/15 pt-2 text-[10px] opacity-75">Última detección: {formatDate(alert.lastSeenAt)}</p>
+                           </div>
+                         ))}
+                         {telemetryAlerts.length === 0 && (
+                           <div className="rounded-ops border border-ops-emerald/30 bg-ops-emerald/10 p-4 text-sm text-ops-emerald">
+                             Sin alertas relevantes en este nodo por ahora.
+                           </div>
+                         )}
+                       </div>
+                     </div>
++
++                    <div className={PANEL_GRID}>
++                      <div className="mb-4 flex items-start justify-between gap-3">
++                        <div>
++                          <p className="text-sm font-semibold text-ops-text">Condiciones operativas</p>
++                          <p className="text-xs text-ops-muted">Hallazgos de inventario, discovery y configuración que requieren seguimiento.</p>
++                        </div>
++                        <span className="rounded-full border border-ops-border bg-black/20 px-2 py-1 text-[10px] text-ops-muted">{model.alerts.length} abiertas</span>
++                      </div>
++                      <div className="space-y-2">
++                        {model.alerts.map((alert) => (
++                          <div key={alert.id} className={`rounded-ops border p-3 ${ALERT_STYLES[alert.level]}`}>
++                            <div className="flex items-start justify-between gap-3">
++                              <div>
++                                <p className="text-sm font-semibold">{alert.title}</p>
++                                <p className="mt-1 text-xs opacity-90">{alert.detail}</p>
++                              </div>
++                              <span className="rounded-full border border-current/30 bg-black/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">{alert.level}</span>
++                            </div>
++                          </div>
++                        ))}
++                        {model.alerts.length === 0 && (
++                          <div className="rounded-ops border border-ops-emerald/30 bg-ops-emerald/10 p-4 text-sm text-ops-emerald">
++                            Sin condiciones operativas pendientes en este nodo.
++                          </div>
++                        )}
++                      </div>
++                    </div>
+                   </div>
+                 )}
+               </>
+             )}
+           </section>
+         </div>
+       </div>
+     </OpsShell>
+   );
+ }

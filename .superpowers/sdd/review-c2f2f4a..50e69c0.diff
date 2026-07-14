@@ -1,0 +1,222 @@
+diff --git a/.superpowers/sdd/grafana-task-4-report.md b/.superpowers/sdd/grafana-task-4-report.md
+new file mode 100644
+index 0000000..d1b6045
+--- /dev/null
++++ b/.superpowers/sdd/grafana-task-4-report.md
+@@ -0,0 +1,17 @@
++Status: DONE
++
++Commits created:
++- `e3453ec feat(web): add grafana embed component`
++- `184deaf fix(web): honor grafana embed params and safety tests`
++
++Changed files:
++- `apps/web/components/grafana-panel-embed.tsx`
++- `apps/web/lib/api.ts`
++- `apps/web/lib/network-monitor.ts`
++- `apps/web/lib/network-monitor.test.ts`
++
++Verification:
++- Command: `npm run test:network-monitor --workspace=apps/web`
++- Result: passed 7/7 tests.
++- Command: `npm run build --workspace=apps/web`
++- Result: production build completed successfully.
+diff --git a/apps/web/components/grafana-panel-embed.tsx b/apps/web/components/grafana-panel-embed.tsx
+new file mode 100644
+index 0000000..a335099
+--- /dev/null
++++ b/apps/web/components/grafana-panel-embed.tsx
+@@ -0,0 +1,35 @@
++type GrafanaPanelEmbedProps = {
++  title: string;
++  src: string | null;
++  loading?: boolean;
++};
++
++export function GrafanaPanelEmbed({ title, src, loading = false }: GrafanaPanelEmbedProps) {
++  if (loading) {
++    return (
++      <div className="rounded-ops border border-ops-border bg-ops-panel p-4 text-sm text-ops-muted">
++        Cargando observabilidad...
++      </div>
++    );
++  }
++
++  if (!src) {
++    return (
++      <div className="rounded-ops border border-ops-border bg-ops-panel p-4 text-sm text-ops-muted">
++        Observabilidad no disponible.
++      </div>
++    );
++  }
++
++  return (
++    <section className="rounded-ops border border-ops-border bg-ops-panel p-3">
++      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-ops-muted">{title}</p>
++      <iframe
++        title={title}
++        className="h-[720px] w-full rounded-ops border border-ops-border bg-black"
++        src={src}
++        loading="lazy"
++      />
++    </section>
++  );
++}
+diff --git a/apps/web/lib/api.ts b/apps/web/lib/api.ts
+index dc45fb3..9d4f575 100644
+--- a/apps/web/lib/api.ts
++++ b/apps/web/lib/api.ts
+@@ -1,12 +1,21 @@
+ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
+ 
++export type GrafanaDashboardKey = "node-observability" | "network-command-view";
++
++export type GrafanaEmbedDescriptor = {
++  title: string;
++  dashboard: GrafanaDashboardKey;
++  url: string;
++  params: Record<string, string>;
++};
++
+ export async function apiGet<T>(path: string, token: string): Promise<T> {
+   const res = await fetch(`${API_URL}${path}`, {
+     headers: { Authorization: `Bearer ${token}` },
+   });
+   if (!res.ok) throw new Error(`API ${res.status} ${path}`);
+   return res.json() as Promise<T>;
+ }
+ 
+ export async function apiPost<T>(path: string, token: string, body: unknown): Promise<T> {
+   const res = await fetch(`${API_URL}${path}`, {
+diff --git a/apps/web/lib/network-monitor.test.ts b/apps/web/lib/network-monitor.test.ts
+index 39b5cd5..c82ef38 100644
+--- a/apps/web/lib/network-monitor.test.ts
++++ b/apps/web/lib/network-monitor.test.ts
+@@ -1,21 +1,88 @@
+ import assert from "node:assert/strict";
+ import test from "node:test";
+ import * as networkMonitor from "./network-monitor";
+ 
+ import {
++  buildGrafanaEmbedModel,
+   buildNetworkMonitorModel,
+   formatTelemetryBytes,
+   telemetryAlertLevel,
+   type MonitorNodeDetail,
+   type MonitorNodeListItem,
+ } from "./network-monitor";
++import type { GrafanaEmbedDescriptor } from "./api";
++
++test("builds a safe iframe src from an API descriptor", () => {
++  const descriptor: GrafanaEmbedDescriptor = {
++    title: "Observabilidad del nodo",
++    dashboard: "node-observability",
++    url: "http://grafana.local/d-solo/node-observability",
++    params: { "var-nodeId": "node-1", from: "now-6h" },
++  };
++
++  const result = buildGrafanaEmbedModel(descriptor);
++
++  assert.equal(result.title, "Observabilidad del nodo");
++  assert.notEqual(result.src, null);
++  if (result.src) {
++    assert.match(result.src, /var-nodeId=node-1/);
++    assert.match(result.src, /from=now-6h/);
++  }
++});
++
++test("buildGrafanaEmbedModel lets descriptor params override base query values", () => {
++  const descriptor: GrafanaEmbedDescriptor = {
++    title: "Observabilidad del nodo",
++    dashboard: "node-observability",
++    url: "http://grafana.local/d-solo/node-observability?var-nodeId=All&from=old",
++    params: { "var-nodeId": "node-1", from: "now-6h" },
++  };
++
++  const result = buildGrafanaEmbedModel(descriptor);
++
++  assert.notEqual(result.src, null);
++  if (result.src) {
++    assert.match(result.src, /var-nodeId=node-1/);
++    assert.match(result.src, /from=now-6h/);
++    assert.doesNotMatch(result.src, /var-nodeId=All/);
++    assert.doesNotMatch(result.src, /from=old/);
++  }
++});
++
++test("buildGrafanaEmbedModel returns null for malformed URLs", () => {
++  const descriptor: GrafanaEmbedDescriptor = {
++    title: "Observabilidad",
++    dashboard: "node-observability",
++    url: "not-a-url",
++    params: {},
++  };
++
++  const result = buildGrafanaEmbedModel(descriptor);
++
++  assert.equal(result.title, "Observabilidad");
++  assert.equal(result.src, null);
++});
++
++test("buildGrafanaEmbedModel rejects non-http schemes", () => {
++  const descriptor: GrafanaEmbedDescriptor = {
++    title: "Observabilidad",
++    dashboard: "node-observability",
++    url: "javascript:alert(1)",
++    params: {},
++  };
++
++  const result = buildGrafanaEmbedModel(descriptor);
++
++  assert.equal(result.title, "Observabilidad");
++  assert.equal(result.src, null);
++});
+ 
+ test("network detail responses only apply to the current node and request", () => {
+   const isCurrentNetworkDetailRequest = (networkMonitor as Record<string, unknown>).isCurrentNetworkDetailRequest as
+     | ((requestedNodeId: string, currentNodeId: string, requestId: number, currentRequestId: number) => boolean)
+     | undefined;
+ 
+   assert.equal(typeof isCurrentNetworkDetailRequest, "function");
+   assert.equal(isCurrentNetworkDetailRequest?.("node-2", "node-2", 4, 4), true);
+   assert.equal(isCurrentNetworkDetailRequest?.("node-1", "node-2", 3, 4), false);
+   assert.equal(isCurrentNetworkDetailRequest?.("node-2", "node-2", 3, 4), false);
+diff --git a/apps/web/lib/network-monitor.ts b/apps/web/lib/network-monitor.ts
+index 13016f7..e268612 100644
+--- a/apps/web/lib/network-monitor.ts
++++ b/apps/web/lib/network-monitor.ts
+@@ -1,10 +1,34 @@
++import type { GrafanaEmbedDescriptor } from "./api";
++
++export type GrafanaEmbedModel = {
++  title: string;
++  src: string | null;
++};
++
++export function buildGrafanaEmbedModel(descriptor: GrafanaEmbedDescriptor): GrafanaEmbedModel {
++  try {
++    const url = new URL(descriptor.url);
++    if (url.protocol !== "http:" && url.protocol !== "https:") {
++      return { title: descriptor.title, src: null };
++    }
++
++    for (const [key, value] of Object.entries(descriptor.params)) {
++      url.searchParams.set(key, value);
++    }
++
++    return { title: descriptor.title, src: url.toString() };
++  } catch {
++    return { title: descriptor.title, src: null };
++  }
++}
++
+ export type MonitorNodeListItem = {
+   id: string;
+   code: string;
+   name: string;
+   primaryIp?: string | null;
+   scanSubnetCidr?: string | null;
+   operativeState: string;
+   route: { identifier: string; center: { name: string } };
+   _count: { assets: number; discoveryJobs: number; analyticsAssignments: number };
+ };

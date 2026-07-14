@@ -1,0 +1,213 @@
+# Review package: 613ef84..1cbe2bf
+
+## Commits
+1cbe2bf test(api): assert network telemetry asset correlation
+bbb852c test(api): add failing network telemetry service tests
+
+## Files changed
+ .superpowers/sdd/task-2-report.md                  | 46 ++++++++++++++++++++++
+ apps/api/package.json                              |  1 +
+ .../network-telemetry.ingest.dto.ts                | 43 ++++++++++++++++++++
+ .../network-telemetry.service.test.ts              | 37 +++++++++++++++++
+ .../network-telemetry/network-telemetry.types.ts   | 22 +++++++++++
+ 5 files changed, 149 insertions(+)
+
+## Diff
+diff --git a/.superpowers/sdd/task-2-report.md b/.superpowers/sdd/task-2-report.md
+new file mode 100644
+index 0000000..792049e
+--- /dev/null
++++ b/.superpowers/sdd/task-2-report.md
+@@ -0,0 +1,46 @@
++# Task 2 Report
++
++## Scope
++
++Implemented Task 2 only:
++
++- Added `IngestNetworkTelemetryDto` with nested validation DTOs.
++- Added the three exported network telemetry helper types.
++- Added the intentionally failing `NetworkTelemetryService.ingestSnapshot` test covering MAC-first official asset correlation.
++- Added the `test:network-telemetry` API workspace script.
++- Did not add or modify the telemetry service implementation.
++
++## Verification
++
++Command:
++
++```bash
++npm run test:network-telemetry --workspace=apps/api
++```
++
++Result: expected failure with exit code `1`:
++
++```text
++TS2307: Cannot find module './network-telemetry.service' or its corresponding type declarations.
++```
++
++Additional checks:
++
++- `git diff --check` passed.
++- `apps/api/package.json` parsed successfully as JSON.
++
++## Review Finding Fix
++
++- Strengthened `ingestSnapshot correlates asset samples to official assets by MAC first` to capture persisted asset sample rows and assert the `AA:BB` sample contains `nodeAssetId: "asset-1"`.
++- Re-ran `npm run test:network-telemetry --workspace=apps/api`.
++- Result: expected failure with exit code `1` because `./network-telemetry.service` is not implemented yet (`TS2307`).
++
++## Self-Review
++
++- Changes are limited to `apps/api/src/network-telemetry/*`, the requested API package script, and this report file.
++- Existing unrelated worktree changes were preserved.
++- The red test outcome is caused by the not-yet-implemented service, as required by the task brief.
++
++## Concerns
++
++None.
+diff --git a/apps/api/package.json b/apps/api/package.json
+index ae17ed2..c31b300 100644
+--- a/apps/api/package.json
++++ b/apps/api/package.json
+@@ -1,20 +1,21 @@
+ {
+   "name": "@siges-cctv/api",
+   "version": "0.1.0",
+   "private": true,
+   "scripts": {
+     "build": "nest build",
+     "start": "node dist/main",
+     "dev": "dotenv -e ../../.env -- nest start --watch",
+     "test:cors": "ts-node --project tsconfig.json src/common/cors.test.ts",
+     "test:discovery": "ts-node --project tsconfig.json src/node-discovery/node-discovery.utils.test.ts",
++    "test:network-telemetry": "ts-node --project tsconfig.json src/network-telemetry/network-telemetry.service.test.ts",
+     "test:splices": "ts-node --project tsconfig.json src/splices/expand-blocks.test.ts",
+     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
+     "db:push": "dotenv -e ../../.env -- prisma db push",
+     "db:studio": "dotenv -e ../../.env -- prisma studio",
+     "db:seed": "dotenv -e ../../.env -- ts-node --project tsconfig.seed.json prisma/seed.ts"
+   },
+   "dependencies": {
+     "@aws-sdk/client-s3": "^3.1075.0",
+     "@nestjs/common": "^11.0.0",
+     "@nestjs/config": "^4.0.0",
+diff --git a/apps/api/src/network-telemetry/network-telemetry.ingest.dto.ts b/apps/api/src/network-telemetry/network-telemetry.ingest.dto.ts
+new file mode 100644
+index 0000000..c6d77fb
+--- /dev/null
++++ b/apps/api/src/network-telemetry/network-telemetry.ingest.dto.ts
+@@ -0,0 +1,43 @@
++import { Type } from "class-transformer";
++import { IsArray, IsIn, IsInt, IsISO8601, IsNotEmpty, IsOptional, IsString, Min, ValidateNested } from "class-validator";
++
++class TotalsDto {
++  @IsInt() @Min(0) bytesIn!: number;
++  @IsInt() @Min(0) bytesOut!: number;
++  @IsInt() @Min(0) activeHosts!: number;
++  @IsInt() @Min(0) activeFlows!: number;
++}
++
++class ProtocolDto {
++  @IsString() @IsNotEmpty() name!: string;
++  @IsInt() @Min(0) bytes!: number;
++  @IsInt() @Min(0) flowCount!: number;
++}
++
++class DestinationDto {
++  @IsString() @IsNotEmpty() target!: string;
++  @IsString() @IsIn(["IP", "DOMAIN", "ASN", "UNKNOWN"]) kind!: "IP" | "DOMAIN" | "ASN" | "UNKNOWN";
++  @IsInt() @Min(0) bytes!: number;
++  @IsInt() @Min(0) flowCount!: number;
++}
++
++class AssetSampleDto {
++  @IsOptional() @IsString() ip?: string;
++  @IsOptional() @IsString() mac?: string;
++  @IsOptional() @IsString() hostname?: string;
++  @IsInt() @Min(0) bytesIn!: number;
++  @IsInt() @Min(0) bytesOut!: number;
++  @IsInt() @Min(0) flowCount!: number;
++  @IsISO8601() lastSeenAt!: string;
++}
++
++export class IngestNetworkTelemetryDto {
++  @IsString() @IsNotEmpty() nodeId!: string;
++  @IsString() @IsNotEmpty() collectorId!: string;
++  @IsISO8601() capturedAt!: string;
++  @IsInt() @Min(1) windowSeconds!: number;
++  @ValidateNested() @Type(() => TotalsDto) totals!: TotalsDto;
++  @IsArray() @ValidateNested({ each: true }) @Type(() => ProtocolDto) protocols!: ProtocolDto[];
++  @IsArray() @ValidateNested({ each: true }) @Type(() => DestinationDto) destinations!: DestinationDto[];
++  @IsArray() @ValidateNested({ each: true }) @Type(() => AssetSampleDto) assets!: AssetSampleDto[];
++}
+diff --git a/apps/api/src/network-telemetry/network-telemetry.service.test.ts b/apps/api/src/network-telemetry/network-telemetry.service.test.ts
+new file mode 100644
+index 0000000..4f7a29c
+--- /dev/null
++++ b/apps/api/src/network-telemetry/network-telemetry.service.test.ts
+@@ -0,0 +1,37 @@
++import assert from "node:assert/strict";
++import test from "node:test";
++
++import { NetworkTelemetryService } from "./network-telemetry.service";
++
++test("ingestSnapshot correlates asset samples to official assets by MAC first", async () => {
++  let persistedSamples: Array<{ mac?: string; nodeAssetId?: string | null }> = [];
++
++  const service = new NetworkTelemetryService({
++    node: { findUniqueOrThrow: async () => ({ id: "node-1" }) },
++    nodeAsset: { findFirst: async ({ where }: { where: { mac?: string | undefined } }) => where.mac === "AA:BB" ? ({ id: "asset-1" }) : null },
++    nodeDiscoveredDevice: { findFirst: async () => null },
++    networkTelemetrySnapshot: { create: async () => ({ id: "snap-1" }) },
++    networkTelemetryAssetSample: {
++      createMany: async ({ data }: { data: Array<{ mac?: string; nodeAssetId?: string | null }> }) => {
++        persistedSamples = data;
++        return { count: data.length };
++      },
++    },
++    networkTelemetryAlert: { upsert: async () => ({ id: "alert-1" }) },
++    $transaction: async (operations: Promise<unknown>[]) => Promise.all(operations),
++  } as never);
++
++  const result = await service.ingestSnapshot({
++    nodeId: "node-1",
++    collectorId: "sensor-a",
++    capturedAt: "2026-07-13T20:01:00.000Z",
++    windowSeconds: 60,
++    totals: { bytesIn: 10, bytesOut: 20, activeHosts: 1, activeFlows: 2 },
++    protocols: [],
++    destinations: [],
++    assets: [{ mac: "AA:BB", bytesIn: 10, bytesOut: 20, flowCount: 1, lastSeenAt: "2026-07-13T20:00:58.000Z" }],
++  });
++
++  assert.equal(result.snapshotId, "snap-1");
++  assert.equal(persistedSamples.find((sample) => sample.mac === "AA:BB")?.nodeAssetId, "asset-1");
++});
+diff --git a/apps/api/src/network-telemetry/network-telemetry.types.ts b/apps/api/src/network-telemetry/network-telemetry.types.ts
+new file mode 100644
+index 0000000..0067ea3
+--- /dev/null
++++ b/apps/api/src/network-telemetry/network-telemetry.types.ts
+@@ -0,0 +1,22 @@
++export type NetworkTelemetryProtocolEntry = {
++  name: string;
++  bytes: number;
++  flowCount: number;
++};
++
++export type NetworkTelemetryDestinationEntry = {
++  target: string;
++  kind: "IP" | "DOMAIN" | "ASN" | "UNKNOWN";
++  bytes: number;
++  flowCount: number;
++};
++
++export type NetworkTelemetryAssetEntry = {
++  ip?: string;
++  mac?: string;
++  hostname?: string;
++  bytesIn: number;
++  bytesOut: number;
++  flowCount: number;
++  lastSeenAt: string;
++};

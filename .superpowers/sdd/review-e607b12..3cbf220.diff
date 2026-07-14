@@ -1,0 +1,201 @@
+diff --git a/apps/api/src/app.module.ts b/apps/api/src/app.module.ts
+index 090ef43..5731adb 100644
+--- a/apps/api/src/app.module.ts
++++ b/apps/api/src/app.module.ts
+@@ -15,20 +15,21 @@ import { DashboardModule } from "./dashboard/dashboard.module";
+ import { FiberSegmentsModule } from "./fiber-segments/fiber-segments.module";
+ import { FiberPointsModule } from "./fiber-points/fiber-points.module";
+ import { FiberCablesModule } from "./fiber-cables/fiber-cables.module";
+ import { EventsModule } from "./events/events.module";
+ import { SplicesModule } from "./splices/splices.module";
+ import { MonitorModule } from "./monitor/monitor.module";
+ import { GatewayModule } from "./gateway/gateway.module";
+ import { NodeAssetsModule } from "./node-assets/node-assets.module";
+ import { NodeAnalyticsModule } from "./node-analytics/node-analytics.module";
+ import { NodeDiscoveryModule } from "./node-discovery/node-discovery.module";
++import { NetworkTelemetryModule } from "./network-telemetry/network-telemetry.module";
+ 
+ @Module({
+   imports: [
+     ConfigModule.forRoot({ isGlobal: true }),
+     PrismaModule,
+     AuthModule,
+     UsersModule,
+     CitiesModule,
+     ProjectsModule,
+     MonitoringCentersModule,
+@@ -41,13 +42,14 @@ import { NodeDiscoveryModule } from "./node-discovery/node-discovery.module";
+     FiberSegmentsModule,
+     FiberPointsModule,
+     FiberCablesModule,
+     EventsModule,
+     SplicesModule,
+     MonitorModule,
+     GatewayModule,
+     NodeAssetsModule,
+     NodeAnalyticsModule,
+     NodeDiscoveryModule,
++    NetworkTelemetryModule,
+   ],
+ })
+ export class AppModule {}
+diff --git a/apps/api/src/network-telemetry/network-telemetry.controller.ts b/apps/api/src/network-telemetry/network-telemetry.controller.ts
+new file mode 100644
+index 0000000..e7dd247
+--- /dev/null
++++ b/apps/api/src/network-telemetry/network-telemetry.controller.ts
+@@ -0,0 +1,39 @@
++import { Body, Controller, Get, Headers, Param, Post, UseGuards } from "@nestjs/common";
++import { AuthGuard } from "@nestjs/passport";
++
++import { IngestNetworkTelemetryDto } from "./network-telemetry.ingest.dto";
++import { NetworkTelemetryService } from "./network-telemetry.service";
++
++@Controller("network-telemetry")
++export class NetworkTelemetryController {
++  constructor(private service: NetworkTelemetryService) {}
++
++  @Post("ingest")
++  ingest(@Headers("authorization") authorization: string | undefined, @Body() dto: IngestNetworkTelemetryDto) {
++    return this.service.ingestWithCollectorAuth(authorization, dto);
++  }
++
++  @UseGuards(AuthGuard("jwt"))
++  @Get("nodes/:id/summary")
++  summary(@Param("id") id: string) {
++    return this.service.getNodeSummary(id);
++  }
++
++  @UseGuards(AuthGuard("jwt"))
++  @Get("nodes/:id/timeseries")
++  timeseries(@Param("id") id: string) {
++    return this.service.getNodeTimeseries(id);
++  }
++
++  @UseGuards(AuthGuard("jwt"))
++  @Get("nodes/:id/assets")
++  assets(@Param("id") id: string) {
++    return this.service.getNodeAssets(id);
++  }
++
++  @UseGuards(AuthGuard("jwt"))
++  @Get("nodes/:id/alerts")
++  alerts(@Param("id") id: string) {
++    return this.service.getNodeAlerts(id);
++  }
++}
+diff --git a/apps/api/src/network-telemetry/network-telemetry.module.ts b/apps/api/src/network-telemetry/network-telemetry.module.ts
+new file mode 100644
+index 0000000..8dabb2f
+--- /dev/null
++++ b/apps/api/src/network-telemetry/network-telemetry.module.ts
+@@ -0,0 +1,13 @@
++import { Module } from "@nestjs/common";
++
++import { PrismaModule } from "../prisma/prisma.module";
++import { NetworkTelemetryController } from "./network-telemetry.controller";
++import { NetworkTelemetryService } from "./network-telemetry.service";
++
++@Module({
++  imports: [PrismaModule],
++  controllers: [NetworkTelemetryController],
++  providers: [NetworkTelemetryService],
++  exports: [NetworkTelemetryService],
++})
++export class NetworkTelemetryModule {}
+diff --git a/apps/api/src/network-telemetry/network-telemetry.service.ts b/apps/api/src/network-telemetry/network-telemetry.service.ts
+index b5efb3a..a5c5ba5 100644
+--- a/apps/api/src/network-telemetry/network-telemetry.service.ts
++++ b/apps/api/src/network-telemetry/network-telemetry.service.ts
+@@ -1,25 +1,90 @@
+-import { Injectable } from "@nestjs/common";
++import { Injectable, UnauthorizedException } from "@nestjs/common";
+ import {
+   NetworkTelemetryAlertKind,
+   NetworkTelemetryAlertSeverity,
+   NetworkTelemetryClassificationSource,
+   Prisma,
+ } from "@prisma/client";
+ 
+ import { PrismaService } from "../prisma/prisma.service";
+ import { IngestNetworkTelemetryDto } from "./network-telemetry.ingest.dto";
+ 
+ @Injectable()
+ export class NetworkTelemetryService {
+   constructor(private prisma: PrismaService) {}
+ 
++  async ingestWithCollectorAuth(authorization: string | undefined, dto: IngestNetworkTelemetryDto) {
++    const expected = process.env.NETWORK_TELEMETRY_INGEST_TOKEN;
++    const received = authorization?.replace(/^Bearer\s+/i, "");
++    if (!expected || received !== expected) {
++      throw new UnauthorizedException("Invalid collector token");
++    }
++    return this.ingestSnapshot(dto);
++  }
++
++  async getNodeSummary(nodeId: string) {
++    const snapshot = await this.prisma.networkTelemetrySnapshot.findFirst({
++      where: { nodeId },
++      orderBy: { capturedAt: "desc" },
++    });
++    const alertCount = await this.prisma.networkTelemetryAlert.count({
++      where: { nodeId, isActive: true },
++    });
++    return {
++      snapshotId: snapshot?.id ?? null,
++      capturedAt: snapshot?.capturedAt ?? null,
++      totalBytesIn: snapshot?.totalBytesIn?.toString() ?? "0",
++      totalBytesOut: snapshot?.totalBytesOut?.toString() ?? "0",
++      activeHosts: snapshot?.activeHosts ?? 0,
++      activeFlows: snapshot?.activeFlows ?? 0,
++      alertCount,
++      topProtocols: snapshot?.topProtocolsJson ?? [],
++      topDestinations: snapshot?.topDestinationsJson ?? [],
++    };
++  }
++
++  async getNodeTimeseries(nodeId: string) {
++    return this.prisma.networkTelemetrySnapshot.findMany({
++      where: { nodeId },
++      orderBy: { capturedAt: "asc" },
++      take: 60,
++      select: {
++        capturedAt: true,
++        totalBytesIn: true,
++        totalBytesOut: true,
++        activeHosts: true,
++        activeFlows: true,
++      },
++    });
++  }
++
++  async getNodeAssets(nodeId: string) {
++    const snapshot = await this.prisma.networkTelemetrySnapshot.findFirst({
++      where: { nodeId },
++      orderBy: { capturedAt: "desc" },
++    });
++    if (!snapshot) return [];
++    return this.prisma.networkTelemetryAssetSample.findMany({
++      where: { snapshotId: snapshot.id },
++      include: { nodeAsset: true },
++      orderBy: [{ bytesOut: "desc" }, { bytesIn: "desc" }],
++    });
++  }
++
++  async getNodeAlerts(nodeId: string) {
++    return this.prisma.networkTelemetryAlert.findMany({
++      where: { nodeId, isActive: true },
++      orderBy: [{ severity: "desc" }, { lastSeenAt: "desc" }],
++    });
++  }
++
+   async ingestSnapshot(dto: IngestNetworkTelemetryDto) {
+     const node = await this.prisma.node.findUniqueOrThrow({ where: { id: dto.nodeId } });
+     const capturedAt = new Date(dto.capturedAt);
+ 
+     return this.prisma.$transaction(async (transaction) => {
+       const snapshot = await transaction.networkTelemetrySnapshot.create({
+         data: {
+           nodeId: node.id,
+           collectorId: dto.collectorId,
+           capturedAt,

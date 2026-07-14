@@ -1,0 +1,187 @@
+# Review package: 1cbe2bf..4d5162a
+
+## Commits
+4d5162a feat(api): add network telemetry ingestion service
+
+## Files changed
+ .superpowers/sdd/task-3-report.md                  |  31 +++++
+ .../network-telemetry/network-telemetry.service.ts | 133 +++++++++++++++++++++
+ 2 files changed, 164 insertions(+)
+
+## Diff
+diff --git a/.superpowers/sdd/task-3-report.md b/.superpowers/sdd/task-3-report.md
+new file mode 100644
+index 0000000..2ac975c
+--- /dev/null
++++ b/.superpowers/sdd/task-3-report.md
+@@ -0,0 +1,31 @@
++# Task 3 Report: Telemetry Service Ingestion And Correlation
++
++## Scope
++
++- Added `apps/api/src/network-telemetry/network-telemetry.service.ts`.
++- Left unrelated worktree changes untouched.
++
++## Implementation
++
++- `ingestSnapshot` validates the node, persists the telemetry snapshot, stores correlated asset samples, and returns snapshot/sample/alert counts.
++- Asset correlation follows the required precedence: official MAC, official IP, newest discovery MAC, newest discovery IP, then unmatched.
++- Unmatched samples produce informational `UNMATCHED_TRAFFIC` alert upsert payloads; official and discovery samples do not.
++- Telemetry protocol and destination DTO arrays are passed as Prisma JSON input values.
++
++## Test-Driven Verification
++
++1. Ran `npm run test:network-telemetry --workspace=apps/api` before the service existed. It failed as expected with TS2307 because `network-telemetry.service` was missing.
++2. Regenerated the local Prisma Client from the existing Task 1 schema. The installed client was stale and lacked all telemetry delegates and enums; no tracked source files were changed by generation.
++3. Ran `npm run test:network-telemetry --workspace=apps/api`: PASS, 1 test, 0 failures.
++4. Ran `npm run build --workspace=apps/api`: PASS.
++5. Ran `git diff --check`: PASS.
++
++## Self-Review
++
++- Confirmed snapshot fields, BigInt conversions, conditional `createMany`, return counts, and all four correlation lookups match the Task 3 brief.
++- Confirmed unmatched-alert titles, severity, timestamps, active state, and resolution reset match the brief.
++- The existing test verifies the highest-priority official-MAC match and sample persistence. It does not exercise discovery, IP fallback, or unmatched alert behavior.
++
++## Concern
++
++`NetworkTelemetryAlert` has no `@@unique([nodeId, kind, title])` in Task 1's schema or migration. The Task 3 brief requires an upsert selector named `nodeId_kind_title`, which Prisma Client does not generate without that constraint. The service preserves the mandated upsert payload using a narrow type bridge, but real unmatched-alert ingestion will fail at runtime until the Task 1 schema and migration add the compound unique constraint and Prisma Client is regenerated. This was not changed because it is outside Task 3 ownership.
+diff --git a/apps/api/src/network-telemetry/network-telemetry.service.ts b/apps/api/src/network-telemetry/network-telemetry.service.ts
+new file mode 100644
+index 0000000..8001eea
+--- /dev/null
++++ b/apps/api/src/network-telemetry/network-telemetry.service.ts
+@@ -0,0 +1,133 @@
++import { Injectable } from "@nestjs/common";
++import {
++  NetworkTelemetryAlertKind,
++  NetworkTelemetryAlertSeverity,
++  NetworkTelemetryClassificationSource,
++  Prisma,
++} from "@prisma/client";
++
++import { PrismaService } from "../prisma/prisma.service";
++import { IngestNetworkTelemetryDto } from "./network-telemetry.ingest.dto";
++
++@Injectable()
++export class NetworkTelemetryService {
++  constructor(private prisma: PrismaService) {}
++
++  async ingestSnapshot(dto: IngestNetworkTelemetryDto) {
++    const node = await this.prisma.node.findUniqueOrThrow({ where: { id: dto.nodeId } });
++
++    const snapshot = await this.prisma.networkTelemetrySnapshot.create({
++      data: {
++        nodeId: node.id,
++        collectorId: dto.collectorId,
++        capturedAt: new Date(dto.capturedAt),
++        windowSeconds: dto.windowSeconds,
++        totalBytesIn: BigInt(dto.totals.bytesIn),
++        totalBytesOut: BigInt(dto.totals.bytesOut),
++        activeHosts: dto.totals.activeHosts,
++        activeFlows: dto.totals.activeFlows,
++        topProtocolsJson: dto.protocols as unknown as Prisma.InputJsonValue,
++        topDestinationsJson: dto.destinations as unknown as Prisma.InputJsonValue,
++      },
++    });
++
++    const rows = [];
++    for (const asset of dto.assets) {
++      rows.push(await this.correlateAssetSample(dto.nodeId, snapshot.id, asset));
++    }
++
++    if (rows.length > 0) {
++      await this.prisma.networkTelemetryAssetSample.createMany({ data: rows });
++    }
++
++    const alerts = this.deriveSnapshotAlerts(dto, rows);
++    for (const alert of alerts) {
++      // Task 1 needs the matching compound unique constraint for this selector.
++      await this.prisma.networkTelemetryAlert.upsert(alert as never);
++    }
++
++    return { snapshotId: snapshot.id, samplesStored: rows.length, alertsUpserted: alerts.length };
++  }
++
++  private async correlateAssetSample(
++    nodeId: string,
++    snapshotId: string,
++    asset: IngestNetworkTelemetryDto["assets"][number],
++  ) {
++    const officialByMac = asset.mac
++      ? await this.prisma.nodeAsset.findFirst({ where: { nodeId, mac: asset.mac } })
++      : null;
++
++    const officialByIp = !officialByMac && asset.ip
++      ? await this.prisma.nodeAsset.findFirst({ where: { nodeId, ip: asset.ip } })
++      : null;
++
++    const discoveryByMac = !officialByMac && !officialByIp && asset.mac
++      ? await this.prisma.nodeDiscoveredDevice.findFirst({
++        where: { mac: asset.mac, nodeDiscoveryJob: { nodeId } },
++        orderBy: { createdAt: "desc" },
++      })
++      : null;
++
++    const discoveryByIp = !officialByMac && !officialByIp && !discoveryByMac && asset.ip
++      ? await this.prisma.nodeDiscoveredDevice.findFirst({
++        where: { ip: asset.ip, nodeDiscoveryJob: { nodeId } },
++        orderBy: { createdAt: "desc" },
++      })
++      : null;
++
++    return {
++      snapshotId,
++      nodeId,
++      nodeAssetId: officialByMac?.id ?? officialByIp?.id ?? null,
++      ip: asset.ip ?? null,
++      mac: asset.mac ?? null,
++      hostname: asset.hostname ?? null,
++      bytesIn: BigInt(asset.bytesIn),
++      bytesOut: BigInt(asset.bytesOut),
++      flowCount: asset.flowCount,
++      lastSeenAt: new Date(asset.lastSeenAt),
++      classificationSource: officialByMac || officialByIp
++        ? NetworkTelemetryClassificationSource.OFFICIAL
++        : discoveryByMac || discoveryByIp
++          ? NetworkTelemetryClassificationSource.DISCOVERY
++          : NetworkTelemetryClassificationSource.UNMATCHED,
++    };
++  }
++
++  private deriveSnapshotAlerts(
++    dto: IngestNetworkTelemetryDto,
++    rows: Array<{
++      ip: string | null;
++      mac: string | null;
++      classificationSource: NetworkTelemetryClassificationSource;
++    }>,
++  ) {
++    return rows
++      .filter((row) => row.classificationSource === NetworkTelemetryClassificationSource.UNMATCHED)
++      .map((row) => ({
++        where: {
++          nodeId_kind_title: {
++            nodeId: dto.nodeId,
++            kind: NetworkTelemetryAlertKind.UNMATCHED_TRAFFIC,
++            title: `Tráfico no correlacionado ${row.ip ?? row.mac ?? "desconocido"}`,
++          },
++        },
++        create: {
++          nodeId: dto.nodeId,
++          kind: NetworkTelemetryAlertKind.UNMATCHED_TRAFFIC,
++          severity: NetworkTelemetryAlertSeverity.INFO,
++          title: `Tráfico no correlacionado ${row.ip ?? row.mac ?? "desconocido"}`,
++          detail: "Se detectó tráfico de un host sin correlación con activos oficiales ni discovery reciente.",
++          firstSeenAt: new Date(dto.capturedAt),
++          lastSeenAt: new Date(dto.capturedAt),
++          isActive: true,
++        },
++        update: {
++          lastSeenAt: new Date(dto.capturedAt),
++          isActive: true,
++          resolvedAt: null,
++        },
++      }));
++  }
++}

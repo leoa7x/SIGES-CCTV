@@ -3,7 +3,7 @@ Status: DONE
 Commits created:
 - `f04d464 test(api): add failing observability embed tests`
 - `a44d9cb fix(api): tighten observability embed test contract`
-- `pending fix(api): cover observability embed descriptor contract`
+- `22035c5 fix(api): cover observability embed descriptor contract`
 
 Changed files:
 - `apps/api/package.json`

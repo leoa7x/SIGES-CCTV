@@ -2,7 +2,7 @@ Status: DONE
 
 Commits created:
 - `7b695b5 feat(api): add grafana observability sql views`
-- `pending fix(api): document grafana asset type filter`
+- `c2f2f4a fix(api): document grafana asset type filter`
 
 Changed files:
 - `apps/api/prisma/migrations/20260714110000_grafana_observability_views/migration.sql`

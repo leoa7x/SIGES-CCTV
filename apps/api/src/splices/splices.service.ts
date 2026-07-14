@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ConflictException, Injectable } from "@nestjs/common";
 import { FiberConnectionBlockKind, SpliceLegDirection } from "@prisma/client";
 import { IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from "class-validator";
 import { PrismaService } from "../prisma/prisma.service";
@@ -81,6 +81,27 @@ export class SplicesService {
       where: { id },
       data: dto as Parameters<typeof this.prisma.spliceClosure.update>[0]["data"],
     });
+  }
+
+  async remove(id: string) {
+    const splice = await this.prisma.spliceClosure.findUniqueOrThrow({
+      where: { id },
+      include: {
+        point: { select: { id: true } },
+        _count: { select: { sourceCables: true, cableLegs: true, blockInputs: true, connections: true } },
+      },
+    });
+
+    if (splice._count.sourceCables > 0 || splice._count.cableLegs > 0 || splice._count.blockInputs > 0 || splice._count.connections > 0) {
+      throw new ConflictException(`No se puede eliminar el empalme ${splice.code} porque todavía tiene cables o fusiones asociadas.`);
+    }
+
+    await this.prisma.$transaction([
+      ...(splice.point ? [this.prisma.fiberPoint.delete({ where: { id: splice.point.id } })] : []),
+      this.prisma.spliceClosure.delete({ where: { id } }),
+    ]);
+
+    return { ok: true };
   }
 
   addLeg(spliceId: string, dto: CreateSpliceCableLegDto) {

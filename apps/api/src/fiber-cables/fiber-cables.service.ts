@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ConflictException, Injectable } from "@nestjs/common";
 import { FiberCableKind } from "@prisma/client";
 import { IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Min } from "class-validator";
 import { PrismaService } from "../prisma/prisma.service";
@@ -66,5 +66,23 @@ export class FiberCablesService {
       where: { id },
       data: dto as Parameters<typeof this.prisma.fiberCable.update>[0]["data"],
     });
+  }
+
+  async remove(id: string) {
+    const cable = await this.prisma.fiberCable.findUniqueOrThrow({
+      where: { id },
+      include: { _count: { select: { childCables: true, spliceLegs: true } } },
+    });
+
+    if (cable._count.childCables > 0) {
+      throw new ConflictException(`No se puede eliminar el cable ${cable.code} porque tiene derivaciones hijas.`);
+    }
+
+    if (cable._count.spliceLegs > 0) {
+      throw new ConflictException(`No se puede eliminar el cable ${cable.code} porque está asociado a empalmes.`);
+    }
+
+    await this.prisma.fiberCable.delete({ where: { id } });
+    return { ok: true };
   }
 }

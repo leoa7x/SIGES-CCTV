@@ -28,6 +28,7 @@ test("getDashboardEmbed builds a node observability URL with nodeId and time ran
   assert.equal(result.params.from, "now-6h");
   assert.equal(result.params.to, "now");
   assert.match(result.url, /node-observability-uid/);
+  assert.match(result.url, /\/d\/node-observability-uid\?/);
   assert.match(result.url, /var-nodeId=node-123/);
   assert.match(result.url, /from=now-6h/);
   assert.match(result.url, /to=now/);
@@ -47,6 +48,7 @@ test("getDashboardEmbed builds a global network command view URL without nodeId"
   assert.equal(result.params.from, "now-24h");
   assert.equal(result.params.to, "now");
   assert.match(result.url, /network-command-view-uid/);
+  assert.match(result.url, /\/d\/network-command-view-uid\?/);
   assert.doesNotMatch(result.url, /var-nodeId=/);
 });
 

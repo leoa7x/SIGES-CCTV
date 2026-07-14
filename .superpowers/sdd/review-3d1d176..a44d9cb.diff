@@ -1,0 +1,122 @@
+diff --git a/.superpowers/sdd/grafana-task-1-report.md b/.superpowers/sdd/grafana-task-1-report.md
+new file mode 100644
+index 0000000..7ab36ac
+--- /dev/null
++++ b/.superpowers/sdd/grafana-task-1-report.md
+@@ -0,0 +1,12 @@
++Status: DONE
++
++Commit created: `f04d464 test(api): add failing observability embed tests`
++
++Changed files:
++- `apps/api/package.json`
++- `apps/api/src/observability/observability.types.ts`
++- `apps/api/src/observability/observability.service.test.ts`
++
++Verification:
++- Command: `npm run test:observability --workspace=apps/api`
++- Result: failed as intended with `TS2307: Cannot find module ./observability.service`.
+diff --git a/apps/api/package.json b/apps/api/package.json
+index c31b300..e2b85be 100644
+--- a/apps/api/package.json
++++ b/apps/api/package.json
+@@ -2,20 +2,21 @@
+   "name": "@siges-cctv/api",
+   "version": "0.1.0",
+   "private": true,
+   "scripts": {
+     "build": "nest build",
+     "start": "node dist/main",
+     "dev": "dotenv -e ../../.env -- nest start --watch",
+     "test:cors": "ts-node --project tsconfig.json src/common/cors.test.ts",
+     "test:discovery": "ts-node --project tsconfig.json src/node-discovery/node-discovery.utils.test.ts",
+     "test:network-telemetry": "ts-node --project tsconfig.json src/network-telemetry/network-telemetry.service.test.ts",
++    "test:observability": "ts-node --project tsconfig.json src/observability/observability.service.test.ts",
+     "test:splices": "ts-node --project tsconfig.json src/splices/expand-blocks.test.ts",
+     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
+     "db:push": "dotenv -e ../../.env -- prisma db push",
+     "db:studio": "dotenv -e ../../.env -- prisma studio",
+     "db:seed": "dotenv -e ../../.env -- ts-node --project tsconfig.seed.json prisma/seed.ts"
+   },
+   "dependencies": {
+     "@aws-sdk/client-s3": "^3.1075.0",
+     "@nestjs/common": "^11.0.0",
+     "@nestjs/config": "^4.0.0",
+diff --git a/apps/api/src/observability/observability.service.test.ts b/apps/api/src/observability/observability.service.test.ts
+new file mode 100644
+index 0000000..55eb6ce
+--- /dev/null
++++ b/apps/api/src/observability/observability.service.test.ts
+@@ -0,0 +1,58 @@
++import assert from "node:assert/strict";
++import test from "node:test";
++
++import { ObservabilityService } from "./observability.service";
++
++const config = {
++  baseUrl: "http://grafana.local",
++  orgId: "1",
++  dashboards: {
++    "node-observability": "node-observability-uid",
++    "network-command-view": "network-command-view-uid",
++  },
++};
++
++test("getDashboardEmbed builds a node observability URL with nodeId and time range", () => {
++  const service = new ObservabilityService(config);
++
++  const result = service.getDashboardEmbed({
++    dashboard: "node-observability",
++    nodeId: "node-123",
++    from: "now-6h",
++    to: "now",
++  });
++
++  assert.equal(result.dashboard, "node-observability");
++  assert.match(result.url, /node-observability-uid/);
++  assert.match(result.url, /var-nodeId=node-123/);
++  assert.match(result.url, /from=now-6h/);
++  assert.match(result.url, /to=now/);
++});
++
++test("getDashboardEmbed builds a global network command view URL without nodeId", () => {
++  const service = new ObservabilityService(config);
++
++  const result = service.getDashboardEmbed({
++    dashboard: "network-command-view",
++    from: "now-24h",
++    to: "now",
++  });
++
++  assert.equal(result.dashboard, "network-command-view");
++  assert.match(result.url, /network-command-view-uid/);
++  assert.doesNotMatch(result.url, /var-nodeId=/);
++});
++
++test("getDashboardEmbed includes routeId when provided", () => {
++  const service = new ObservabilityService(config);
++
++  const result = service.getDashboardEmbed({
++    dashboard: "network-command-view",
++    routeId: "route-456",
++    from: "now-24h",
++    to: "now",
++  });
++
++  assert.equal(result.dashboard, "network-command-view");
++  assert.match(result.url, /var-routeId=route-456/);
++});
+diff --git a/apps/api/src/observability/observability.types.ts b/apps/api/src/observability/observability.types.ts
+new file mode 100644
+index 0000000..fd81d07
+--- /dev/null
++++ b/apps/api/src/observability/observability.types.ts
+@@ -0,0 +1,8 @@
++export type GrafanaDashboardKey = "node-observability" | "network-command-view";
++
++export type GrafanaEmbedDescriptor = {
++  title: string;
++  dashboard: GrafanaDashboardKey;
++  url: string;
++  params: Record<string, string>;
++};

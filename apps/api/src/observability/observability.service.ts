@@ -49,7 +49,7 @@ export class ObservabilityService {
     return {
       title: DASHBOARD_TITLES[input.dashboard],
       dashboard: input.dashboard,
-      url: `${this.baseUrl}/d-solo/${uid}?${params.toString()}`,
+      url: `${this.baseUrl}/d/${uid}?${params.toString()}`,
       params: Object.fromEntries(params.entries()),
     };
   }

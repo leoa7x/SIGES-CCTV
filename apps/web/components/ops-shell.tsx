@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { useAuth } from "./auth-provider";
+
+const SIDEBAR_PINNED_KEY = "siges-sidebar-pinned";
 
 const NAV = [
   { href: "/dashboard",  label: "Dashboard",  icon: "⬡" },
+  { href: "/monitoring/network", label: "Monitoreo Red", icon: "◌" },
   { href: "/map",        label: "Mapa GIS",    icon: "◈" },
   { href: "/topology",   label: "Topología",   icon: "◫" },
   { href: "/projects",   label: "Proyectos",   icon: "◧" },
@@ -53,10 +56,25 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading, logout } = useAuth();
+  const [pinned, setPinned] = useState(false);
+  const [hovering, setHovering] = useState(false);
+  const [focused, setFocused] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) router.replace("/login");
   }, [isLoading, user, router]);
+
+  useEffect(() => {
+    setPinned(window.localStorage.getItem(SIDEBAR_PINNED_KEY) === "1");
+  }, []);
+
+  function togglePinned() {
+    setPinned((current) => {
+      const next = !current;
+      window.localStorage.setItem(SIDEBAR_PINNED_KEY, next ? "1" : "0");
+      return next;
+    });
+  }
 
   if (isLoading || !user) {
     return (
@@ -66,69 +84,107 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
     );
   }
 
+  const expanded = pinned || hovering || focused;
+
   return (
     <div className="flex min-h-screen bg-ops-bg text-ops-text">
-      {/* Sidebar */}
-      <aside className="flex w-64 flex-shrink-0 flex-col border-r border-ops-border bg-ops-panel">
+      {/* Sidebar: icon rail, expands on hover, keyboard focus, or when pinned */}
+      <aside
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
+        onFocus={() => setFocused(true)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
+        }}
+        className={`z-40 flex h-screen flex-col overflow-hidden border-r border-ops-border bg-ops-panel transition-[width,box-shadow] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
+          pinned ? "relative flex-shrink-0" : "fixed left-0 top-0"
+        } ${expanded ? "w-64" : "w-16"} ${!pinned && expanded ? "shadow-2xl" : ""}`}
+      >
         {/* Logo */}
-        <div className="flex items-center gap-3 border-b border-ops-border px-5 py-4">
+        <div className={`flex items-center gap-3 border-b border-ops-border px-5 py-4 ${expanded ? "" : "justify-center px-0"}`}>
           <SigesLogo />
-          <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-ops-silver/60">Sistema Integral</p>
-            <p className="mt-0.5 font-display text-sm font-bold tracking-wide text-ops-text">
-              SIGES<span className="text-ops-blue">-CCTV</span>
-            </p>
-          </div>
+          {expanded && (
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <p className="whitespace-nowrap text-[9px] font-bold uppercase tracking-[0.3em] text-ops-silver/60">Sistema Integral</p>
+              <p className="mt-0.5 whitespace-nowrap font-display text-sm font-bold tracking-wide text-ops-text">
+                SIGES<span className="text-ops-blue">-CCTV</span>
+              </p>
+            </div>
+          )}
+          {expanded && (
+            <button
+              type="button"
+              onClick={togglePinned}
+              title={pinned ? "Liberar menú" : "Fijar menú"}
+              className="flex-shrink-0 rounded-ops border border-ops-border px-1.5 py-1 font-mono text-xs text-ops-muted hover:border-ops-blue/40 hover:text-ops-text"
+            >
+              {pinned ? "⇤" : "⇥"}
+            </button>
+          )}
         </div>
 
         {/* User */}
-        <div className="border-b border-ops-border px-5 py-4">
-          <p className="text-[9px] uppercase tracking-widest text-ops-muted">Operador</p>
-          <p className="mt-0.5 truncate text-sm font-medium text-ops-text">{user.name ?? user.email}</p>
-          <span className="mt-1 inline-block rounded-full border border-ops-blue/30 bg-ops-blue/10 px-2 py-0.5 font-mono text-[9px] text-ops-blue">
-            {user.role}
-          </span>
+        <div className={`border-b border-ops-border py-4 ${expanded ? "px-5" : "px-2 text-center"}`} title={expanded ? undefined : (user.name ?? user.email)}>
+          {expanded ? (
+            <>
+              <p className="text-[9px] uppercase tracking-widest text-ops-muted">Operador</p>
+              <p className="mt-0.5 truncate text-sm font-medium text-ops-text">{user.name ?? user.email}</p>
+              <span className="mt-1 inline-block rounded-full border border-ops-blue/30 bg-ops-blue/10 px-2 py-0.5 font-mono text-[9px] text-ops-blue">
+                {user.role}
+              </span>
+            </>
+          ) : (
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-ops-blue/30 bg-ops-blue/10 font-mono text-xs text-ops-blue">
+              {(user.name ?? user.email).charAt(0).toUpperCase()}
+            </span>
+          )}
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 space-y-1 px-3 py-4">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
           {NAV.map((item) => {
             const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 rounded-ops px-3 py-2.5 text-sm font-medium transition-colors ${
+                title={expanded ? undefined : item.label}
+                className={`flex items-center gap-3 rounded-ops px-3 py-2.5 text-sm font-medium transition-colors ${!expanded ? "justify-center px-0" : ""} ${
                   isActive
                     ? "bg-ops-blue/10 text-ops-blue shadow-ops-glow-blue"
                     : "text-ops-muted hover:bg-ops-surface hover:text-ops-text"
                 }`}
               >
                 <span className="font-mono text-base leading-none">{item.icon}</span>
-                {item.label}
+                {expanded && <span className="whitespace-nowrap">{item.label}</span>}
               </Link>
             );
           })}
 
           {(user.role === "SUPER_ADMIN" || user.role === "ADMIN") && (
             <>
-              <p className="px-3 pb-1 pt-4 text-[9px] font-bold uppercase tracking-widest text-ops-dim">
-                Administración
-              </p>
+              {expanded ? (
+                <p className="px-3 pb-1 pt-4 text-[9px] font-bold uppercase tracking-widest text-ops-dim">
+                  Administración
+                </p>
+              ) : (
+                <div className="mx-2 my-3 border-t border-ops-border" />
+              )}
               {ADMIN_NAV.map((item) => {
                 const isActive = pathname.startsWith(item.href);
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-3 rounded-ops px-3 py-2.5 text-sm font-medium transition-colors ${
+                    title={expanded ? undefined : item.label}
+                    className={`flex items-center gap-3 rounded-ops px-3 py-2.5 text-sm font-medium transition-colors ${!expanded ? "justify-center px-0" : ""} ${
                       isActive
                         ? "bg-ops-blue/10 text-ops-blue shadow-ops-glow-blue"
                         : "text-ops-muted hover:bg-ops-surface hover:text-ops-text"
                     }`}
                   >
                     <span className="font-mono text-base leading-none">{item.icon}</span>
-                    {item.label}
+                    {expanded && <span className="whitespace-nowrap">{item.label}</span>}
                   </Link>
                 );
               })}
@@ -137,16 +193,20 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
         </nav>
 
         {/* Logout */}
-        <div className="border-t border-ops-border px-3 py-4">
+        <div className={`border-t border-ops-border py-4 ${expanded ? "px-3" : "px-2"}`}>
           <button
             type="button"
             onClick={logout}
-            className="w-full rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-muted transition hover:border-ops-rose/40 hover:text-ops-rose"
+            title={expanded ? undefined : "Cerrar sesión"}
+            className="flex w-full items-center justify-center gap-2 rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-muted transition-colors hover:border-ops-rose/40 hover:text-ops-rose"
           >
-            Cerrar sesión
+            {expanded ? "Cerrar sesión" : "⏻"}
           </button>
         </div>
       </aside>
+
+      {/* Spacer so fixed, unpinned rail doesn't sit on top of content */}
+      {!pinned && <div className="w-16 flex-shrink-0" />}
 
       {/* Main */}
       <main className="flex min-h-screen flex-1 flex-col overflow-hidden">

@@ -1,0 +1,228 @@
+diff --git a/.env.example b/.env.example
+index 33698c1..924d35a 100644
+--- a/.env.example
++++ b/.env.example
+@@ -38,13 +38,19 @@ NEXT_PUBLIC_API_URL=http://localhost:4001
+ NEXT_PUBLIC_APP_NAME=SIGES-CCTV
+ 
+ # ── Seed (first admin user) ───────────────────────────────────────────────────
+ SEED_ADMIN_EMAIL=admin@sigescctv.co
+ SEED_ADMIN_PASSWORD=Admin1234!
+ 
+ # ── Monitor API ───────────────────────────────────────────────────────────────
+ MONITOR_API_TOKEN=change-me-in-production
+ NETWORK_TELEMETRY_INGEST_TOKEN=change-me-in-production
+ 
++# ── Grafana observability embeds ─────────────────────────────────────────────
++GRAFANA_BASE_URL=http://localhost:3005
++GRAFANA_ORG_ID=1
++GRAFANA_DASHBOARD_NODE_OBSERVABILITY_UID=node-observability
++GRAFANA_DASHBOARD_NETWORK_COMMAND_VIEW_UID=network-command-view
++
+ # ── Discovery / LAN-Orangutan ────────────────────────────────────────────────
+ LAN_ORANGUTAN_HOME=/absolute/path/to/SIGES-CCTV/tools/LAN-Orangutan
+ LAN_ORANGUTAN_CMD=python3 /absolute/path/to/SIGES-CCTV/apps/api/scripts/run_lan_orangutan_scan.py {target}
+diff --git a/apps/api/src/app.module.ts b/apps/api/src/app.module.ts
+index 5731adb..ad022e3 100644
+--- a/apps/api/src/app.module.ts
++++ b/apps/api/src/app.module.ts
+@@ -16,20 +16,21 @@ import { FiberSegmentsModule } from "./fiber-segments/fiber-segments.module";
+ import { FiberPointsModule } from "./fiber-points/fiber-points.module";
+ import { FiberCablesModule } from "./fiber-cables/fiber-cables.module";
+ import { EventsModule } from "./events/events.module";
+ import { SplicesModule } from "./splices/splices.module";
+ import { MonitorModule } from "./monitor/monitor.module";
+ import { GatewayModule } from "./gateway/gateway.module";
+ import { NodeAssetsModule } from "./node-assets/node-assets.module";
+ import { NodeAnalyticsModule } from "./node-analytics/node-analytics.module";
+ import { NodeDiscoveryModule } from "./node-discovery/node-discovery.module";
+ import { NetworkTelemetryModule } from "./network-telemetry/network-telemetry.module";
++import { ObservabilityModule } from "./observability/observability.module";
+ 
+ @Module({
+   imports: [
+     ConfigModule.forRoot({ isGlobal: true }),
+     PrismaModule,
+     AuthModule,
+     UsersModule,
+     CitiesModule,
+     ProjectsModule,
+     MonitoringCentersModule,
+@@ -43,13 +44,14 @@ import { NetworkTelemetryModule } from "./network-telemetry/network-telemetry.mo
+     FiberPointsModule,
+     FiberCablesModule,
+     EventsModule,
+     SplicesModule,
+     MonitorModule,
+     GatewayModule,
+     NodeAssetsModule,
+     NodeAnalyticsModule,
+     NodeDiscoveryModule,
+     NetworkTelemetryModule,
++    ObservabilityModule,
+   ],
+ })
+ export class AppModule {}
+diff --git a/apps/api/src/observability/observability.controller.ts b/apps/api/src/observability/observability.controller.ts
+new file mode 100644
+index 0000000..c0a940d
+--- /dev/null
++++ b/apps/api/src/observability/observability.controller.ts
+@@ -0,0 +1,34 @@
++import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
++import { AuthGuard } from "@nestjs/passport";
++
++import { ObservabilityService } from "./observability.service";
++
++@UseGuards(AuthGuard("jwt"))
++@Controller("observability")
++export class ObservabilityController {
++  constructor(private readonly service: ObservabilityService) {}
++
++  @Get("embed/node/:id")
++  getNodeEmbed(@Param("id") id: string, @Query("from") from?: string, @Query("to") to?: string) {
++    return this.service.getDashboardEmbed({
++      dashboard: "node-observability",
++      nodeId: id,
++      from,
++      to,
++    });
++  }
++
++  @Get("embed/network-command-view")
++  getNetworkCommandView(
++    @Query("routeId") routeId?: string,
++    @Query("from") from?: string,
++    @Query("to") to?: string,
++  ) {
++    return this.service.getDashboardEmbed({
++      dashboard: "network-command-view",
++      routeId,
++      from,
++      to,
++    });
++  }
++}
+diff --git a/apps/api/src/observability/observability.module.ts b/apps/api/src/observability/observability.module.ts
+new file mode 100644
+index 0000000..a562e95
+--- /dev/null
++++ b/apps/api/src/observability/observability.module.ts
+@@ -0,0 +1,25 @@
++import { Module } from "@nestjs/common";
++import { ConfigService } from "@nestjs/config";
++
++import { ObservabilityController } from "./observability.controller";
++import { ObservabilityService } from "./observability.service";
++
++@Module({
++  controllers: [ObservabilityController],
++  providers: [
++    {
++      provide: ObservabilityService,
++      inject: [ConfigService],
++      useFactory: (configService: ConfigService) =>
++        new ObservabilityService({
++          baseUrl: configService.getOrThrow<string>("GRAFANA_BASE_URL"),
++          orgId: configService.getOrThrow<string>("GRAFANA_ORG_ID"),
++          dashboards: {
++            "node-observability": configService.getOrThrow<string>("GRAFANA_DASHBOARD_NODE_OBSERVABILITY_UID"),
++            "network-command-view": configService.getOrThrow<string>("GRAFANA_DASHBOARD_NETWORK_COMMAND_VIEW_UID"),
++          },
++        }),
++    },
++  ],
++})
++export class ObservabilityModule {}
+diff --git a/apps/api/src/observability/observability.service.test.ts b/apps/api/src/observability/observability.service.test.ts
+index cf8cae1..2f61934 100644
+--- a/apps/api/src/observability/observability.service.test.ts
++++ b/apps/api/src/observability/observability.service.test.ts
+@@ -58,10 +58,25 @@ test("getDashboardEmbed includes routeId when provided", () => {
+     routeId: "route-456",
+     from: "now-24h",
+     to: "now",
+   });
+ 
+   assert.equal(result.title, "Vista global de red");
+   assert.equal(result.dashboard, "network-command-view");
+   assert.equal(result.params["var-routeId"], "route-456");
+   assert.match(result.url, /var-routeId=route-456/);
+ });
++
++test("getDashboardEmbed rejects unknown dashboard keys", () => {
++  const service = new ObservabilityService(config);
++
++  assert.throws(() => service.getDashboardEmbed({ dashboard: "bad-key" as never }));
++});
++
++test("getDashboardEmbed defaults to the six-hour Grafana time range", () => {
++  const service = new ObservabilityService(config);
++
++  const result = service.getDashboardEmbed({ dashboard: "network-command-view" });
++
++  assert.equal(result.params.from, "now-6h");
++  assert.equal(result.params.to, "now");
++});
+diff --git a/apps/api/src/observability/observability.service.ts b/apps/api/src/observability/observability.service.ts
+new file mode 100644
+index 0000000..83a8399
+--- /dev/null
++++ b/apps/api/src/observability/observability.service.ts
+@@ -0,0 +1,56 @@
++import { Injectable } from "@nestjs/common";
++
++import { GrafanaDashboardKey, GrafanaEmbedDescriptor } from "./observability.types";
++
++export type ObservabilityConfig = {
++  baseUrl: string;
++  orgId: string;
++  dashboards: Record<GrafanaDashboardKey, string>;
++};
++
++type GrafanaEmbedInput = {
++  dashboard: GrafanaDashboardKey;
++  nodeId?: string;
++  routeId?: string;
++  from?: string;
++  to?: string;
++};
++
++const DASHBOARD_TITLES: Record<GrafanaDashboardKey, string> = {
++  "node-observability": "Observabilidad del nodo",
++  "network-command-view": "Vista global de red",
++};
++
++@Injectable()
++export class ObservabilityService {
++  private readonly baseUrl: string;
++
++  constructor(private readonly config: ObservabilityConfig) {
++    this.baseUrl = config.baseUrl.replace(/\/+$/, "");
++  }
++
++  getDashboardEmbed(input: GrafanaEmbedInput): GrafanaEmbedDescriptor {
++    if (!(input.dashboard in DASHBOARD_TITLES)) {
++      throw new Error(`Unknown Grafana dashboard: ${input.dashboard}`);
++    }
++
++    const uid = this.config.dashboards[input.dashboard];
++    const params = new URLSearchParams({
++      orgId: this.config.orgId,
++      from: input.from ?? "now-6h",
++      to: input.to ?? "now",
++      theme: "dark",
++      kiosk: "tv",
++    });
++
++    if (input.nodeId) params.set("var-nodeId", input.nodeId);
++    if (input.routeId) params.set("var-routeId", input.routeId);
++
++    return {
++      title: DASHBOARD_TITLES[input.dashboard],
++      dashboard: input.dashboard,
++      url: `${this.baseUrl}/d-solo/${uid}?${params.toString()}`,
++      params: Object.fromEntries(params.entries()),
++    };
++  }
++}

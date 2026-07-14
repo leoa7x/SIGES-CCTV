@@ -71,6 +71,7 @@ export class NodesService {
             },
           },
           orderBy: { createdAt: "desc" },
+          take: 20,
         },
         analyticsAssignments: {
           include: { analyticsCatalog: true },
