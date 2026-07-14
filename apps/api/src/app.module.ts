@@ -24,6 +24,7 @@ import { NodeAnalyticsModule } from "./node-analytics/node-analytics.module";
 import { NodeDiscoveryModule } from "./node-discovery/node-discovery.module";
 import { NetworkTelemetryModule } from "./network-telemetry/network-telemetry.module";
 import { ObservabilityModule } from "./observability/observability.module";
+import { CameraPreviewModule } from "./camera-preview/camera-preview.module";
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { ObservabilityModule } from "./observability/observability.module";
     RoutesModule,
     NodesModule,
     CamerasModule,
+    CameraPreviewModule,
     IncidentsModule,
     LogbookModule,
     DashboardModule,

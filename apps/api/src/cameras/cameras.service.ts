@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString } from "class-validator";
 import { CameraState, CameraTransport } from "@prisma/client";
 import { CameraSecretService } from "./camera-secret.service";
@@ -56,6 +56,21 @@ export class CamerasService {
       include: { node: { include: { route: { include: { center: true } } } } },
     });
     return this.toSafeCamera(camera);
+  }
+
+  /** Internal-only connection lookup for authenticated preview sessions. */
+  async getPreviewConnection(id: string) {
+    const camera = await this.prisma.camera.findUniqueOrThrow({ where: { id } });
+    if (!camera.previewEnabled || !camera.streamUrl) {
+      throw new BadRequestException("Camera is not configured for live preview");
+    }
+    return {
+      streamUrl: camera.streamUrl,
+      streamUsername: camera.streamUsername,
+      streamPassword: camera.streamPasswordEncrypted ? this.secretService.decrypt(camera.streamPasswordEncrypted) : null,
+      streamTransport: camera.streamTransport,
+      previewEnabled: camera.previewEnabled,
+    };
   }
 
   async create(dto: CreateCameraDto) {
