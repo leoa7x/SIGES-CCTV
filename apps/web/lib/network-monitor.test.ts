@@ -16,8 +16,8 @@ test("builds a safe iframe src from an API descriptor", () => {
   const descriptor: GrafanaEmbedDescriptor = {
     title: "Observabilidad del nodo",
     dashboard: "node-observability",
-    url: "http://grafana.local/d-solo/node-observability?var-nodeId=node-1",
-    params: { "var-nodeId": "node-1" },
+    url: "http://grafana.local/d-solo/node-observability",
+    params: { "var-nodeId": "node-1", from: "now-6h" },
   };
 
   const result = buildGrafanaEmbedModel(descriptor);
@@ -26,7 +26,36 @@ test("builds a safe iframe src from an API descriptor", () => {
   assert.notEqual(result.src, null);
   if (result.src) {
     assert.match(result.src, /var-nodeId=node-1/);
+    assert.match(result.src, /from=now-6h/);
   }
+});
+
+test("buildGrafanaEmbedModel returns null for malformed URLs", () => {
+  const descriptor: GrafanaEmbedDescriptor = {
+    title: "Observabilidad",
+    dashboard: "node-observability",
+    url: "not-a-url",
+    params: {},
+  };
+
+  const result = buildGrafanaEmbedModel(descriptor);
+
+  assert.equal(result.title, "Observabilidad");
+  assert.equal(result.src, null);
+});
+
+test("buildGrafanaEmbedModel rejects non-http schemes", () => {
+  const descriptor: GrafanaEmbedDescriptor = {
+    title: "Observabilidad",
+    dashboard: "node-observability",
+    url: "javascript:alert(1)",
+    params: {},
+  };
+
+  const result = buildGrafanaEmbedModel(descriptor);
+
+  assert.equal(result.title, "Observabilidad");
+  assert.equal(result.src, null);
 });
 
 test("network detail responses only apply to the current node and request", () => {

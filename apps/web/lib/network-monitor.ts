@@ -12,6 +12,12 @@ export function buildGrafanaEmbedModel(descriptor: GrafanaEmbedDescriptor): Graf
       return { title: descriptor.title, src: null };
     }
 
+    for (const [key, value] of Object.entries(descriptor.params)) {
+      if (!url.searchParams.has(key)) {
+        url.searchParams.set(key, value);
+      }
+    }
+
     return { title: descriptor.title, src: url.toString() };
   } catch {
     return { title: descriptor.title, src: null };
