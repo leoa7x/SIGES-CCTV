@@ -74,10 +74,10 @@ type NetworkTelemetryAlert = {
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub: string }) {
   return (
-    <div className="rounded-ops border border-ops-border bg-[linear-gradient(180deg,rgba(29,78,216,0.08),rgba(15,23,42,0.04))] p-4 shadow-ops">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-muted">{label}</p>
-      <p className="mt-3 text-3xl font-semibold tracking-tight text-ops-text">{value}</p>
-      <p className="mt-1 text-xs text-ops-dim">{sub}</p>
+    <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">{label}</p>
+      <p className="mt-2 text-3xl font-semibold tracking-tight text-white">{value}</p>
+      <p className="mt-1 text-xs text-slate-300">{sub}</p>
     </div>
   );
 }
@@ -386,51 +386,58 @@ export default function NetworkMonitoringPage() {
 
   return (
     <OpsShell eyebrow="Centro de Operaciones" title="Monitoreo de Red">
-      <div className="space-y-6">
-        <section className="relative overflow-hidden rounded-ops border border-ops-border bg-[radial-gradient(circle_at_top_left,rgba(29,78,216,0.22),transparent_32%),radial-gradient(circle_at_top_right,rgba(16,185,129,0.14),transparent_28%),linear-gradient(135deg,#08111f,#0b1629_62%,#07101d)] p-5 shadow-ops">
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(148,163,184,0.05)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.05)_1px,transparent_1px)] bg-[size:28px_28px]" />
-          <div className="relative flex flex-wrap items-start justify-between gap-6">
+      <div className="space-y-8">
+        <section className="relative overflow-hidden rounded-[28px] border border-ops-border bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.12),transparent_30%),radial-gradient(circle_at_top_right,rgba(37,99,235,0.18),transparent_35%),linear-gradient(135deg,#07111d,#0b1727_62%,#08131f)] p-6 shadow-ops">
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(148,163,184,0.04)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.04)_1px,transparent_1px)] bg-[size:32px_32px]" />
+          <div className="relative flex flex-wrap items-start justify-between gap-8">
             <div className="max-w-2xl">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.36em] text-ops-blue/80">Fusion Orangutan + Sniffnet</p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">Inventario vivo, discovery correlacionado y lectura visual de la red por nodo.</h2>
-              <p className="mt-2 text-sm text-slate-300">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-cyan-200/80">Comando Operativo De Red</p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-4xl">Inventario vivo, discovery correlacionado y telemetría con contexto operativo.</h2>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">
                 Base operacional para NOC: qué equipos existen, cuáles están vivos, qué quedó pendiente y cómo se comporta el nodo.
               </p>
             </div>
             <div className="grid min-w-[280px] flex-1 gap-3 sm:grid-cols-3">
-              <div className="rounded-ops border border-white/10 bg-white/5 p-3 backdrop-blur">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-3 backdrop-blur-sm">
                 <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">Cobertura</p>
                 <p className="mt-2 text-xl font-semibold text-white">{model.summary.totalNodes}</p>
                 <p className="text-xs text-slate-300">nodos visibles</p>
               </div>
-              <div className="rounded-ops border border-white/10 bg-white/5 p-3 backdrop-blur">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-3 backdrop-blur-sm">
                 <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">Discovery</p>
                 <p className="mt-2 text-xl font-semibold text-white">{model.observability.pendingDiscoveries}</p>
                 <p className="text-xs text-slate-300">pendientes por operar</p>
               </div>
-              <div className="rounded-ops border border-white/10 bg-white/5 p-3 backdrop-blur">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-3 backdrop-blur-sm">
                 <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">Observabilidad</p>
                 <p className="mt-2 text-xl font-semibold text-white">{model.observability.analyticsConfigured}</p>
                 <p className="text-xs text-slate-300">analíticas configuradas</p>
               </div>
             </div>
           </div>
+          <div className="relative mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <StatCard label="Nodos" value={model.summary.totalNodes} sub={`${model.summary.onlineNodes} en línea`} />
+            <StatCard label="Degradados" value={model.summary.degradedNodes} sub="requieren revisión" />
+            <StatCard label="Fuera de línea" value={model.summary.offlineNodes} sub="impacto operativo" />
+            <StatCard label="Inventario oficial" value={model.summary.officialAssets} sub="equipos registrados" />
+            <StatCard label="Pendientes" value={model.observability.pendingDiscoveries} sub="por confirmar" />
+            <StatCard label="Último discovery" value={model.observability.latestDiscoveryLabel} sub={detail?.scanSubnetCidr ?? "sin subnet"} />
+          </div>
         </section>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-          <StatCard label="Nodos" value={model.summary.totalNodes} sub={`${model.summary.onlineNodes} en línea`} />
-          <StatCard label="Degradados" value={model.summary.degradedNodes} sub="requieren revisión" />
-          <StatCard label="Fuera de línea" value={model.summary.offlineNodes} sub="impacto operativo" />
-          <StatCard label="Inventario oficial" value={model.summary.officialAssets} sub="equipos registrados" />
-          <StatCard label="Pendientes" value={model.observability.pendingDiscoveries} sub="por confirmar" />
-          <StatCard label="Último discovery" value={model.observability.latestDiscoveryLabel} sub={detail?.scanSubnetCidr ?? "sin subnet"} />
-        </div>
-
-        <GrafanaPanelEmbed
-          title={networkEmbed?.title ?? "Comando de red"}
-          src={networkEmbed?.src ?? null}
-          loading={loadingNetworkEmbed}
-        />
+        <section className="rounded-[26px] border border-ops-border bg-[linear-gradient(180deg,rgba(8,18,32,0.98),rgba(5,11,22,0.98))] p-4 shadow-ops">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-muted">Observabilidad Global</p>
+              <h2 className="mt-1 text-lg font-semibold text-ops-text">Comando de red y telemetría consolidada</h2>
+            </div>
+          </div>
+          <GrafanaPanelEmbed
+            title={networkEmbed?.title ?? "Comando de red"}
+            src={networkEmbed?.src ?? null}
+            loading={loadingNetworkEmbed}
+          />
+        </section>
 
         <div className="grid gap-6 xl:grid-cols-[1fr_1.6fr] xl:items-start">
           <section className={`${PANEL_HUD} xl:sticky xl:top-6`}>
