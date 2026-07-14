@@ -23,6 +23,7 @@ import { NodeAssetsModule } from "./node-assets/node-assets.module";
 import { NodeAnalyticsModule } from "./node-analytics/node-analytics.module";
 import { NodeDiscoveryModule } from "./node-discovery/node-discovery.module";
 import { NetworkTelemetryModule } from "./network-telemetry/network-telemetry.module";
+import { ObservabilityModule } from "./observability/observability.module";
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { NetworkTelemetryModule } from "./network-telemetry/network-telemetry.mo
     NodeAnalyticsModule,
     NodeDiscoveryModule,
     NetworkTelemetryModule,
+    ObservabilityModule,
   ],
 })
 export class AppModule {}

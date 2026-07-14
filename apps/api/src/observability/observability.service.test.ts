@@ -65,3 +65,18 @@ test("getDashboardEmbed includes routeId when provided", () => {
   assert.equal(result.params["var-routeId"], "route-456");
   assert.match(result.url, /var-routeId=route-456/);
 });
+
+test("getDashboardEmbed rejects unknown dashboard keys", () => {
+  const service = new ObservabilityService(config);
+
+  assert.throws(() => service.getDashboardEmbed({ dashboard: "bad-key" as never }));
+});
+
+test("getDashboardEmbed defaults to the six-hour Grafana time range", () => {
+  const service = new ObservabilityService(config);
+
+  const result = service.getDashboardEmbed({ dashboard: "network-command-view" });
+
+  assert.equal(result.params.from, "now-6h");
+  assert.equal(result.params.to, "now");
+});
