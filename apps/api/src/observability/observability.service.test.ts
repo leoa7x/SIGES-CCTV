@@ -22,7 +22,11 @@ test("getDashboardEmbed builds a node observability URL with nodeId and time ran
     to: "now",
   });
 
+  assert.equal(result.title, "Observabilidad del nodo");
   assert.equal(result.dashboard, "node-observability");
+  assert.equal(result.params["var-nodeId"], "node-123");
+  assert.equal(result.params.from, "now-6h");
+  assert.equal(result.params.to, "now");
   assert.match(result.url, /node-observability-uid/);
   assert.match(result.url, /var-nodeId=node-123/);
   assert.match(result.url, /from=now-6h/);
@@ -38,7 +42,10 @@ test("getDashboardEmbed builds a global network command view URL without nodeId"
     to: "now",
   });
 
+  assert.equal(result.title, "Vista global de red");
   assert.equal(result.dashboard, "network-command-view");
+  assert.equal(result.params.from, "now-24h");
+  assert.equal(result.params.to, "now");
   assert.match(result.url, /network-command-view-uid/);
   assert.doesNotMatch(result.url, /var-nodeId=/);
 });
@@ -53,6 +60,8 @@ test("getDashboardEmbed includes routeId when provided", () => {
     to: "now",
   });
 
+  assert.equal(result.title, "Vista global de red");
   assert.equal(result.dashboard, "network-command-view");
+  assert.equal(result.params["var-routeId"], "route-456");
   assert.match(result.url, /var-routeId=route-456/);
 });
