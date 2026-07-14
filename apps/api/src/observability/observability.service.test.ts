@@ -42,3 +42,17 @@ test("getDashboardEmbed builds a global network command view URL without nodeId"
   assert.match(result.url, /network-command-view-uid/);
   assert.doesNotMatch(result.url, /var-nodeId=/);
 });
+
+test("getDashboardEmbed includes routeId when provided", () => {
+  const service = new ObservabilityService(config);
+
+  const result = service.getDashboardEmbed({
+    dashboard: "network-command-view",
+    routeId: "route-456",
+    from: "now-24h",
+    to: "now",
+  });
+
+  assert.equal(result.dashboard, "network-command-view");
+  assert.match(result.url, /var-routeId=route-456/);
+});
