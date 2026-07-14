@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { OpsShell } from "../../../components/ops-shell";
 import { OpsModal } from "../../../components/ops-modal";
+import { GrafanaPanelEmbed } from "../../../components/grafana-panel-embed";
 import { useAuth } from "../../../components/auth-provider";
-import { apiDelete, apiGet, apiPatch, apiPost } from "../../../lib/api";
+import { apiDelete, apiGet, apiPatch, apiPost, type GrafanaEmbedDescriptor } from "../../../lib/api";
+import { buildGrafanaEmbedModel } from "../../../lib/network-monitor";
+import { tabClass } from "../../../lib/ui";
 
 type NodeItem = {
   id: string;
@@ -208,11 +211,35 @@ export default function NodesPage() {
   });
 
   const [selectedAssetId, setSelectedAssetId] = useState("");
+  const [nodeFilter, setNodeFilter] = useState("");
+  const [detailTab, setDetailTab] = useState<"equipos" | "descubrimientos" | "analiticas" | "observabilidad">("equipos");
+  const [nodeEmbedDescriptor, setNodeEmbedDescriptor] = useState<GrafanaEmbedDescriptor | null>(null);
+  const [loadingNodeEmbed, setLoadingNodeEmbed] = useState(false);
 
   const selectedAsset = useMemo(
     () => detail?.assets.find((asset) => asset.id === selectedAssetId) ?? null,
     [detail, selectedAssetId],
   );
+
+  const nodeEmbed = useMemo(
+    () => nodeEmbedDescriptor ? buildGrafanaEmbedModel(nodeEmbedDescriptor) : null,
+    [nodeEmbedDescriptor],
+  );
+
+  const filteredItems = useMemo(() => {
+    const q = nodeFilter.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((item) =>
+      item.code.toLowerCase().includes(q) ||
+      item.name.toLowerCase().includes(q) ||
+      item.route.identifier.toLowerCase().includes(q) ||
+      item.route.center.name.toLowerCase().includes(q));
+  }, [items, nodeFilter]);
+
+  function selectNode(nodeId: string) {
+    setSelectedNodeId(nodeId);
+    setDetailTab("equipos");
+  }
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -256,6 +283,30 @@ export default function NodesPage() {
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { if (selectedNodeId) void loadDetail(selectedNodeId); }, [selectedNodeId, loadDetail]);
+  useEffect(() => {
+    if (!accessToken || !selectedNodeId) {
+      setNodeEmbedDescriptor(null);
+      setLoadingNodeEmbed(false);
+      return;
+    }
+
+    let cancelled = false;
+    setNodeEmbedDescriptor(null);
+    setLoadingNodeEmbed(true);
+
+    void apiGet<GrafanaEmbedDescriptor>(`/observability/embed/node/${selectedNodeId}`, accessToken)
+      .then((descriptor) => {
+        if (!cancelled) setNodeEmbedDescriptor(descriptor);
+      })
+      .catch(() => {
+        if (!cancelled) setNodeEmbedDescriptor(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingNodeEmbed(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [accessToken, selectedNodeId]);
 
   function resetNodeForm() {
     setNodeForm({
@@ -550,55 +601,68 @@ export default function NodesPage() {
         </button>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.05fr_1.45fr]">
-        <section className="overflow-hidden rounded-ops border border-ops-border bg-ops-panel">
+      <div className="grid gap-4 xl:grid-cols-[1.05fr_1.45fr] xl:items-start">
+        <section className="overflow-hidden rounded-ops border border-ops-border bg-ops-panel xl:sticky xl:top-6">
           <div className="border-b border-ops-border px-4 py-3">
-            <p className="text-sm font-semibold text-ops-text">Postes / nodos</p>
+            <p className="mb-3 text-sm font-semibold text-ops-text">Postes / nodos</p>
+            <input
+              className={`${INPUT} mb-0`}
+              value={nodeFilter}
+              onChange={(e) => setNodeFilter(e.target.value)}
+              placeholder="Buscar por código, nombre o ruta…"
+            />
           </div>
           {loading ? (
             <div className="flex justify-center py-12"><div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" /></div>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-ops-border text-left text-[10px] font-semibold uppercase tracking-wide text-ops-muted">
-                  <th className="px-4 py-3">Nodo</th>
-                  <th className="px-4 py-3 hidden md:table-cell">Red</th>
-                  <th className="px-4 py-3 hidden md:table-cell">Activos</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-ops-border">
-                {items.map((item) => (
-                  <tr
-                    key={item.id}
-                    className={`cursor-pointer hover:bg-ops-surface ${selectedNodeId === item.id ? "bg-ops-surface" : ""}`}
-                    onClick={() => setSelectedNodeId(item.id)}
-                  >
-                    <td className="px-4 py-3">
-                      <p className="font-mono text-xs text-ops-text">{item.code}</p>
-                      <p className="text-sm text-ops-text">{item.name}</p>
-                      <p className="text-[11px] text-ops-muted">{item.route.identifier} · {item.route.center.name}</p>
-                    </td>
-                    <td className="px-4 py-3 hidden md:table-cell">
-                      <p className="font-mono text-xs text-ops-muted">{item.primaryIp ?? "sin IP"}</p>
-                      <p className="text-[11px] text-ops-dim">{item.scanSubnetCidr ?? "sin subred explícita"}</p>
-                    </td>
-                    <td className="px-4 py-3 hidden md:table-cell text-[11px] text-ops-muted">
-                      <p>{item._count.assets} oficiales</p>
-                      <p>{item._count.analyticsAssignments} analíticas</p>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openEditNode(item); }}
-                        className="text-[11px] text-ops-blue hover:underline"
-                      >
-                        Editar
-                      </button>
-                    </td>
+            <div className="max-h-[65vh] overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="sticky top-0 z-10 border-b border-ops-border bg-ops-panel text-left text-[10px] font-semibold uppercase tracking-wide text-ops-muted">
+                    <th className="px-4 py-3">Nodo</th>
+                    <th className="px-4 py-3 hidden md:table-cell">Red</th>
+                    <th className="px-4 py-3 hidden md:table-cell">Activos</th>
+                    <th className="px-4 py-3" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-ops-border">
+                  {filteredItems.map((item) => (
+                    <tr
+                      key={item.id}
+                      className={`cursor-pointer hover:bg-ops-surface ${selectedNodeId === item.id ? "bg-ops-surface" : ""}`}
+                      onClick={() => selectNode(item.id)}
+                    >
+                      <td className="px-4 py-3">
+                        <p className="font-mono text-xs text-ops-text">{item.code}</p>
+                        <p className="text-sm text-ops-text">{item.name}</p>
+                        <p className="text-[11px] text-ops-muted">{item.route.identifier} · {item.route.center.name}</p>
+                      </td>
+                      <td className="px-4 py-3 hidden md:table-cell">
+                        <p className="font-mono text-xs text-ops-muted">{item.primaryIp ?? "sin IP"}</p>
+                        <p className="text-[11px] text-ops-dim">{item.scanSubnetCidr ?? "sin subred explícita"}</p>
+                      </td>
+                      <td className="px-4 py-3 hidden md:table-cell text-[11px] text-ops-muted">
+                        <p>{item._count.assets} oficiales</p>
+                        <p>{item._count.analyticsAssignments} analíticas</p>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openEditNode(item); }}
+                          className="text-[11px] text-ops-blue hover:underline"
+                        >
+                          Editar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredItems.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-6 text-center text-sm text-ops-muted">Sin resultados para “{nodeFilter}”.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
 
@@ -633,14 +697,6 @@ export default function NodesPage() {
                   <p className="text-[11px] text-ops-dim">Tipo base: POSTE</p>
                   <button
                     type="button"
-                    onClick={handleRunDiscovery}
-                    disabled={runningDiscovery}
-                    className="mt-3 block text-[11px] text-ops-blue hover:underline disabled:opacity-50"
-                  >
-                    {runningDiscovery ? "Escaneando…" : "Escanear ahora"}
-                  </button>
-                  <button
-                    type="button"
                     onClick={handleDeleteNode}
                     disabled={deletingNode}
                     className="mt-3 text-[11px] text-ops-rose hover:underline disabled:opacity-50"
@@ -650,14 +706,29 @@ export default function NodesPage() {
                 </div>
               </div>
 
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className={tabClass(detailTab === "equipos")} onClick={() => setDetailTab("equipos")}>
+                  Equipos · {detail.assets.length}
+                </button>
+                <button type="button" className={tabClass(detailTab === "descubrimientos")} onClick={() => setDetailTab("descubrimientos")}>
+                  Descubrimientos · {detail.discoveryJobs.length}
+                </button>
+                <button type="button" className={tabClass(detailTab === "analiticas")} onClick={() => setDetailTab("analiticas")}>
+                  Analíticas · {detail.analyticsAssignments.length}
+                </button>
+                <button type="button" className={tabClass(detailTab === "observabilidad")} onClick={() => setDetailTab("observabilidad")}>
+                  Observabilidad
+                </button>
+              </div>
+
+              {detailTab === "equipos" && (
               <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-                <div className="space-y-4">
-                  <div className={PANEL}>
+                <div className={PANEL}>
                     <div className="mb-4 flex items-center justify-between">
                       <p className="text-sm font-semibold text-ops-text">Equipos oficiales</p>
                       <button onClick={resetAssetForm} className="text-[11px] text-ops-blue hover:underline">Nuevo activo</button>
                     </div>
-                    <div className="space-y-3">
+                    <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
                       {detail.assets.length === 0 ? (
                         <p className="text-sm text-ops-muted">Aún no hay inventario oficial para este poste.</p>
                       ) : detail.assets.map((asset) => (
@@ -699,14 +770,60 @@ export default function NodesPage() {
                         </div>
                       ))}
                     </div>
-                  </div>
+                </div>
 
-                  <div className={PANEL}>
-                    <p className="mb-4 text-sm font-semibold text-ops-text">Descubrimientos pendientes</p>
+                <div className={PANEL}>
+                  <p className="mb-4 text-sm font-semibold text-ops-text">{editingAsset ? "Editar activo" : "Crear activo oficial"}</p>
+                  <form onSubmit={submitAsset} className="space-y-3">
+                    <select className={INPUT} value={assetForm.assetType} onChange={(e) => setAssetForm((f) => ({ ...f, assetType: e.target.value }))}>
+                      {ASSET_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+                    </select>
+                    <input className={INPUT} value={assetForm.name} onChange={(e) => setAssetForm((f) => ({ ...f, name: e.target.value }))} placeholder="Nombre del equipo" required />
+                    <div className="grid grid-cols-2 gap-3">
+                      <input className={INPUT} value={assetForm.ip} onChange={(e) => setAssetForm((f) => ({ ...f, ip: e.target.value }))} placeholder="IP" />
+                      <input className={INPUT} value={assetForm.mac} onChange={(e) => setAssetForm((f) => ({ ...f, mac: e.target.value }))} placeholder="MAC" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <input className={INPUT} value={assetForm.vendor} onChange={(e) => setAssetForm((f) => ({ ...f, vendor: e.target.value }))} placeholder="Marca" />
+                      <input className={INPUT} value={assetForm.model} onChange={(e) => setAssetForm((f) => ({ ...f, model: e.target.value }))} placeholder="Modelo" />
+                    </div>
+                    <input className={INPUT} value={assetForm.hostname} onChange={(e) => setAssetForm((f) => ({ ...f, hostname: e.target.value }))} placeholder="Hostname" />
+                    <select className={INPUT} value={assetForm.operativeState} onChange={(e) => setAssetForm((f) => ({ ...f, operativeState: e.target.value }))}>
+                      {NODE_STATES.map((state) => <option key={state} value={state}>{state}</option>)}
+                    </select>
+                    <textarea className={INPUT} value={assetForm.notes} onChange={(e) => setAssetForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Notas" rows={3} />
+                    <div className="flex justify-end gap-2">
+                      {editingAsset && (
+                        <button type="button" onClick={resetAssetForm} className="rounded-ops border border-ops-border px-3 py-2 text-sm text-ops-muted">
+                          Cancelar edición
+                        </button>
+                      )}
+                      <button type="submit" disabled={savingAsset} className="rounded-ops bg-ops-blue px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                        {savingAsset ? "Guardando…" : editingAsset ? "Actualizar activo" : "Agregar activo"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+              )}
+
+              {detailTab === "descubrimientos" && (
+              <div className={PANEL}>
+                <div className="mb-4 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-ops-text">Descubrimientos pendientes</p>
+                  <button
+                    type="button"
+                    onClick={handleRunDiscovery}
+                    disabled={runningDiscovery}
+                    className="text-[11px] text-ops-blue hover:underline disabled:opacity-50"
+                  >
+                    {runningDiscovery ? "Escaneando…" : "Escanear ahora"}
+                  </button>
+                </div>
                     {detail.discoveryJobs.length === 0 ? (
                       <p className="text-sm text-ops-muted">Todavía no hay escaneos ejecutados para este nodo.</p>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="max-h-[65vh] space-y-3 overflow-y-auto pr-1">
                         {detail.discoveryJobs.map((job) => (
                           <div key={job.id} className="rounded-ops border border-ops-border bg-ops-surface p-3">
                             <div className="flex items-center justify-between gap-3">
@@ -753,44 +870,12 @@ export default function NodesPage() {
                         ))}
                       </div>
                     )}
-                  </div>
                 </div>
+              )}
 
-                <div className="space-y-4">
-                  <div className={PANEL}>
-                    <p className="mb-4 text-sm font-semibold text-ops-text">{editingAsset ? "Editar activo" : "Crear activo oficial"}</p>
-                    <form onSubmit={submitAsset} className="space-y-3">
-                      <select className={INPUT} value={assetForm.assetType} onChange={(e) => setAssetForm((f) => ({ ...f, assetType: e.target.value }))}>
-                        {ASSET_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
-                      </select>
-                      <input className={INPUT} value={assetForm.name} onChange={(e) => setAssetForm((f) => ({ ...f, name: e.target.value }))} placeholder="Nombre del equipo" required />
-                      <div className="grid grid-cols-2 gap-3">
-                        <input className={INPUT} value={assetForm.ip} onChange={(e) => setAssetForm((f) => ({ ...f, ip: e.target.value }))} placeholder="IP" />
-                        <input className={INPUT} value={assetForm.mac} onChange={(e) => setAssetForm((f) => ({ ...f, mac: e.target.value }))} placeholder="MAC" />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <input className={INPUT} value={assetForm.vendor} onChange={(e) => setAssetForm((f) => ({ ...f, vendor: e.target.value }))} placeholder="Marca" />
-                        <input className={INPUT} value={assetForm.model} onChange={(e) => setAssetForm((f) => ({ ...f, model: e.target.value }))} placeholder="Modelo" />
-                      </div>
-                      <input className={INPUT} value={assetForm.hostname} onChange={(e) => setAssetForm((f) => ({ ...f, hostname: e.target.value }))} placeholder="Hostname" />
-                      <select className={INPUT} value={assetForm.operativeState} onChange={(e) => setAssetForm((f) => ({ ...f, operativeState: e.target.value }))}>
-                        {NODE_STATES.map((state) => <option key={state} value={state}>{state}</option>)}
-                      </select>
-                      <textarea className={INPUT} value={assetForm.notes} onChange={(e) => setAssetForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Notas" rows={3} />
-                      <div className="flex justify-end gap-2">
-                        {editingAsset && (
-                          <button type="button" onClick={resetAssetForm} className="rounded-ops border border-ops-border px-3 py-2 text-sm text-ops-muted">
-                            Cancelar edición
-                          </button>
-                        )}
-                        <button type="submit" disabled={savingAsset} className="rounded-ops bg-ops-blue px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                          {savingAsset ? "Guardando…" : editingAsset ? "Actualizar activo" : "Agregar activo"}
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-
-                  <div className={PANEL}>
+              {detailTab === "analiticas" && (
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className={PANEL}>
                     <p className="mb-4 text-sm font-semibold text-ops-text">Analíticas del nodo</p>
                     <div className="mb-3 flex flex-wrap gap-2">
                       {detail.analyticsAssignments.map((assignment) => (
@@ -864,7 +949,15 @@ export default function NodesPage() {
                     )}
                   </div>
                 </div>
-              </div>
+              )}
+
+              {detailTab === "observabilidad" && (
+                <GrafanaPanelEmbed
+                  title={nodeEmbed?.title ?? "Observabilidad del nodo"}
+                  src={nodeEmbed?.src ?? null}
+                  loading={loadingNodeEmbed}
+                />
+              )}
             </>
           )}
         </section>
