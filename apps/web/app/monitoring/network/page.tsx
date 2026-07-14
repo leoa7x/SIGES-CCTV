@@ -389,30 +389,16 @@ export default function NetworkMonitoringPage() {
       <div className="space-y-8">
         <section className="relative overflow-hidden rounded-[28px] border border-ops-border bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.12),transparent_30%),radial-gradient(circle_at_top_right,rgba(37,99,235,0.18),transparent_35%),linear-gradient(135deg,#07111d,#0b1727_62%,#08131f)] p-6 shadow-ops">
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(148,163,184,0.04)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.04)_1px,transparent_1px)] bg-[size:32px_32px]" />
-          <div className="relative flex flex-wrap items-start justify-between gap-8">
+          <div className="relative max-w-2xl">
             <div className="max-w-2xl">
               <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-cyan-200/80">Comando Operativo De Red</p>
               <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-4xl">Inventario vivo, discovery correlacionado y telemetría con contexto operativo.</h2>
               <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">
                 Base operacional para NOC: qué equipos existen, cuáles están vivos, qué quedó pendiente y cómo se comporta el nodo.
               </p>
-            </div>
-            <div className="grid min-w-[280px] flex-1 gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-3 backdrop-blur-sm">
-                <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">Cobertura</p>
-                <p className="mt-2 text-xl font-semibold text-white">{model.summary.totalNodes}</p>
-                <p className="text-xs text-slate-300">nodos visibles</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-3 backdrop-blur-sm">
-                <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">Discovery</p>
-                <p className="mt-2 text-xl font-semibold text-white">{model.observability.pendingDiscoveries}</p>
-                <p className="text-xs text-slate-300">pendientes por operar</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-3 backdrop-blur-sm">
-                <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">Observabilidad</p>
-                <p className="mt-2 text-xl font-semibold text-white">{model.observability.analyticsConfigured}</p>
-                <p className="text-xs text-slate-300">analíticas configuradas</p>
-              </div>
+              <p className="mt-4 text-xs font-medium text-slate-400">
+                Cobertura: {model.summary.totalNodes} nodos visibles · Discovery: {model.observability.pendingDiscoveries} pendientes · Observabilidad: {model.observability.analyticsConfigured} analíticas configuradas
+              </p>
             </div>
           </div>
           <div className="relative mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
