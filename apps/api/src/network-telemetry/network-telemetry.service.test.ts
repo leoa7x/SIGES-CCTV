@@ -20,7 +20,10 @@ function createService(overrides: Record<string, unknown> = {}) {
   const calls = { official: [] as unknown[], discovery: [] as unknown[], transactions: 0 };
 
   const prisma = {
-    node: { findUniqueOrThrow: async () => ({ id: "node-1" }) },
+    node: {
+      findUnique: async () => ({ id: "node-1" }),
+      findUniqueOrThrow: async () => ({ id: "node-1" }),
+    },
     nodeAsset: {
       findFirst: async (args: unknown) => {
         calls.official.push(args);
@@ -261,6 +264,39 @@ test("getNodeAssets serializes byte counters", async () => {
   assert.doesNotThrow(() => JSON.stringify(result));
 });
 
+test("getNodeSummary and getNodeAlerts tolerate unknown node IDs without deriving alerts", async () => {
+  let upsertCalls = 0;
+  const { service } = createService({
+    node: { findUnique: async () => null },
+    networkTelemetrySnapshot: { findFirst: async () => null },
+    networkTelemetryAlert: {
+      count: async () => 0,
+      findMany: async () => [],
+      upsert: async () => {
+        upsertCalls += 1;
+        throw new Error("Foreign key constraint failed");
+      },
+    },
+  });
+
+  const summary = await service.getNodeSummary("missing-node");
+  const alerts = await service.getNodeAlerts("missing-node");
+
+  assert.deepEqual(summary, {
+    snapshotId: null,
+    capturedAt: null,
+    totalBytesIn: "0",
+    totalBytesOut: "0",
+    activeHosts: 0,
+    activeFlows: 0,
+    alertCount: 0,
+    topProtocols: [],
+    topDestinations: [],
+  });
+  assert.deepEqual(alerts, []);
+  assert.equal(upsertCalls, 0);
+});
+
 test("getNodeSummary upserts NODE_SILENT when the latest snapshot is missing", async () => {
   const { service, upserts } = createService({
     networkTelemetrySnapshot: { findFirst: async () => null },
@@ -285,6 +321,38 @@ test("getNodeSummary upserts NODE_SILENT when the latest snapshot is missing", a
   assert.equal(alert.create.detail, "No se recibió telemetría reciente para el nodo dentro de la ventana esperada.");
   assert.ok(alert.create.firstSeenAt instanceof Date);
   assert.deepEqual(alert.update, { isActive: true, resolvedAt: null, lastSeenAt: alert.create.firstSeenAt });
+});
+
+test("getNodeSummary derives ASSET_SILENT for an official asset without a recent sample", async () => {
+  const { service, upserts } = createService({
+    networkTelemetrySnapshot: {
+      findFirst: async () => ({ id: "snap-1", capturedAt: new Date() }),
+    },
+    nodeAsset: {
+      findMany: async () => [{ id: "asset-1", name: "Camara norte" }],
+    },
+    networkTelemetryAssetSample: {
+      findMany: async () => [],
+    },
+    networkTelemetryAlert: {
+      count: async () => 0,
+      updateMany: async () => ({ count: 0 }),
+      upsert: async (args: unknown) => {
+        upserts.push(args);
+        return { id: "alert-1" };
+      },
+    },
+  });
+
+  await service.getNodeSummary("node-1");
+
+  assert.equal(upserts.length, 1);
+  const alert = upserts[0] as { where: { nodeId_kind_title: { kind: string; title: string } } };
+  assert.deepEqual(alert.where.nodeId_kind_title, {
+    nodeId: "node-1",
+    kind: "ASSET_SILENT",
+    title: "Activo sin telemetría reciente asset-1",
+  });
 });
 
 test("getNodeAlerts includes NODE_SILENT when no recent snapshot exists", async () => {

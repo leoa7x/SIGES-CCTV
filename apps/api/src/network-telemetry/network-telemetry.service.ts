@@ -28,6 +28,20 @@ export class NetworkTelemetryService {
   }
 
   async getNodeSummary(nodeId: string) {
+    if (!await this.nodeExists(nodeId)) {
+      return {
+        snapshotId: null,
+        capturedAt: null,
+        totalBytesIn: "0",
+        totalBytesOut: "0",
+        activeHosts: 0,
+        activeFlows: 0,
+        alertCount: 0,
+        topProtocols: [],
+        topDestinations: [],
+      };
+    }
+
     const snapshot = await this.prisma.networkTelemetrySnapshot.findFirst({
       where: { nodeId },
       orderBy: { capturedAt: "desc" },
@@ -88,6 +102,8 @@ export class NetworkTelemetryService {
   }
 
   async getNodeAlerts(nodeId: string) {
+    if (!await this.nodeExists(nodeId)) return [];
+
     const snapshot = await this.prisma.networkTelemetrySnapshot.findFirst({
       where: { nodeId },
       orderBy: { capturedAt: "desc" },
@@ -220,6 +236,13 @@ export class NetworkTelemetryService {
           resolvedAt: null,
         },
       }));
+  }
+
+  private async nodeExists(nodeId: string) {
+    return (await this.prisma.node.findUnique({
+      where: { id: nodeId },
+      select: { id: true },
+    })) !== null;
   }
 
   private async deriveSilentAlerts(nodeId: string, latestCapturedAt: Date | null) {
