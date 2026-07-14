@@ -1,3 +1,23 @@
+import type { GrafanaEmbedDescriptor } from "./api";
+
+export type GrafanaEmbedModel = {
+  title: string;
+  src: string | null;
+};
+
+export function buildGrafanaEmbedModel(descriptor: GrafanaEmbedDescriptor): GrafanaEmbedModel {
+  try {
+    const url = new URL(descriptor.url);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return { title: descriptor.title, src: null };
+    }
+
+    return { title: descriptor.title, src: url.toString() };
+  } catch {
+    return { title: descriptor.title, src: null };
+  }
+}
+
 export type MonitorNodeListItem = {
   id: string;
   code: string;

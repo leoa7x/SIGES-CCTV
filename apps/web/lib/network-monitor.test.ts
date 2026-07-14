@@ -3,12 +3,31 @@ import test from "node:test";
 import * as networkMonitor from "./network-monitor";
 
 import {
+  buildGrafanaEmbedModel,
   buildNetworkMonitorModel,
   formatTelemetryBytes,
   telemetryAlertLevel,
   type MonitorNodeDetail,
   type MonitorNodeListItem,
 } from "./network-monitor";
+import type { GrafanaEmbedDescriptor } from "./api";
+
+test("builds a safe iframe src from an API descriptor", () => {
+  const descriptor: GrafanaEmbedDescriptor = {
+    title: "Observabilidad del nodo",
+    dashboard: "node-observability",
+    url: "http://grafana.local/d-solo/node-observability?var-nodeId=node-1",
+    params: { "var-nodeId": "node-1" },
+  };
+
+  const result = buildGrafanaEmbedModel(descriptor);
+
+  assert.equal(result.title, "Observabilidad del nodo");
+  assert.notEqual(result.src, null);
+  if (result.src) {
+    assert.match(result.src, /var-nodeId=node-1/);
+  }
+});
 
 test("network detail responses only apply to the current node and request", () => {
   const isCurrentNetworkDetailRequest = (networkMonitor as Record<string, unknown>).isCurrentNetworkDetailRequest as
