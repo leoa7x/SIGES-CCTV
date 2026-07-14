@@ -4,12 +4,19 @@ import test from "node:test";
 import { NetworkTelemetryService } from "./network-telemetry.service";
 
 test("ingestSnapshot correlates asset samples to official assets by MAC first", async () => {
+  let persistedSamples: Array<{ mac?: string; nodeAssetId?: string | null }> = [];
+
   const service = new NetworkTelemetryService({
     node: { findUniqueOrThrow: async () => ({ id: "node-1" }) },
     nodeAsset: { findFirst: async ({ where }: { where: { mac?: string | undefined } }) => where.mac === "AA:BB" ? ({ id: "asset-1" }) : null },
     nodeDiscoveredDevice: { findFirst: async () => null },
     networkTelemetrySnapshot: { create: async () => ({ id: "snap-1" }) },
-    networkTelemetryAssetSample: { createMany: async () => ({ count: 1 }) },
+    networkTelemetryAssetSample: {
+      createMany: async ({ data }: { data: Array<{ mac?: string; nodeAssetId?: string | null }> }) => {
+        persistedSamples = data;
+        return { count: data.length };
+      },
+    },
     networkTelemetryAlert: { upsert: async () => ({ id: "alert-1" }) },
     $transaction: async (operations: Promise<unknown>[]) => Promise.all(operations),
   } as never);
@@ -26,4 +33,5 @@ test("ingestSnapshot correlates asset samples to official assets by MAC first", 
   });
 
   assert.equal(result.snapshotId, "snap-1");
+  assert.equal(persistedSamples.find((sample) => sample.mac === "AA:BB")?.nodeAssetId, "asset-1");
 });
