@@ -22,6 +22,7 @@ import { GatewayModule } from "./gateway/gateway.module";
 import { NodeAssetsModule } from "./node-assets/node-assets.module";
 import { NodeAnalyticsModule } from "./node-analytics/node-analytics.module";
 import { NodeDiscoveryModule } from "./node-discovery/node-discovery.module";
+import { NetworkTelemetryModule } from "./network-telemetry/network-telemetry.module";
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { NodeDiscoveryModule } from "./node-discovery/node-discovery.module";
     NodeAssetsModule,
     NodeAnalyticsModule,
     NodeDiscoveryModule,
+    NetworkTelemetryModule,
   ],
 })
 export class AppModule {}

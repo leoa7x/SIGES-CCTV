@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, UnauthorizedException } from "@nestjs/common";
 import {
   NetworkTelemetryAlertKind,
   NetworkTelemetryAlertSeverity,
@@ -12,6 +12,71 @@ import { IngestNetworkTelemetryDto } from "./network-telemetry.ingest.dto";
 @Injectable()
 export class NetworkTelemetryService {
   constructor(private prisma: PrismaService) {}
+
+  async ingestWithCollectorAuth(authorization: string | undefined, dto: IngestNetworkTelemetryDto) {
+    const expected = process.env.NETWORK_TELEMETRY_INGEST_TOKEN;
+    const received = authorization?.replace(/^Bearer\s+/i, "");
+    if (!expected || received !== expected) {
+      throw new UnauthorizedException("Invalid collector token");
+    }
+    return this.ingestSnapshot(dto);
+  }
+
+  async getNodeSummary(nodeId: string) {
+    const snapshot = await this.prisma.networkTelemetrySnapshot.findFirst({
+      where: { nodeId },
+      orderBy: { capturedAt: "desc" },
+    });
+    const alertCount = await this.prisma.networkTelemetryAlert.count({
+      where: { nodeId, isActive: true },
+    });
+    return {
+      snapshotId: snapshot?.id ?? null,
+      capturedAt: snapshot?.capturedAt ?? null,
+      totalBytesIn: snapshot?.totalBytesIn?.toString() ?? "0",
+      totalBytesOut: snapshot?.totalBytesOut?.toString() ?? "0",
+      activeHosts: snapshot?.activeHosts ?? 0,
+      activeFlows: snapshot?.activeFlows ?? 0,
+      alertCount,
+      topProtocols: snapshot?.topProtocolsJson ?? [],
+      topDestinations: snapshot?.topDestinationsJson ?? [],
+    };
+  }
+
+  async getNodeTimeseries(nodeId: string) {
+    return this.prisma.networkTelemetrySnapshot.findMany({
+      where: { nodeId },
+      orderBy: { capturedAt: "asc" },
+      take: 60,
+      select: {
+        capturedAt: true,
+        totalBytesIn: true,
+        totalBytesOut: true,
+        activeHosts: true,
+        activeFlows: true,
+      },
+    });
+  }
+
+  async getNodeAssets(nodeId: string) {
+    const snapshot = await this.prisma.networkTelemetrySnapshot.findFirst({
+      where: { nodeId },
+      orderBy: { capturedAt: "desc" },
+    });
+    if (!snapshot) return [];
+    return this.prisma.networkTelemetryAssetSample.findMany({
+      where: { snapshotId: snapshot.id },
+      include: { nodeAsset: true },
+      orderBy: [{ bytesOut: "desc" }, { bytesIn: "desc" }],
+    });
+  }
+
+  async getNodeAlerts(nodeId: string) {
+    return this.prisma.networkTelemetryAlert.findMany({
+      where: { nodeId, isActive: true },
+      orderBy: [{ severity: "desc" }, { lastSeenAt: "desc" }],
+    });
+  }
 
   async ingestSnapshot(dto: IngestNetworkTelemetryDto) {
     const node = await this.prisma.node.findUniqueOrThrow({ where: { id: dto.nodeId } });
