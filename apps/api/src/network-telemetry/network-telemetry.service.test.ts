@@ -304,6 +304,7 @@ test("getNodeSummary upserts NODE_SILENT when the latest snapshot is missing", a
     networkTelemetryAssetSample: { findMany: async () => [] },
     networkTelemetryAlert: {
       count: async () => 1,
+      updateMany: async () => ({ count: 0 }),
       upsert: async (args: unknown) => {
         upserts.push(args);
         return { id: "alert-1" };
@@ -362,6 +363,7 @@ test("getNodeAlerts includes NODE_SILENT when no recent snapshot exists", async 
     networkTelemetryAssetSample: { findMany: async () => [] },
     networkTelemetryAlert: {
       findMany: async () => [{ kind: "NODE_SILENT" }],
+      updateMany: async () => ({ count: 0 }),
       upsert: async (args: unknown) => {
         upserts.push(args);
         return { id: "alert-1" };
@@ -427,7 +429,7 @@ test("getNodeSummary resolves an active NODE_SILENT alert when telemetry resumes
 
   await service.getNodeSummary("node-1");
 
-  assert.equal(resolutions.length, 1);
+  assert.equal(resolutions.length, 2);
   const resolution = resolutions[0] as { where: { nodeId: string; kind: string; isActive: boolean }; data: { isActive: boolean; resolvedAt: Date } };
   assert.deepEqual(resolution.where, { nodeId: "node-1", kind: "NODE_SILENT", isActive: true });
   assert.equal(resolution.data.isActive, false);
@@ -523,7 +525,7 @@ test("getNodeAlerts resolves an active ASSET_SILENT alert when its asset becomes
 
   await service.getNodeAlerts("node-1");
 
-  assert.equal(resolutions.length, 2);
+  assert.equal(resolutions.length, 3);
   const assetResolution = resolutions[1] as { where: { nodeId: string; nodeAssetId: { in: string[] }; kind: string; isActive: boolean }; data: { isActive: boolean; resolvedAt: Date } };
   assert.deepEqual(assetResolution.where, {
     nodeId: "node-1",
@@ -533,4 +535,43 @@ test("getNodeAlerts resolves an active ASSET_SILENT alert when its asset becomes
   });
   assert.equal(assetResolution.data.isActive, false);
   assert.ok(assetResolution.data.resolvedAt instanceof Date);
+});
+
+test("getNodeAlerts resolves an active ASSET_SILENT alert for an asset no longer on the node", async () => {
+  const resolutions: unknown[] = [];
+  const { service } = createService({
+    networkTelemetrySnapshot: {
+      findFirst: async () => ({ id: "snap-1", capturedAt: new Date() }),
+    },
+    nodeAsset: {
+      findMany: async () => [{ id: "asset-current", name: "Camara norte" }],
+    },
+    networkTelemetryAssetSample: {
+      findMany: async () => [],
+    },
+    networkTelemetryAlert: {
+      findMany: async () => [],
+      updateMany: async (args: unknown) => {
+        resolutions.push(args);
+        return { count: 1 };
+      },
+      upsert: async () => ({ id: "alert-1" }),
+    },
+  });
+
+  await service.getNodeAlerts("node-1");
+
+  assert.equal(resolutions.length, 2);
+  const staleAssetResolution = resolutions[1] as {
+    where: { nodeId: string; nodeAssetId: { notIn: string[] }; kind: string; isActive: boolean };
+    data: { isActive: boolean; resolvedAt: Date };
+  };
+  assert.deepEqual(staleAssetResolution.where, {
+    nodeId: "node-1",
+    nodeAssetId: { notIn: ["asset-current"] },
+    kind: "ASSET_SILENT",
+    isActive: true,
+  });
+  assert.equal(staleAssetResolution.data.isActive, false);
+  assert.ok(staleAssetResolution.data.resolvedAt instanceof Date);
 });

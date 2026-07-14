@@ -282,6 +282,7 @@ export class NetworkTelemetryService {
     const visibleAssetIds = new Set(
       recentSamples.flatMap((sample) => sample.nodeAssetId ? [sample.nodeAssetId] : []),
     );
+    const currentAssetIds = assets.map((asset) => asset.id);
 
     if (visibleAssetIds.size > 0) {
       await this.prisma.networkTelemetryAlert.updateMany({
@@ -297,6 +298,19 @@ export class NetworkTelemetryService {
         },
       });
     }
+
+    await this.prisma.networkTelemetryAlert.updateMany({
+      where: {
+        nodeId,
+        nodeAssetId: { notIn: currentAssetIds },
+        kind: NetworkTelemetryAlertKind.ASSET_SILENT,
+        isActive: true,
+      },
+      data: {
+        isActive: false,
+        resolvedAt: now,
+      },
+    });
 
     for (const alert of deriveSilentAssetAlerts(nodeId, assets, visibleAssetIds, now)) {
       await this.prisma.networkTelemetryAlert.upsert(alert);
