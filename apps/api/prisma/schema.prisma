@@ -559,20 +559,28 @@ model SpliceFiberConnection {
 // ─── Cameras ──────────────────────────────────────────────────────────────────
 
 model Camera {
-  id              String         @id @default(uuid())
-  code            String         @unique
-  name            String
-  ip              String?
-  brand           String?
-  model           String?
-  resolution      String?
-  state           CameraState    @default(ONLINE)
-  hasAnalytics    Boolean        @default(false)
-  nodeId          String
-  node            Node           @relation(fields: [nodeId], references: [id])
-  incidents       Incident[]     @relation("CameraIncidents")
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id                      String          @id @default(uuid())
+  code                    String          @unique
+  name                    String
+  ip                      String?
+  brand                   String?
+  model                   String?
+  resolution              String?
+  state                   CameraState     @default(ONLINE)
+  hasAnalytics            Boolean         @default(false)
+  streamUrl               String?
+  streamUsername          String?
+  streamPasswordEncrypted String?
+  streamTransport         CameraTransport @default(TCP)
+  previewEnabled          Boolean         @default(false)
+  onvifUrl                String?
+  lastPreviewCheckAt      DateTime?
+  lastPreviewStatus       String?
+  nodeId                  String
+  node                    Node            @relation(fields: [nodeId], references: [id])
+  incidents               Incident[]      @relation("CameraIncidents")
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
 }
 
 enum CameraState {
@@ -580,6 +588,11 @@ enum CameraState {
   OFFLINE
   DEGRADED
   MAINTENANCE
+}
+
+enum CameraTransport {
+  TCP
+  UDP
 }
 
 // ─── Incidents ────────────────────────────────────────────────────────────────

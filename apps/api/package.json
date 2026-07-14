@@ -7,6 +7,7 @@
     "start": "node dist/main",
     "dev": "dotenv -e ../../.env -- nest start --watch",
     "test:cors": "ts-node --project tsconfig.json src/common/cors.test.ts",
+    "test:cameras": "ts-node --project tsconfig.json src/cameras/cameras.service.test.ts",
     "test:discovery": "ts-node --project tsconfig.json src/node-discovery/node-discovery.utils.test.ts",
     "test:network-telemetry": "ts-node --project tsconfig.json src/network-telemetry/network-telemetry.service.test.ts",
     "test:observability": "ts-node --project tsconfig.json src/observability/observability.service.test.ts",

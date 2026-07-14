@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString } from "class-validator";
-import { CameraState } from "@prisma/client";
+import { CameraState, CameraTransport } from "@prisma/client";
+import { CameraSecretService } from "./camera-secret.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 export class CreateCameraDto {
@@ -11,6 +12,12 @@ export class CreateCameraDto {
   @IsOptional() @IsString() model?: string;
   @IsOptional() @IsString() resolution?: string;
   @IsOptional() @IsBoolean() hasAnalytics?: boolean;
+  @IsOptional() @IsString() streamUrl?: string;
+  @IsOptional() @IsString() streamUsername?: string;
+  @IsOptional() @IsString() streamPassword?: string;
+  @IsOptional() @IsEnum(CameraTransport) streamTransport?: CameraTransport;
+  @IsOptional() @IsBoolean() previewEnabled?: boolean;
+  @IsOptional() @IsString() onvifUrl?: string;
   @IsString() @IsNotEmpty() nodeId!: string;
 }
 
@@ -19,33 +26,66 @@ export class UpdateCameraDto {
   @IsOptional() @IsString() ip?: string;
   @IsOptional() @IsEnum(CameraState) state?: CameraState;
   @IsOptional() @IsBoolean() hasAnalytics?: boolean;
+  @IsOptional() @IsString() streamUrl?: string;
+  @IsOptional() @IsString() streamUsername?: string;
+  @IsOptional() @IsString() streamPassword?: string;
+  @IsOptional() @IsEnum(CameraTransport) streamTransport?: CameraTransport;
+  @IsOptional() @IsBoolean() previewEnabled?: boolean;
+  @IsOptional() @IsString() onvifUrl?: string;
 }
 
 @Injectable()
 export class CamerasService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly secretService: CameraSecretService,
+  ) {}
 
-  findAll(nodeId?: string) {
-    return this.prisma.camera.findMany({
+  async findAll(nodeId?: string) {
+    const cameras = await this.prisma.camera.findMany({
       where: nodeId ? { nodeId } : undefined,
       include: { node: true },
       orderBy: { code: "asc" },
     });
+    return cameras.map((camera) => this.toSafeCamera(camera));
   }
 
-  findOne(id: string) {
-    return this.prisma.camera.findUniqueOrThrow({
+  async findOne(id: string) {
+    const camera = await this.prisma.camera.findUniqueOrThrow({
       where: { id },
       include: { node: { include: { route: { include: { center: true } } } } },
     });
+    return this.toSafeCamera(camera);
   }
 
-  create(dto: CreateCameraDto) {
-    const { nodeId, ...rest } = dto;
-    return this.prisma.camera.create({ data: { ...rest, node: { connect: { id: nodeId } } } });
+  async create(dto: CreateCameraDto) {
+    const { nodeId, streamPassword, ...rest } = dto;
+    const camera = await this.prisma.camera.create({
+      data: {
+        ...rest,
+        streamPasswordEncrypted: streamPassword ? this.secretService.encrypt(streamPassword) : undefined,
+        node: { connect: { id: nodeId } },
+      },
+    });
+    return this.toSafeCamera(camera);
   }
 
-  update(id: string, dto: UpdateCameraDto) {
-    return this.prisma.camera.update({ where: { id }, data: dto as Parameters<typeof this.prisma.camera.update>[0]["data"] });
+  async update(id: string, dto: UpdateCameraDto) {
+    const { streamPassword, ...rest } = dto;
+    const camera = await this.prisma.camera.update({
+      where: { id },
+      data: {
+        ...rest,
+        streamPasswordEncrypted: streamPassword ? this.secretService.encrypt(streamPassword) : undefined,
+      } as Parameters<typeof this.prisma.camera.update>[0]["data"],
+    });
+    return this.toSafeCamera(camera);
+  }
+
+  private toSafeCamera<T extends { streamPasswordEncrypted?: string | null }>(
+    camera: T,
+  ): Omit<T, "streamPasswordEncrypted" | "streamPassword"> {
+    const { streamPasswordEncrypted: _, streamPassword: __, ...safe } = camera as T & { streamPassword?: unknown };
+    return safe;
   }
 }
