@@ -42,8 +42,7 @@ export class NetworkTelemetryService {
 
     const alerts = this.deriveSnapshotAlerts(dto, rows);
     for (const alert of alerts) {
-      // Task 1 needs the matching compound unique constraint for this selector.
-      await this.prisma.networkTelemetryAlert.upsert(alert as never);
+      await this.prisma.networkTelemetryAlert.upsert(alert);
     }
 
     return { snapshotId: snapshot.id, samplesStored: rows.length, alertsUpserted: alerts.length };

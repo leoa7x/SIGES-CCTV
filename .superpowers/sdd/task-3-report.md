@@ -29,3 +29,11 @@
 ## Concern
 
 `NetworkTelemetryAlert` has no `@@unique([nodeId, kind, title])` in Task 1's schema or migration. The Task 3 brief requires an upsert selector named `nodeId_kind_title`, which Prisma Client does not generate without that constraint. The service preserves the mandated upsert payload using a narrow type bridge, but real unmatched-alert ingestion will fail at runtime until the Task 1 schema and migration add the compound unique constraint and Prisma Client is regenerated. This was not changed because it is outside Task 3 ownership.
+
+## Review Fix Verification
+
+- Added `@@unique([nodeId, kind, title])` and a forward-only migration, then regenerated Prisma Client so `nodeId_kind_title` is a real upsert selector.
+- Removed the unsafe `as never` alert-upsert bridge from the service.
+- Expanded focused coverage for official-IP fallback, discovery MAC precedence with newest-first ordering, unmatched alert creation, and the Prisma compound selector payload.
+- Ran `npm run test:network-telemetry --workspace=apps/api`: PASS, 5 tests, 0 failures.
+- Ran `npm run build --workspace=apps/api`: PASS.

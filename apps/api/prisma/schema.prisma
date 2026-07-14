@@ -378,6 +378,7 @@ model NetworkTelemetryAlert {
 
   @@index([nodeId, isActive])
   @@index([kind, isActive])
+  @@unique([nodeId, kind, title])
 }
 
 
