@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import * as networkMonitor from "./network-monitor";
 
 import {
   buildNetworkMonitorModel,
@@ -8,6 +9,17 @@ import {
   type MonitorNodeDetail,
   type MonitorNodeListItem,
 } from "./network-monitor";
+
+test("network detail responses only apply to the current node and request", () => {
+  const isCurrentNetworkDetailRequest = (networkMonitor as Record<string, unknown>).isCurrentNetworkDetailRequest as
+    | ((requestedNodeId: string, currentNodeId: string, requestId: number, currentRequestId: number) => boolean)
+    | undefined;
+
+  assert.equal(typeof isCurrentNetworkDetailRequest, "function");
+  assert.equal(isCurrentNetworkDetailRequest?.("node-2", "node-2", 4, 4), true);
+  assert.equal(isCurrentNetworkDetailRequest?.("node-1", "node-2", 3, 4), false);
+  assert.equal(isCurrentNetworkDetailRequest?.("node-2", "node-2", 3, 4), false);
+});
 
 test("telemetry helpers format serialized counters and API alert severities", () => {
   assert.equal(formatTelemetryBytes("0"), "0 B");

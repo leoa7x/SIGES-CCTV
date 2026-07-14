@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OpsShell } from "../../../components/ops-shell";
 import { useAuth } from "../../../components/auth-provider";
 import { apiGet, apiPost } from "../../../lib/api";
 import {
   buildNetworkMonitorModel,
   formatTelemetryBytes,
+  isCurrentNetworkDetailRequest,
   telemetryAlertLevel,
   type MonitorDiscoveryJob,
   type MonitorNodeDetail,
@@ -222,6 +223,10 @@ export default function NetworkMonitoringPage() {
   const [resolvingDiscoveryId, setResolvingDiscoveryId] = useState("");
   const [filter, setFilter] = useState("");
   const [tab, setTab] = useState<"inventario" | "trafico" | "alertas">("inventario");
+  const selectedNodeIdRef = useRef(selectedNodeId);
+  const detailRequestIdRef = useRef(0);
+
+  selectedNodeIdRef.current = selectedNodeId;
 
   const filteredNodes = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -250,9 +255,26 @@ export default function NetworkMonitoringPage() {
     }
   }, [accessToken, selectedNodeId]);
 
+  const resetNodeData = useCallback(() => {
+    setDetail(null);
+    setTelemetrySummary(null);
+    setTelemetryTimeseries([]);
+    setTelemetryAssets([]);
+    setTelemetryAlerts([]);
+  }, []);
+
   const loadDetail = useCallback(async (nodeId: string) => {
-    if (!accessToken || !nodeId) return;
+    if (!accessToken || !nodeId || selectedNodeIdRef.current !== nodeId) return;
+    const requestId = ++detailRequestIdRef.current;
+    const isCurrentRequest = () => isCurrentNetworkDetailRequest(
+      nodeId,
+      selectedNodeIdRef.current,
+      requestId,
+      detailRequestIdRef.current,
+    );
+
     setLoadingDetail(true);
+    resetNodeData();
     try {
       const [detailResponse, summaryResponse, timeseriesResponse, assetsResponse, alertsResponse] = await Promise.all([
         apiGet<MonitorNodeDetail>(`/nodes/${nodeId}`, accessToken),
@@ -261,15 +283,19 @@ export default function NetworkMonitoringPage() {
         apiGet<NetworkTelemetryAssetView[]>(`/network-telemetry/nodes/${nodeId}/assets`, accessToken),
         apiGet<NetworkTelemetryAlert[]>(`/network-telemetry/nodes/${nodeId}/alerts`, accessToken),
       ]);
+      if (!isCurrentRequest()) return;
+
       setDetail(detailResponse);
       setTelemetrySummary(summaryResponse);
       setTelemetryTimeseries(timeseriesResponse);
       setTelemetryAssets(assetsResponse);
       setTelemetryAlerts(alertsResponse);
+    } catch {
+      if (isCurrentRequest()) resetNodeData();
     } finally {
-      setLoadingDetail(false);
+      if (isCurrentRequest()) setLoadingDetail(false);
     }
-  }, [accessToken]);
+  }, [accessToken, resetNodeData]);
 
   useEffect(() => { void loadNodes(); }, [loadNodes]);
   useEffect(() => { if (selectedNodeId) void loadDetail(selectedNodeId); }, [selectedNodeId, loadDetail]);

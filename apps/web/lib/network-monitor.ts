@@ -78,6 +78,15 @@ export function telemetryAlertLevel(severity: TelemetryAlertSeverity): MonitorAl
   return "info";
 }
 
+export function isCurrentNetworkDetailRequest(
+  requestedNodeId: string,
+  currentNodeId: string,
+  requestId: number,
+  currentRequestId: number,
+) {
+  return requestedNodeId === currentNodeId && requestId === currentRequestId;
+}
+
 export function formatTelemetryBytes(value: string | number) {
   const bytes = Number(value);
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
