@@ -9,6 +9,19 @@ export type GrafanaEmbedDescriptor = {
   params: Record<string, string>;
 };
 
+export type CameraPreviewSession = {
+  sessionId: string;
+  status: "starting";
+  viewerUrl: string;
+  expiresAt: string;
+};
+
+export type CameraPreviewStatus = {
+  status: "starting" | "live" | "failed" | "expired";
+  errorCode?: string;
+  message?: string;
+};
+
 export async function apiGet<T>(path: string, token: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -28,6 +41,38 @@ export async function apiPost<T>(path: string, token: string, body: unknown): Pr
     throw new Error(err.message ?? `API ${res.status}`);
   }
   return res.json() as Promise<T>;
+}
+
+export async function apiPostNoContent(path: string, token: string, body: unknown): Promise<void> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`API ${res.status} ${path}`);
+}
+
+export function startCameraPreview(cameraId: string, token: string): Promise<CameraPreviewSession> {
+  return apiPost<CameraPreviewSession>(`/cameras/${cameraId}/preview/start`, token, {});
+}
+
+export function pollPreviewStatus(sessionId: string, token: string): Promise<CameraPreviewStatus> {
+  return apiGet<CameraPreviewStatus>(`/cameras/preview/${sessionId}/status`, token);
+}
+
+export function stopCameraPreview(sessionId: string, token: string): Promise<void> {
+  return apiPostNoContent(`/cameras/preview/${sessionId}/stop`, token, {});
+}
+
+/** Fetches the protected MJPEG response so the browser can send Bearer auth. */
+export async function fetchCameraPreviewMedia(viewerUrl: string, token: string, signal: AbortSignal): Promise<Response> {
+  const res = await fetch(`${API_URL}${viewerUrl}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok) throw new Error(`API ${res.status} ${viewerUrl}`);
+  return res;
 }
 
 export async function apiPatch<T>(path: string, token: string, body: unknown): Promise<T> {
