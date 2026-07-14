@@ -528,10 +528,10 @@ export default function NetworkMonitoringPage() {
                 </div>
 
                 <div className="border-y border-ops-border bg-black/20 px-3 py-2">
-                  <div className="flex flex-wrap gap-2" role="tablist" aria-label="Vistas operativas del nodo">
-                    <button type="button" role="tab" aria-selected={tab === "inventario"} className={tabClass(tab === "inventario")} onClick={() => setTab("inventario")}>Inventario</button>
-                    <button type="button" role="tab" aria-selected={tab === "trafico"} className={tabClass(tab === "trafico")} onClick={() => setTab("trafico")}>Tráfico / Observabilidad</button>
-                    <button type="button" role="tab" aria-selected={tab === "alertas"} className={tabClass(tab === "alertas")} onClick={() => setTab("alertas")}>Alertas</button>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" className={tabClass(tab === "inventario")} onClick={() => setTab("inventario")}>Inventario</button>
+                    <button type="button" className={tabClass(tab === "trafico")} onClick={() => setTab("trafico")}>Tráfico / Observabilidad</button>
+                    <button type="button" className={tabClass(tab === "alertas")} onClick={() => setTab("alertas")}>Alertas</button>
                   </div>
                 </div>
 
