@@ -26,6 +26,7 @@ import { NetworkTelemetryModule } from "./network-telemetry/network-telemetry.mo
 import { ObservabilityModule } from "./observability/observability.module";
 import { CameraPreviewModule } from "./camera-preview/camera-preview.module";
 import { BrandingModule } from "./branding/branding.module";
+import { CenterAssetsModule } from "./center-assets/center-assets.module";
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { BrandingModule } from "./branding/branding.module";
     CamerasModule,
     CameraPreviewModule,
     BrandingModule,
+    CenterAssetsModule,
     IncidentsModule,
     LogbookModule,
     DashboardModule,

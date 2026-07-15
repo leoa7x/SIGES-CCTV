@@ -1,33 +1,74 @@
-# Task 1 Report: Add Prisma Models For Telemetry
+# Task 1 Report
 
-## Status
+## What I implemented
 
-DONE
+- Added the `CenterAsset` Prisma model and `MonitoringCenter.centerAssets` relation.
+- Added `CenterAssetsService` with DTOs and `findAll`, `create`, `update`, and `remove` operations.
+- Added authenticated `/center-assets` CRUD endpoints, with `MANAGE_ORG` required for create, update, and delete.
+- Added and wired `CenterAssetsModule` into `AppModule`.
 
-## Scope Delivered
+## What I tested
 
-- Added `NetworkTelemetryClassificationSource`, `NetworkTelemetryAlertKind`, and `NetworkTelemetryAlertSeverity` enums.
-- Added `NetworkTelemetrySnapshot`, `NetworkTelemetryAssetSample`, and `NetworkTelemetryAlert` models with the indexes, defaults, and optional relations specified in the task brief.
-- Added inverse telemetry relations to `Node` and `NodeAsset`.
-- Added migration `20260713190000_network_telemetry` containing only telemetry enums, tables, indexes, and foreign keys.
+- `npx prisma generate --schema apps/api/prisma/schema.prisma`
+- `npx ts-node --project apps/api/tsconfig.json apps/api/src/center-assets/center-assets.service.test.ts`
+  - 1 test passed, 0 failed.
+- `npx prisma validate --schema apps/api/prisma/schema.prisma`
+  - Schema valid.
+- `npm run build --workspace=apps/api`
+  - Build passed.
+- `git diff --check`
+  - No whitespace errors.
 
-## Validation
+## TDD Evidence
 
-- Confirmed the intermediate schema failure before adding inverse relations: Prisma reported the five expected missing opposite relation fields on `Node` and `NodeAsset`.
-- Ran `dotenv -e ../../.env -- ../../node_modules/.bin/prisma validate` from `apps/api` after completing the schema.
-- Result: `The schema at prisma/schema.prisma is valid`.
-- Ran `git diff --check` before staging and `git show --check HEAD` after committing; both completed without whitespace errors.
+### RED
 
-## Self-Review
+Command:
 
-- Confirmed the committed file list contains only `apps/api/prisma/schema.prisma` and `apps/api/prisma/migrations/20260713190000_network_telemetry/migration.sql`.
-- Confirmed the migration includes three enum types, three tables, the five specified indexes, and all seven required foreign keys.
-- Left unrelated in-progress worktree changes untouched.
+```text
+npx ts-node --project apps/api/tsconfig.json apps/api/src/center-assets/center-assets.service.test.ts
+```
 
-## Commit
+The test failed before implementation with:
 
-- `613ef84 feat(api): add network telemetry prisma models`
+```text
+error TS2307: Cannot find module './center-assets.service'
+```
 
-## Concerns
+This was expected because the service did not exist yet.
 
-None.
+### GREEN
+
+Commands:
+
+```text
+npx prisma generate --schema apps/api/prisma/schema.prisma
+npx ts-node --project apps/api/tsconfig.json apps/api/src/center-assets/center-assets.service.test.ts
+```
+
+Relevant result:
+
+```text
+1..1
+# tests 1
+# pass 1
+# fail 0
+```
+
+## Files changed
+
+- `apps/api/prisma/schema.prisma`
+- `apps/api/src/center-assets/center-assets.service.ts`
+- `apps/api/src/center-assets/center-assets.controller.ts`
+- `apps/api/src/center-assets/center-assets.module.ts`
+- `apps/api/src/center-assets/center-assets.service.test.ts`
+- `apps/api/src/app.module.ts`
+- `.superpowers/sdd/task-1-report.md`
+
+## Self-review findings
+
+No implementation findings. The service follows the existing node-assets CRUD pattern, the create path connects the CMC relation and sets `lastSeenAt`, and the controller preserves the repository's JWT and permissions guard conventions.
+
+## Issues or concerns
+
+No blocking concerns. The task brief requested the Prisma schema change but no migration file; no database migration was generated.
