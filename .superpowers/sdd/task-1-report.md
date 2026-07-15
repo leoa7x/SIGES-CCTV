@@ -100,3 +100,34 @@ Result: exit code 0; `nest build` completed successfully.
 - `apps/api/src/center-assets/center-assets.service.ts`
 - `apps/api/src/center-assets/center-assets.service.test.ts`
 - `.superpowers/sdd/task-1-report.md`
+
+## Migration Fix Report
+
+### What I changed
+
+- Added the missing Prisma SQL migration for the new `CenterAsset` table and its foreign key to `MonitoringCenter`.
+
+### Commands run
+
+```text
+npx prisma validate --schema apps/api/prisma/schema.prisma
+```
+
+Result: exit code 0; Prisma reported `apps/api/prisma/schema.prisma` as valid.
+
+```text
+npx ts-node --project apps/api/tsconfig.json apps/api/src/center-assets/center-assets.service.test.ts
+```
+
+Result: exit code 0; 1 test passed, 0 failed.
+
+```text
+npm run build --workspace=apps/api
+```
+
+Result: exit code 0; `nest build` completed successfully.
+
+### Files changed
+
+- `apps/api/prisma/migrations/20260715234500_center_assets/migration.sql`
+- `.superpowers/sdd/task-1-report.md`
