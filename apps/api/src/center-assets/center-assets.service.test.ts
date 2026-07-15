@@ -27,7 +27,8 @@ test("create stores a manual center asset linked to its CMC", async () => {
     assetType: "SWITCH",
     name: "Core Switch CMC",
     ip: "10.10.10.2",
-  });
+    source: "DISCOVERED",
+  } as any);
 
   assert.deepEqual(createArgs, {
     data: {
@@ -35,10 +36,13 @@ test("create stores a manual center asset linked to its CMC", async () => {
       name: "Core Switch CMC",
       ip: "10.10.10.2",
       center: { connect: { id: "center-1" } },
-      lastSeenAt: createArgs && (createArgs as any).data.lastSeenAt,
+      source: "MANUAL",
+      lastSeenAt: (createArgs as any).data.lastSeenAt,
     },
     include: {
       center: { select: { id: true, name: true } },
     },
   });
+
+  assert.ok((createArgs as any).data.lastSeenAt instanceof Date);
 });

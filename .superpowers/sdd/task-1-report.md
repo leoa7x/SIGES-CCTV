@@ -72,3 +72,31 @@ No implementation findings. The service follows the existing node-assets CRUD pa
 ## Issues or concerns
 
 No blocking concerns. The task brief requested the Prisma schema change but no migration file; no database migration was generated.
+
+## Review Fix Report
+
+### What I changed
+
+- Removed client-selectable `source` from `CreateCenterAssetDto`.
+- Forced new center assets to persist with `NodeAssetSource.MANUAL`, even when an untrusted runtime payload attempts to provide another source.
+- Strengthened the create test to assert `source: "MANUAL"` and verify `lastSeenAt` is an actual `Date` instance.
+
+### Commands run
+
+```text
+npx ts-node --project apps/api/tsconfig.json apps/api/src/center-assets/center-assets.service.test.ts
+```
+
+Result: exit code 0; 1 test passed, 0 failed.
+
+```text
+npm run build --workspace=apps/api
+```
+
+Result: exit code 0; `nest build` completed successfully.
+
+### Files changed
+
+- `apps/api/src/center-assets/center-assets.service.ts`
+- `apps/api/src/center-assets/center-assets.service.test.ts`
+- `.superpowers/sdd/task-1-report.md`

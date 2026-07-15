@@ -14,7 +14,6 @@ export class CreateCenterAssetDto {
   @IsOptional() @IsString() model?: string;
   @IsOptional() @IsString() hostname?: string;
   @IsOptional() @IsEnum(NodeState) operativeState?: NodeState;
-  @IsOptional() @IsEnum(NodeAssetSource) source?: NodeAssetSource;
   @IsOptional() @IsString() notes?: string;
 }
 
@@ -49,6 +48,7 @@ export class CenterAssetsService {
     return this.prisma.centerAsset.create({
       data: {
         ...rest,
+        source: NodeAssetSource.MANUAL,
         center: { connect: { id: centerId } },
         lastSeenAt: new Date(),
       },
