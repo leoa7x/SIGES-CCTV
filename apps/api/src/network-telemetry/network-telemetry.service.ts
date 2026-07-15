@@ -122,6 +122,13 @@ export class NetworkTelemetryService {
     });
   }
 
+  getCenterOfficialAssets(centerId: string) {
+    return this.prisma.centerAsset.findMany({
+      where: { centerId },
+      orderBy: [{ assetType: "asc" }, { name: "asc" }],
+    });
+  }
+
   async ingestSnapshot(dto: IngestNetworkTelemetryDto) {
     const node = await this.prisma.node.findUniqueOrThrow({ where: { id: dto.nodeId } });
     const capturedAt = new Date(dto.capturedAt);

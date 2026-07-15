@@ -12,6 +12,7 @@ type GrafanaEmbedInput = {
   dashboard: GrafanaDashboardKey;
   nodeId?: string;
   routeId?: string;
+  centerId?: string;
   from?: string;
   to?: string;
 };
@@ -45,6 +46,7 @@ export class ObservabilityService {
 
     if (input.nodeId) params.set("var-nodeId", input.nodeId);
     if (input.routeId) params.set("var-routeId", input.routeId);
+    if (input.centerId) params.set("var-centerId", input.centerId);
 
     return {
       title: DASHBOARD_TITLES[input.dashboard],

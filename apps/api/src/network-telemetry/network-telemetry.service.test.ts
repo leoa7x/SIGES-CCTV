@@ -24,6 +24,9 @@ function createService(overrides: Record<string, unknown> = {}) {
       findUnique: async () => ({ id: "node-1" }),
       findUniqueOrThrow: async () => ({ id: "node-1" }),
     },
+    centerAsset: {
+      findMany: async () => [],
+    },
     nodeAsset: {
       findFirst: async (args: unknown) => {
         calls.official.push(args);
@@ -58,6 +61,29 @@ function createService(overrides: Record<string, unknown> = {}) {
 
   return { service: new NetworkTelemetryService(prisma as unknown as PrismaService), persistedSamples, upserts, calls };
 }
+
+test("getCenterOfficialAssets returns ordered official CMC inventory", async () => {
+  const officialAssets = [
+    { id: "asset-1", name: "Core Switch", assetType: "SWITCH", operativeState: "ONLINE" },
+  ];
+  const centerAssetCalls: unknown[] = [];
+  const { service } = createService({
+    centerAsset: {
+      findMany: async (args: unknown) => {
+        centerAssetCalls.push(args);
+        return officialAssets;
+      },
+    },
+  });
+
+  const result = await service.getCenterOfficialAssets("center-1");
+
+  assert.deepEqual(result, officialAssets);
+  assert.deepEqual(centerAssetCalls, [{
+    where: { centerId: "center-1" },
+    orderBy: [{ assetType: "asc" }, { name: "asc" }],
+  }]);
+});
 
 test("ingestSnapshot correlates asset samples to official assets by MAC first", async () => {
   const { service, persistedSamples, calls } = createService({

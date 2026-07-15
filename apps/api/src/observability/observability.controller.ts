@@ -21,12 +21,14 @@ export class ObservabilityController {
   @Get("embed/network-command-view")
   getNetworkCommandView(
     @Query("routeId") routeId?: string,
+    @Query("centerId") centerId?: string,
     @Query("from") from?: string,
     @Query("to") to?: string,
   ) {
     return this.service.getDashboardEmbed({
       dashboard: "network-command-view",
       routeId,
+      centerId,
       from,
       to,
     });

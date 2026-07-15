@@ -104,6 +104,18 @@ export type MonitorAsset = {
   analyticsAssignments: MonitorAnalyticsAssignment[];
 };
 
+export type MonitorCenterAsset = {
+  id: string;
+  assetType: string;
+  name: string;
+  ip?: string | null;
+  mac?: string | null;
+  vendor?: string | null;
+  model?: string | null;
+  hostname?: string | null;
+  operativeState: string;
+};
+
 export type MonitorDiscoveredDevice = {
   id: string;
   candidateType?: string | null;
@@ -132,7 +144,7 @@ export type MonitorNodeDetail = {
   primaryIp?: string | null;
   scanSubnetCidr?: string | null;
   operativeState: string;
-  route: { identifier: string; center: { name: string } };
+  route: { identifier: string; center: { id: string; name: string } };
   assets: MonitorAsset[];
   discoveryJobs: MonitorDiscoveryJob[];
   analyticsAssignments: MonitorAnalyticsAssignment[];
@@ -213,10 +225,25 @@ export type NetworkMonitorModel = {
   };
 };
 
-export function buildNetworkMonitorModel(nodes: MonitorNodeListItem[], detail: MonitorNodeDetail | null): NetworkMonitorModel {
+export function buildNetworkMonitorModel(
+  nodes: MonitorNodeListItem[],
+  detail: MonitorNodeDetail | null,
+  centerAssets: MonitorCenterAsset[] = [],
+): NetworkMonitorModel {
   const latestDiscovery = detail?.discoveryJobs[0] ?? null;
   const pendingDiscoveries = latestDiscovery?.discoveredDevices.filter((device) => device.status === "DISCOVERED") ?? [];
   const inventory = [
+    ...centerAssets.map((asset) => ({
+      id: asset.id,
+      source: "OFFICIAL" as const,
+      name: asset.name,
+      type: asset.assetType,
+      ip: asset.ip ?? "—",
+      mac: asset.mac ?? "—",
+      vendor: asset.vendor ?? "—",
+      state: asset.operativeState,
+      confidenceLabel: "CMC",
+    })),
     ...(detail?.assets ?? []).map((asset) => ({
       id: asset.id,
       source: "OFFICIAL" as const,
@@ -249,25 +276,29 @@ export function buildNetworkMonitorModel(nodes: MonitorNodeListItem[], detail: M
       onlineNodes: nodes.filter((node) => node.operativeState === "ONLINE").length,
       degradedNodes: nodes.filter((node) => node.operativeState === "DEGRADED").length,
       offlineNodes: nodes.filter((node) => node.operativeState === "OFFLINE").length,
-      officialAssets: nodes.reduce((acc, node) => acc + node._count.assets, 0),
+      officialAssets: centerAssets.length + nodes.reduce((acc, node) => acc + node._count.assets, 0),
       pendingDiscoveries: nodes.reduce((acc, node) => acc + node._count.discoveryJobs, 0),
     },
     inventory,
     alerts,
     observability: {
-      officialDevicesWithIp: detail?.assets.filter((asset) => Boolean(asset.ip)).length ?? 0,
-      officialDevicesWithMac: detail?.assets.filter((asset) => Boolean(asset.mac)).length ?? 0,
+      officialDevicesWithIp:
+        centerAssets.filter((asset) => Boolean(asset.ip)).length +
+        (detail?.assets.filter((asset) => Boolean(asset.ip)).length ?? 0),
+      officialDevicesWithMac:
+        centerAssets.filter((asset) => Boolean(asset.mac)).length +
+        (detail?.assets.filter((asset) => Boolean(asset.mac)).length ?? 0),
       analyticsConfigured:
         (detail?.analyticsAssignments.length ?? 0) +
         (detail?.assets.reduce((acc, asset) => acc + asset.analyticsAssignments.length, 0) ?? 0),
       latestDiscoveryLabel: latestDiscovery ? formatDate(latestDiscovery.createdAt) : "Sin escaneos",
-      topVendors: topVendors(detail?.assets ?? [], pendingDiscoveries),
+      topVendors: topVendors([...centerAssets, ...(detail?.assets ?? [])], pendingDiscoveries),
       pendingDiscoveries: pendingDiscoveries.length,
     },
     charts: {
       discoveryTrend: buildDiscoveryTrend(detail?.discoveryJobs ?? []),
-      assetTypeBreakdown: buildAssetTypeBreakdown(detail?.assets ?? []),
-      stateBreakdown: buildStateBreakdown(detail),
+      assetTypeBreakdown: buildAssetTypeBreakdown([...centerAssets, ...(detail?.assets ?? [])]),
+      stateBreakdown: buildStateBreakdown(detail, centerAssets),
     },
   };
 }
@@ -384,7 +415,7 @@ function buildAlerts(detail: MonitorNodeDetail | null, pendingDiscoveries: numbe
   return alerts;
 }
 
-function topVendors(assets: MonitorAsset[], devices: MonitorDiscoveredDevice[]) {
+function topVendors(assets: Array<MonitorAsset | MonitorCenterAsset>, devices: MonitorDiscoveredDevice[]) {
   const counts = new Map<string, number>();
   for (const value of [...assets.map((asset) => asset.vendor), ...devices.map((device) => device.vendor)]) {
     if (!value) continue;
@@ -409,7 +440,7 @@ function buildDiscoveryTrend(jobs: MonitorDiscoveryJob[]) {
     }));
 }
 
-function buildAssetTypeBreakdown(assets: MonitorAsset[]) {
+function buildAssetTypeBreakdown(assets: Array<MonitorAsset | MonitorCenterAsset>) {
   const counts = new Map<string, number>();
   for (const asset of assets) {
     counts.set(asset.assetType, (counts.get(asset.assetType) ?? 0) + 1);
@@ -419,13 +450,13 @@ function buildAssetTypeBreakdown(assets: MonitorAsset[]) {
     .map(([type, count]) => ({ type, count }));
 }
 
-function buildStateBreakdown(detail: MonitorNodeDetail | null) {
+function buildStateBreakdown(detail: MonitorNodeDetail | null, centerAssets: MonitorCenterAsset[]) {
   const counts = new Map<string, number>();
   if (detail) {
     counts.set(detail.operativeState, (counts.get(detail.operativeState) ?? 0) + 1);
-    for (const asset of detail.assets) {
-      counts.set(asset.operativeState, (counts.get(asset.operativeState) ?? 0) + 1);
-    }
+  }
+  for (const asset of [...centerAssets, ...(detail?.assets ?? [])]) {
+    counts.set(asset.operativeState, (counts.get(asset.operativeState) ?? 0) + 1);
   }
   return [...counts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))

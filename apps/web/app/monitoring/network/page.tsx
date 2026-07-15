@@ -12,6 +12,7 @@ import {
   formatTelemetryBytes,
   isCurrentNetworkDetailRequest,
   telemetryAlertLevel,
+  type MonitorCenterAsset,
   type MonitorDiscoveryJob,
   type MonitorNodeDetail,
   type MonitorNodeListItem,
@@ -227,6 +228,7 @@ export default function NetworkMonitoringPage() {
   const [nodes, setNodes] = useState<MonitorNodeListItem[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState("");
   const [detail, setDetail] = useState<MonitorNodeDetail | null>(null);
+  const [centerAssets, setCenterAssets] = useState<MonitorCenterAsset[]>([]);
   const [telemetrySummary, setTelemetrySummary] = useState<NetworkTelemetrySummary | null>(null);
   const [telemetryTimeseries, setTelemetryTimeseries] = useState<NetworkTelemetryPoint[]>([]);
   const [telemetryAssets, setTelemetryAssets] = useState<NetworkTelemetryAssetView[]>([]);
@@ -257,7 +259,7 @@ export default function NetworkMonitoringPage() {
   }, [filter, nodes]);
 
   const latestJob = detail?.discoveryJobs[0] ?? null;
-  const model = useMemo(() => buildNetworkMonitorModel(nodes, detail), [nodes, detail]);
+  const model = useMemo(() => buildNetworkMonitorModel(nodes, detail, centerAssets), [nodes, detail, centerAssets]);
   const networkEmbed = useMemo(
     () => networkEmbedDescriptor ? buildGrafanaEmbedModel(networkEmbedDescriptor) : null,
     [networkEmbedDescriptor],
@@ -289,6 +291,7 @@ export default function NetworkMonitoringPage() {
 
   const resetNodeData = useCallback(() => {
     setDetail(null);
+    setCenterAssets([]);
     setTelemetrySummary(null);
     setTelemetryTimeseries([]);
     setTelemetryAssets([]);
@@ -308,16 +311,19 @@ export default function NetworkMonitoringPage() {
     setLoadingDetail(true);
     resetNodeData();
     try {
-      const [detailResponse, summaryResponse, timeseriesResponse, assetsResponse, alertsResponse] = await Promise.all([
-        apiGet<MonitorNodeDetail>(`/nodes/${nodeId}`, accessToken),
+      const detailResponse = await apiGet<MonitorNodeDetail>(`/nodes/${nodeId}`, accessToken);
+      const centerId = detailResponse.route.center.id;
+      const [summaryResponse, timeseriesResponse, assetsResponse, alertsResponse, centerAssetsResponse] = await Promise.all([
         apiGet<NetworkTelemetrySummary>(`/network-telemetry/nodes/${nodeId}/summary`, accessToken),
         apiGet<NetworkTelemetryPoint[]>(`/network-telemetry/nodes/${nodeId}/timeseries`, accessToken),
         apiGet<NetworkTelemetryAssetView[]>(`/network-telemetry/nodes/${nodeId}/assets`, accessToken),
         apiGet<NetworkTelemetryAlert[]>(`/network-telemetry/nodes/${nodeId}/alerts`, accessToken),
+        apiGet<MonitorCenterAsset[]>(`/network-telemetry/centers/${centerId}/official-assets`, accessToken),
       ]);
       if (!isCurrentRequest()) return;
 
       setDetail(detailResponse);
+      setCenterAssets(centerAssetsResponse);
       setTelemetrySummary(summaryResponse);
       setTelemetryTimeseries(timeseriesResponse);
       setTelemetryAssets(assetsResponse);
@@ -342,7 +348,12 @@ export default function NetworkMonitoringPage() {
     setNetworkEmbedDescriptor(null);
     setLoadingNetworkEmbed(true);
 
-    void apiGet<GrafanaEmbedDescriptor>("/observability/embed/network-command-view", accessToken)
+    const centerId = detail?.route.center.id;
+    const embedPath = centerId
+      ? `/observability/embed/network-command-view?centerId=${encodeURIComponent(centerId)}`
+      : "/observability/embed/network-command-view";
+
+    void apiGet<GrafanaEmbedDescriptor>(embedPath, accessToken)
       .then((descriptor) => {
         if (!cancelled) setNetworkEmbedDescriptor(descriptor);
       })
@@ -354,7 +365,7 @@ export default function NetworkMonitoringPage() {
       });
 
     return () => { cancelled = true; };
-  }, [accessToken]);
+  }, [accessToken, detail?.route.center.id]);
 
   async function handleRunDiscovery() {
     if (!accessToken || !detail) return;

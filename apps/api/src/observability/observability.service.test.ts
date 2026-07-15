@@ -68,6 +68,20 @@ test("getDashboardEmbed includes routeId when provided", () => {
   assert.match(result.url, /var-routeId=route-456/);
 });
 
+test("getDashboardEmbed includes centerId when provided", () => {
+  const service = new ObservabilityService(config);
+
+  const result = service.getDashboardEmbed({
+    dashboard: "network-command-view",
+    centerId: "center-789",
+    from: "now-24h",
+    to: "now",
+  });
+
+  assert.equal(result.params["var-centerId"], "center-789");
+  assert.match(result.url, /var-centerId=center-789/);
+});
+
 test("getDashboardEmbed rejects unknown dashboard keys", () => {
   const service = new ObservabilityService(config);
 

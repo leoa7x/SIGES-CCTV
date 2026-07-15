@@ -8,6 +8,7 @@ import {
   buildNetworkMonitorModel,
   formatTelemetryBytes,
   telemetryAlertLevel,
+  type MonitorCenterAsset,
   type MonitorNodeDetail,
   type MonitorNodeListItem,
   type TopologyCenterDetail,
@@ -132,7 +133,7 @@ test("buildNetworkMonitorModel merges official inventory, discovery and alerts f
     primaryIp: "192.168.1.1",
     scanSubnetCidr: "192.168.1.0/24",
     operativeState: "ONLINE",
-    route: { identifier: "RUTA-1", center: { name: "CMC Norte" } },
+    route: { identifier: "RUTA-1", center: { id: "center-1", name: "CMC Norte" } },
     analyticsAssignments: [{ id: "an-1", analyticsCatalog: { id: "c1", code: "LPR", name: "LPR" } }],
     assets: [
       {
@@ -236,7 +237,7 @@ test("buildNetworkMonitorModel reports missing IP, subnet and analytics as alert
     primaryIp: null,
     scanSubnetCidr: null,
     operativeState: "OFFLINE",
-    route: { identifier: "RUTA-2", center: { name: "CMC Sur" } },
+    route: { identifier: "RUTA-2", center: { id: "center-2", name: "CMC Sur" } },
     assets: [],
     discoveryJobs: [],
     analyticsAssignments: [],
@@ -246,6 +247,27 @@ test("buildNetworkMonitorModel reports missing IP, subnet and analytics as alert
   assert.equal(model.alerts.some((alert) => alert.id === "missing-subnet"), true);
   assert.equal(model.alerts.some((alert) => alert.id === "missing-analytics"), true);
   assert.equal(model.observability.latestDiscoveryLabel, "Sin escaneos");
+});
+
+test("network monitor model can include official CMC assets in inventory summaries", () => {
+  const centerAssets: MonitorCenterAsset[] = [
+    {
+      id: "center-asset-1",
+      assetType: "SWITCH",
+      name: "Core Switch CMC",
+      ip: "10.10.10.2",
+      mac: "AA:BB:CC",
+      vendor: "Cisco",
+      operativeState: "ONLINE",
+    },
+  ];
+
+  const model = buildNetworkMonitorModel([], null, centerAssets);
+
+  assert.equal(model.summary.officialAssets, 1);
+  assert.equal(model.inventory[0]?.name, "Core Switch CMC");
+  assert.equal(model.inventory[0]?.confidenceLabel, "CMC");
+  assert.equal(model.observability.officialDevicesWithIp, 1);
 });
 
 test("topology model reserves a separate branch for CMC equipment", () => {
