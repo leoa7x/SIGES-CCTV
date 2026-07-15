@@ -5,7 +5,7 @@ import { OpsShell } from "../../../components/ops-shell";
 import { OpsModal } from "../../../components/ops-modal";
 import { OpsNotice } from "../../../components/ops-notice";
 import { useAuth } from "../../../components/auth-provider";
-import { apiGet, apiPatch, apiPost } from "../../../lib/api";
+import { apiDelete, apiGet, apiPatch, apiPost, type CenterAsset } from "../../../lib/api";
 import { formatLifecycleState, toUserFacingError } from "../../../lib/presentation";
 
 type CenterItem = {
@@ -18,7 +18,11 @@ type CenterItem = {
   lng: number | null;
   state: string;
   project: { id: string; name: string; city: { name: string } };
-  _count: { routes: number };
+  _count: { routes: number; centerAssets: number };
+};
+type CenterDetail = CenterItem & {
+  routes: Array<{ id: string; identifier: string; _count: { nodes: number } }>;
+  centerAssets: CenterAsset[];
 };
 type ProjectRef = { id: string; name: string };
 type CreateForm = {
@@ -29,12 +33,41 @@ type EditForm = {
   name: string; address: string; phone: string; contactName: string;
   lat: string; lng: string; state: string;
 };
+type AssetForm = {
+  assetType: string;
+  name: string;
+  ip: string;
+  mac: string;
+  vendor: string;
+  model: string;
+  hostname: string;
+  operativeState: string;
+  notes: string;
+};
+type Feedback = { tone: "error" | "info"; title: string; message: string } | null;
 
 const INPUT = "w-full rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-text focus:border-ops-blue focus:outline-none";
+const ASSET_TYPES = ["CAMARA_FIJA", "CAMARA_PTZ", "SWITCH", "UPS", "OTHER"];
+const NODE_STATES = ["ONLINE", "DEGRADED", "OFFLINE", "MAINTENANCE"];
 
 const EMPTY_CREATE: CreateForm = {
   name: "", address: "", phone: "", contactName: "", lat: "", lng: "", projectId: "",
 };
+const EMPTY_ASSET: AssetForm = {
+  assetType: "SWITCH",
+  name: "",
+  ip: "",
+  mac: "",
+  vendor: "",
+  model: "",
+  hostname: "",
+  operativeState: "ONLINE",
+  notes: "",
+};
+
+function formatAssetType(value: string) {
+  return value.replaceAll("_", " ");
+}
 
 export default function CentersPage() {
   const { accessToken } = useAuth();
@@ -47,8 +80,17 @@ export default function CentersPage() {
   const [editForm, setEditForm] = useState<EditForm>({
     name: "", address: "", phone: "", contactName: "", lat: "", lng: "", state: "ACTIVE",
   });
+  const [selectedCenterId, setSelectedCenterId] = useState("");
+  const [detail, setDetail] = useState<CenterDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [assetModalOpen, setAssetModalOpen] = useState(false);
+  const [editingAsset, setEditingAsset] = useState<CenterAsset | null>(null);
+  const [assetForm, setAssetForm] = useState<AssetForm>(EMPTY_ASSET);
   const [saving, setSaving] = useState(false);
+  const [savingAsset, setSavingAsset] = useState(false);
+  const [deletingAssetId, setDeletingAssetId] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [feedback, setFeedback] = useState<Feedback>(null);
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -60,16 +102,42 @@ export default function CentersPage() {
         apiGet<ProjectRef[]>("/projects", accessToken),
       ]);
       setItems(c); setProjects(p);
+      setSelectedCenterId((current) => current || c[0]?.id || "");
     } catch (err) {
       setLoadError(toUserFacingError(err, "No se pudieron cargar los centros de monitoreo."));
     } finally { setLoading(false); }
   }, [accessToken]);
 
   useEffect(() => { load(); }, [load]);
+  const loadDetail = useCallback(async (centerId: string) => {
+    if (!accessToken || !centerId) return;
+    setLoadingDetail(true);
+    try {
+      const data = await apiGet<CenterDetail>(`/monitoring-centers/${centerId}`, accessToken);
+      setDetail(data);
+    } catch (err) {
+      setFeedback({
+        tone: "error",
+        title: "No se pudo cargar el inventario del CMC",
+        message: toUserFacingError(err, "Inténtalo nuevamente en unos segundos."),
+      });
+    } finally {
+      setLoadingDetail(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (selectedCenterId) {
+      void loadDetail(selectedCenterId);
+    } else {
+      setDetail(null);
+    }
+  }, [selectedCenterId, loadDetail]);
 
   function openCreate() {
     setEditing(null);
     setCreateForm({ ...EMPTY_CREATE, projectId: projects[0]?.id ?? "" });
+    setFeedback(null);
     setModalOpen(true);
   }
 
@@ -84,14 +152,46 @@ export default function CentersPage() {
       lng: item.lng != null ? String(item.lng) : "",
       state: item.state,
     });
+    setFeedback(null);
     setModalOpen(true);
   }
 
   function closeModal() { setModalOpen(false); }
+  function closeAssetModal() { setAssetModalOpen(false); }
 
   function parseOptionalNumber(s: string): number | undefined {
     const n = parseFloat(s);
     return isNaN(n) ? undefined : n;
+  }
+
+  function selectCenter(centerId: string) {
+    setSelectedCenterId(centerId);
+    setFeedback(null);
+  }
+
+  function openAssetCreate() {
+    if (!detail) return;
+    setEditingAsset(null);
+    setAssetForm(EMPTY_ASSET);
+    setFeedback(null);
+    setAssetModalOpen(true);
+  }
+
+  function openAssetEdit(asset: CenterAsset) {
+    setEditingAsset(asset);
+    setAssetForm({
+      assetType: asset.assetType,
+      name: asset.name,
+      ip: asset.ip ?? "",
+      mac: asset.mac ?? "",
+      vendor: asset.vendor ?? "",
+      model: asset.model ?? "",
+      hostname: asset.hostname ?? "",
+      operativeState: asset.operativeState,
+      notes: asset.notes ?? "",
+    });
+    setFeedback(null);
+    setAssetModalOpen(true);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -122,7 +222,71 @@ export default function CentersPage() {
       }
       closeModal();
       await load();
-    } catch (err) { console.error(toUserFacingError(err, "No se pudo guardar el centro de monitoreo.")); } finally { setSaving(false); }
+      if (editing) {
+        await loadDetail(editing.id);
+      }
+    } catch (err) {
+      setFeedback({
+        tone: "error",
+        title: "No se pudo guardar el CMC",
+        message: toUserFacingError(err, "No se pudo guardar el centro de monitoreo."),
+      });
+    } finally { setSaving(false); }
+  }
+
+  async function handleAssetSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!accessToken || !detail) return;
+    setSavingAsset(true);
+    try {
+      const payload = {
+        centerId: detail.id,
+        assetType: assetForm.assetType,
+        name: assetForm.name,
+        ip: assetForm.ip || undefined,
+        mac: assetForm.mac || undefined,
+        vendor: assetForm.vendor || undefined,
+        model: assetForm.model || undefined,
+        hostname: assetForm.hostname || undefined,
+        operativeState: assetForm.operativeState,
+        notes: assetForm.notes || undefined,
+      };
+
+      if (editingAsset) {
+        await apiPatch(`/center-assets/${editingAsset.id}`, accessToken, payload);
+      } else {
+        await apiPost("/center-assets", accessToken, payload);
+      }
+
+      closeAssetModal();
+      await Promise.all([load(), loadDetail(detail.id)]);
+    } catch (err) {
+      setFeedback({
+        tone: "error",
+        title: editingAsset ? "No se pudo actualizar el equipo" : "No se pudo crear el equipo",
+        message: toUserFacingError(err, "No se pudo guardar el equipo del CMC."),
+      });
+    } finally {
+      setSavingAsset(false);
+    }
+  }
+
+  async function handleDeleteAsset(asset: CenterAsset) {
+    if (!accessToken || !detail) return;
+    if (!window.confirm(`¿Eliminar el equipo "${asset.name}" del CMC?`)) return;
+    setDeletingAssetId(asset.id);
+    try {
+      await apiDelete(`/center-assets/${asset.id}`, accessToken);
+      await Promise.all([load(), loadDetail(detail.id)]);
+    } catch (err) {
+      setFeedback({
+        tone: "error",
+        title: "No se pudo eliminar el equipo",
+        message: toUserFacingError(err, "No se pudo eliminar el equipo del CMC."),
+      });
+    } finally {
+      setDeletingAssetId("");
+    }
   }
 
   return (
@@ -130,6 +294,11 @@ export default function CentersPage() {
       {loadError ? (
         <div className="mb-4">
           <OpsNotice tone="error" title="No se pudo cargar la información" message={loadError} onDismiss={() => setLoadError("")} />
+        </div>
+      ) : null}
+      {feedback ? (
+        <div className="mb-4">
+          <OpsNotice tone={feedback.tone} title={feedback.title} message={feedback.message} onDismiss={() => setFeedback(null)} />
         </div>
       ) : null}
       <div className="mb-4 flex items-center justify-between">
@@ -154,13 +323,14 @@ export default function CentersPage() {
                 <th className="px-4 py-3 hidden lg:table-cell">Contacto</th>
                 <th className="px-4 py-3 hidden lg:table-cell">GIS</th>
                 <th className="px-4 py-3">Rutas</th>
+                <th className="px-4 py-3">Equipos</th>
                 <th className="px-4 py-3">Estado</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-ops-border">
               {items.map((item) => (
-                <tr key={item.id} className="hover:bg-ops-surface">
+                <tr key={item.id} className={`hover:bg-ops-surface ${selectedCenterId === item.id ? "bg-ops-surface/70" : ""}`}>
                   <td className="px-4 py-3">
                     <p className="font-medium text-ops-text">{item.name}</p>
                     {item.phone && <p className="text-[10px] text-ops-muted">{item.phone}</p>}
@@ -182,13 +352,17 @@ export default function CentersPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 tabular-nums text-ops-muted">{item._count.routes}</td>
+                  <td className="px-4 py-3 tabular-nums text-ops-muted">{item._count.centerAssets}</td>
                   <td className="px-4 py-3">
                     <span className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${item.state === "ACTIVE" ? "border-ops-emerald/30 bg-ops-emerald/10 text-ops-emerald" : "border-ops-border bg-ops-surface text-ops-muted"}`}>
                       {formatLifecycleState(item.state)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button onClick={() => openEdit(item)} className="text-[11px] text-ops-blue hover:underline">Editar</button>
+                    <div className="flex justify-end gap-3">
+                      <button onClick={() => selectCenter(item.id)} className="text-[11px] text-ops-muted hover:text-ops-text hover:underline">Equipos</button>
+                      <button onClick={() => openEdit(item)} className="text-[11px] text-ops-blue hover:underline">Editar</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -196,6 +370,76 @@ export default function CentersPage() {
           </table>
         </div>
       )}
+
+      <section className="mt-6 rounded-ops border border-ops-border bg-ops-panel p-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-ops-text">Equipos del CMC</p>
+            <p className="text-xs text-ops-muted">
+              {detail ? `${detail.name} · ${detail.project.city.name}` : "Selecciona un centro para administrar su inventario interno."}
+            </p>
+          </div>
+          <button
+            onClick={openAssetCreate}
+            disabled={!detail}
+            className="rounded-ops border border-ops-border px-3 py-1.5 text-xs text-ops-muted hover:border-ops-blue hover:text-ops-blue disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            + Nuevo equipo
+          </button>
+        </div>
+
+        {loadingDetail ? (
+          <div className="flex justify-center py-10">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" />
+          </div>
+        ) : !detail ? (
+          <div className="rounded-ops border border-dashed border-ops-border bg-ops-surface px-4 py-6 text-sm text-ops-muted">
+            No hay un CMC seleccionado.
+          </div>
+        ) : detail.centerAssets.length === 0 ? (
+          <div className="rounded-ops border border-dashed border-ops-border bg-ops-surface px-4 py-6 text-sm text-ops-muted">
+            Este centro todavía no tiene equipos oficiales registrados.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {detail.centerAssets.map((asset) => (
+              <div key={asset.id} className="rounded-ops border border-ops-border bg-ops-surface p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium text-ops-text">{asset.name}</p>
+                      <span className="rounded border border-ops-border px-2 py-0.5 text-[10px] text-ops-muted">
+                        {formatAssetType(asset.assetType)}
+                      </span>
+                      <span className="rounded border border-ops-border px-2 py-0.5 text-[10px] text-ops-muted">
+                        {asset.operativeState}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-ops-muted">
+                      {asset.ip ?? "sin IP"} · {asset.mac ?? "sin MAC"} · {asset.vendor ?? "sin fabricante"} · {asset.model ?? "sin modelo"}
+                    </p>
+                    {asset.hostname || asset.notes ? (
+                      <p className="mt-1 text-[11px] text-ops-dim">
+                        {[asset.hostname ? `host ${asset.hostname}` : "", asset.notes ?? ""].filter(Boolean).join(" · ")}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex gap-3 text-[11px]">
+                    <button onClick={() => openAssetEdit(asset)} className="text-ops-blue hover:underline">Editar</button>
+                    <button
+                      onClick={() => handleDeleteAsset(asset)}
+                      disabled={deletingAssetId === asset.id}
+                      className="text-ops-rose hover:underline disabled:opacity-50"
+                    >
+                      {deletingAssetId === asset.id ? "Eliminando…" : "Eliminar"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <OpsModal open={modalOpen} title={editing ? "Editar CMC" : "Nuevo CMC"} onClose={closeModal} saving={saving}>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -273,6 +517,71 @@ export default function CentersPage() {
             <button type="submit" disabled={saving}
               className="rounded-ops bg-ops-blue px-4 py-2 text-sm font-semibold text-white hover:bg-ops-blue/80 disabled:opacity-50">
               {saving ? "Guardando…" : editing ? "Guardar" : "Crear"}
+            </button>
+          </div>
+        </form>
+      </OpsModal>
+
+      <OpsModal open={assetModalOpen} title={editingAsset ? "Editar equipo del CMC" : "Nuevo equipo del CMC"} onClose={closeAssetModal} saving={savingAsset}>
+        <form onSubmit={handleAssetSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Tipo</label>
+              <select className={INPUT} value={assetForm.assetType} onChange={(e) => setAssetForm((f) => ({ ...f, assetType: e.target.value }))}>
+                {ASSET_TYPES.map((type) => <option key={type} value={type}>{formatAssetType(type)}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Estado operativo</label>
+              <select className={INPUT} value={assetForm.operativeState} onChange={(e) => setAssetForm((f) => ({ ...f, operativeState: e.target.value }))}>
+                {NODE_STATES.map((state) => <option key={state} value={state}>{state}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Nombre</label>
+            <input className={INPUT} value={assetForm.name} required placeholder="Core Switch CMC" onChange={(e) => setAssetForm((f) => ({ ...f, name: e.target.value }))} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">IP</label>
+              <input className={INPUT} value={assetForm.ip} placeholder="10.10.10.2" onChange={(e) => setAssetForm((f) => ({ ...f, ip: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">MAC</label>
+              <input className={INPUT} value={assetForm.mac} placeholder="AA:BB:CC:DD:EE:FF" onChange={(e) => setAssetForm((f) => ({ ...f, mac: e.target.value }))} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Fabricante</label>
+              <input className={INPUT} value={assetForm.vendor} placeholder="Cisco" onChange={(e) => setAssetForm((f) => ({ ...f, vendor: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Modelo</label>
+              <input className={INPUT} value={assetForm.model} placeholder="CBS350" onChange={(e) => setAssetForm((f) => ({ ...f, model: e.target.value }))} />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Hostname</label>
+            <input className={INPUT} value={assetForm.hostname} placeholder="cmc-core-sw-01" onChange={(e) => setAssetForm((f) => ({ ...f, hostname: e.target.value }))} />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Notas</label>
+            <textarea className={`${INPUT} min-h-24 resize-y`} value={assetForm.notes} placeholder="Rack principal del centro de mando." onChange={(e) => setAssetForm((f) => ({ ...f, notes: e.target.value }))} />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={closeAssetModal} className="rounded-ops border border-ops-border px-4 py-2 text-sm text-ops-muted hover:text-ops-text">
+              Cancelar
+            </button>
+            <button type="submit" disabled={savingAsset} className="rounded-ops bg-ops-blue px-4 py-2 text-sm font-semibold text-white hover:bg-ops-blue/80 disabled:opacity-50">
+              {savingAsset ? "Guardando…" : editingAsset ? "Guardar" : "Crear"}
             </button>
           </div>
         </form>

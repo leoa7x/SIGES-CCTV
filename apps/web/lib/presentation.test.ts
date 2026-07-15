@@ -44,3 +44,8 @@ test("normalizes UI error messages with fallback copy", () => {
     "Error genérico",
   );
 });
+
+test("center asset admin errors still map to operator-facing copy", () => {
+  const error = new Error("No se pudo guardar el equipo del CMC.");
+  assert.equal(toUserFacingError(error, "fallback"), "No se pudo guardar el equipo del CMC.");
+});

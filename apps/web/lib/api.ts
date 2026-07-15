@@ -37,6 +37,22 @@ export type CameraPreviewStatus = {
   message?: string;
 };
 
+export type CenterAsset = {
+  id: string;
+  centerId: string;
+  assetType: string;
+  name: string;
+  ip?: string | null;
+  mac?: string | null;
+  vendor?: string | null;
+  model?: string | null;
+  hostname?: string | null;
+  operativeState: string;
+  source: string;
+  lastSeenAt?: string | null;
+  notes?: string | null;
+};
+
 export async function apiGet<T>(path: string, token: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
