@@ -83,6 +83,7 @@ No se duplicará información del CMC. `CenterAsset` se colgará del `centerId` 
 ### Explicitly Excluded In This Phase
 
 - Discovery Orangutan para CMC
+- Discovery `whosthere` para CMC
 - Confirmación automática de hallazgos para `CenterAsset`
 - Georreferenciación individual de equipos del CMC
 - Conversión del CMC en nodo principal de la red
@@ -143,6 +144,7 @@ Capacidades esperadas:
 ## Telemetry Strategy For This Phase
 
 Esta fase no incorpora discovery Orangutan para CMC.
+Esta fase tampoco incorpora discovery con `whosthere` para CMC.
 
 Los `CenterAsset` serán:
 
@@ -151,6 +153,27 @@ Los `CenterAsset` serán:
 - elegibles para observabilidad y Grafana
 
 La siguiente fase podrá extender discovery y correlación automática para `centerId`, pero sin cambiar el modelo base definido aquí.
+
+## Planned Discovery Direction For Phase 2
+
+La recomendación para la fase 2 es:
+
+- mantener `LAN-Orangutan` para discovery de nodos de campo
+- introducir `whosthere` para discovery de infraestructura LAN del CMC
+
+Razón:
+
+- `LAN-Orangutan` ya está acoplado al pipeline actual basado en `nodeId`
+- el CMC necesita un flujo separado orientado a `centerId`
+- `whosthere` encaja mejor como fuente dedicada para discovery interno del CMC sin forzar la semántica de nodos de campo
+
+Esto implica que la futura fase 2 del CMC deberá añadir:
+
+- jobs de discovery por `centerId`
+- normalización de salida de `whosthere`
+- correlación de hallazgos contra `CenterAsset`
+- backlog y estado de discovery específicos del CMC
+- ampliaciones de observabilidad para distinguir inventario oficial del CMC frente a hallazgos pendientes
 
 ## Backend Design
 
