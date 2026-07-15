@@ -3,12 +3,16 @@ import test from "node:test";
 import * as networkMonitor from "./network-monitor";
 
 import {
+  buildTopologyCenterGroups,
   buildGrafanaEmbedModel,
   buildNetworkMonitorModel,
   formatTelemetryBytes,
   telemetryAlertLevel,
   type MonitorNodeDetail,
   type MonitorNodeListItem,
+  type TopologyCenterDetail,
+  type TopologyCenterListItem,
+  type TopologyNodeItem,
 } from "./network-monitor";
 import type { GrafanaEmbedDescriptor } from "./api";
 
@@ -242,4 +246,53 @@ test("buildNetworkMonitorModel reports missing IP, subnet and analytics as alert
   assert.equal(model.alerts.some((alert) => alert.id === "missing-subnet"), true);
   assert.equal(model.alerts.some((alert) => alert.id === "missing-analytics"), true);
   assert.equal(model.observability.latestDiscoveryLabel, "Sin escaneos");
+});
+
+test("topology model reserves a separate branch for CMC equipment", () => {
+  const centers: TopologyCenterListItem[] = [
+    {
+      id: "center-1",
+      name: "CMC Central",
+      project: { id: "project-1", name: "Proyecto Meta", city: { id: "city-1", name: "Villavicencio" } },
+      _count: { routes: 1, centerAssets: 1 },
+    },
+  ];
+
+  const nodes: TopologyNodeItem[] = [
+    {
+      id: "node-1",
+      code: "N-1",
+      name: "Nodo Norte",
+      operativeState: "ONLINE",
+      nodeType: "SWITCH",
+      ip: "10.0.0.2",
+      _count: { cameras: 4 },
+      route: {
+        id: "route-1",
+        name: "Ruta Norte",
+        center: {
+          id: "center-1",
+          name: "CMC Central",
+          project: { id: "project-1", name: "Proyecto Meta", city: { id: "city-1", name: "Villavicencio" } },
+        },
+      },
+    },
+  ];
+
+  const centerDetailsById: Record<string, TopologyCenterDetail> = {
+    "center-1": {
+      id: "center-1",
+      name: "CMC Central",
+      project: { id: "project-1", name: "Proyecto Meta", city: { id: "city-1", name: "Villavicencio" } },
+      centerAssets: [{ id: "asset-1", name: "Core Switch", assetType: "SWITCH", operativeState: "ONLINE", ip: "10.0.0.10", mac: null }],
+    },
+  };
+
+  const groups = buildTopologyCenterGroups(nodes, centers, centerDetailsById);
+
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0]?.centerAssets.length, 1);
+  assert.equal(groups[0]?.centerAssets[0]?.name, "Core Switch");
+  assert.equal(groups[0]?.nodes.length, 1);
+  assert.equal(groups[0]?.nodes[0]?.code, "N-1");
 });

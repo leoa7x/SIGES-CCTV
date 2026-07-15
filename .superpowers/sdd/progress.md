@@ -13,4 +13,5 @@ Task 2 (camera live preview): complete (commit 635bf0e, review clean; frontend m
 Task 3 (camera live preview): complete (commit 140be11, review clean; MJPEG consumed via authenticated fetch)
 Task 1 (center assets phase 1): complete (commits c70cea5..162cd15, migration added, local review clean)
 Task 2 (center assets phase 1): complete (commit df95d91, local verification clean)
-Task 3 (center assets phase 1): complete (commit pending, web build/test clean)
+Task 3 (center assets phase 1): complete (commit ab2ee69, web build/test clean)
+Task 4 (center assets phase 1): complete (commit pending, topology build/test clean)

@@ -33,6 +33,57 @@ export type MonitorNodeListItem = {
   _count: { assets: number; discoveryJobs: number; analyticsAssignments: number };
 };
 
+export type TopologyNodeItem = {
+  id: string;
+  code: string;
+  name: string;
+  operativeState: string;
+  nodeType: string;
+  ip: string | null;
+  _count: { cameras: number };
+  route: {
+    id: string;
+    name: string;
+    center: {
+      id: string;
+      name: string;
+      project: { id: string; name: string; city: { id: string; name: string } };
+    };
+  };
+};
+
+export type TopologyCenterAsset = {
+  id: string;
+  name: string;
+  assetType: string;
+  ip?: string | null;
+  mac?: string | null;
+  operativeState: string;
+};
+
+export type TopologyCenterListItem = {
+  id: string;
+  name: string;
+  project: { id: string; name: string; city: { id: string; name: string } };
+  _count: { routes: number; centerAssets: number };
+};
+
+export type TopologyCenterDetail = {
+  id: string;
+  name: string;
+  project: { id: string; name: string; city: { id: string; name: string } };
+  centerAssets: TopologyCenterAsset[];
+};
+
+export type TopologyCenterGroup = {
+  centerId: string;
+  centerName: string;
+  projectName: string;
+  cityName: string;
+  nodes: TopologyNodeItem[];
+  centerAssets: TopologyCenterAsset[];
+};
+
 export type MonitorAnalyticsAssignment = {
   id: string;
   customLabel?: string | null;
@@ -219,6 +270,64 @@ export function buildNetworkMonitorModel(nodes: MonitorNodeListItem[], detail: M
       stateBreakdown: buildStateBreakdown(detail),
     },
   };
+}
+
+export function buildTopologyCenterGroups(
+  nodes: TopologyNodeItem[],
+  centers: TopologyCenterListItem[],
+  centerDetailsById: Record<string, TopologyCenterDetail> = {},
+): TopologyCenterGroup[] {
+  const groups = new Map<string, TopologyCenterGroup>();
+
+  for (const center of centers) {
+    groups.set(center.id, {
+      centerId: center.id,
+      centerName: center.name,
+      projectName: center.project.name,
+      cityName: center.project.city.name,
+      nodes: [],
+      centerAssets: centerDetailsById[center.id]?.centerAssets ?? [],
+    });
+  }
+
+  for (const node of nodes) {
+    const { center } = node.route;
+    if (!groups.has(center.id)) {
+      groups.set(center.id, {
+        centerId: center.id,
+        centerName: center.name,
+        projectName: center.project.name,
+        cityName: center.project.city.name,
+        nodes: [],
+        centerAssets: centerDetailsById[center.id]?.centerAssets ?? [],
+      });
+    }
+    groups.get(center.id)?.nodes.push(node);
+  }
+
+  for (const [centerId, detail] of Object.entries(centerDetailsById)) {
+    const existing = groups.get(centerId);
+    if (existing) {
+      existing.centerAssets = [...detail.centerAssets].sort((a, b) => a.name.localeCompare(b.name));
+      continue;
+    }
+
+    groups.set(centerId, {
+      centerId,
+      centerName: detail.name,
+      projectName: detail.project.name,
+      cityName: detail.project.city.name,
+      nodes: [],
+      centerAssets: [...detail.centerAssets].sort((a, b) => a.name.localeCompare(b.name)),
+    });
+  }
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      nodes: [...group.nodes].sort((a, b) => a.code.localeCompare(b.code)),
+    }))
+    .sort((a, b) => a.centerName.localeCompare(b.centerName));
 }
 
 function buildAlerts(detail: MonitorNodeDetail | null, pendingDiscoveries: number): MonitorAlert[] {
