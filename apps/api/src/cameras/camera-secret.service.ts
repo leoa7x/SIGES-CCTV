@@ -1,11 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { requireEnv } from "../common/env";
 
 @Injectable()
 export class CameraSecretService {
-  private readonly key = createHash("sha256")
-    .update(process.env.CAMERA_SECRET_KEY ?? process.env.JWT_SECRET ?? "dev_secret_change_me")
-    .digest();
+  private readonly key = createHash("sha256").update(requireEnv("CAMERA_SECRET_KEY")).digest();
 
   encrypt(plainText: string): string {
     const iv = randomBytes(16);

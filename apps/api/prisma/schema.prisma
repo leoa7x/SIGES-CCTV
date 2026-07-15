@@ -15,6 +15,7 @@ model User {
   passwordHash   String
   name           String?
   role           UserRole       @default(OPERATOR)
+  permissions    Permission[]   @default([])
   state          EntityState    @default(ACTIVE)
   incidents      Incident[]     @relation("AssignedIncidents")
   logbookEntries LogbookEntry[]
@@ -30,6 +31,21 @@ enum UserRole {
   OPERATOR
   TECHNICIAN
   VIEWER
+}
+
+// Granular capabilities that can be toggled per user, independent of role.
+// SUPER_ADMIN always bypasses these checks (see PermissionsGuard).
+enum Permission {
+  MANAGE_USERS
+  MANAGE_ORG
+  MANAGE_ROUTES
+  MANAGE_NODES
+  MANAGE_FIBER
+  MANAGE_CAMERAS
+  CAMERA_PREVIEW
+  RUN_DISCOVERY
+  RESOLVE_DISCOVERY
+  VIEW_TELEMETRY
 }
 
 // ─── Geographic hierarchy ─────────────────────────────────────────────────────

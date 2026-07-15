@@ -204,7 +204,7 @@ export default function MapPage() {
     setDrawWaypoints([]);
   }, []);
 
-  const lastEvent = useMonitorAll(centers.map((c) => c.id));
+  const lastEvent = useMonitorAll(centers.map((c) => c.id), accessToken);
 
   useEffect(() => {
     if (!lastEvent || lastEvent.entityType !== "node") return;

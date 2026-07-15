@@ -83,7 +83,7 @@ export default function TopologyPage() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   // Real-time state updates for the selected CMC
-  const lastEvent = useMonitor(selectedCenterId);
+  const lastEvent = useMonitor(selectedCenterId, accessToken);
 
   useEffect(() => {
     if (!accessToken) return;

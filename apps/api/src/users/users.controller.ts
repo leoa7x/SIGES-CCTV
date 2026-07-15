@@ -1,8 +1,12 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import { Permission } from "@prisma/client";
+import { RequirePermissions } from "../common/decorators/permissions.decorator";
+import { PermissionsGuard } from "../common/guards/permissions.guard";
 import { UsersService, CreateUserDto, UpdateUserDto } from "./users.service";
 
-@UseGuards(AuthGuard("jwt"))
+@UseGuards(AuthGuard("jwt"), PermissionsGuard)
+@RequirePermissions(Permission.MANAGE_USERS)
 @Controller("users")
 export class UsersController {
   constructor(private service: UsersService) {}

@@ -6,6 +6,7 @@ import {
   WebSocketServer,
 } from "@nestjs/websockets";
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
 import { Server, Socket } from "socket.io";
 import { Kafka, Consumer } from "kafkajs";
 import { createCorsOriginResolver } from "../common/cors";
@@ -26,7 +27,7 @@ export class OpsGateway implements OnGatewayConnection, OnGatewayDisconnect, OnM
   private readonly logger = new Logger(OpsGateway.name);
   private consumer: Consumer;
 
-  constructor() {
+  constructor(private readonly jwtService: JwtService) {
     const kafka = new Kafka({
       clientId: "siges-gateway",
       brokers: (process.env.REDPANDA_BROKERS ?? "localhost:9092").split(","),
@@ -52,7 +53,21 @@ export class OpsGateway implements OnGatewayConnection, OnGatewayDisconnect, OnM
   }
 
   handleConnection(client: Socket) {
-    this.logger.debug(`Client connected: ${client.id}`);
+    const token = this.extractToken(client);
+    if (!token) {
+      this.logger.warn(`Rejected unauthenticated socket connection: ${client.id}`);
+      client.disconnect(true);
+      return;
+    }
+
+    try {
+      const payload = this.jwtService.verify(token) as { sub: string; email: string; role: string };
+      client.data.user = payload;
+      this.logger.debug(`Client connected: ${client.id} (${payload.email})`);
+    } catch {
+      this.logger.warn(`Rejected socket with invalid/expired token: ${client.id}`);
+      client.disconnect(true);
+    }
   }
 
   handleDisconnect(client: Socket) {
@@ -61,9 +76,29 @@ export class OpsGateway implements OnGatewayConnection, OnGatewayDisconnect, OnM
 
   @SubscribeMessage("subscribe")
   handleSubscribe(client: Socket, data: { centerId: string }) {
+    if (!client.data.user) {
+      client.disconnect(true);
+      return;
+    }
+    if (typeof data?.centerId !== "string" || data.centerId.length === 0) {
+      return { event: "error", data: { message: "centerId is required" } };
+    }
+
     const room = `cmc:${data.centerId}`;
     void client.join(room);
     this.logger.debug(`Client ${client.id} joined ${room}`);
     return { event: "subscribed", data: { room } };
+  }
+
+  private extractToken(client: Socket): string | null {
+    const authToken = client.handshake.auth?.token;
+    if (typeof authToken === "string" && authToken.length > 0) return authToken;
+
+    const headerAuth = client.handshake.headers.authorization;
+    if (typeof headerAuth === "string" && headerAuth.startsWith("Bearer ")) {
+      return headerAuth.slice("Bearer ".length);
+    }
+
+    return null;
   }
 }

@@ -5,10 +5,17 @@ import { OpsShell } from "../../../components/ops-shell";
 import { OpsModal } from "../../../components/ops-modal";
 import { useAuth } from "../../../components/auth-provider";
 import { apiGet, apiPatch, apiPost } from "../../../lib/api";
+import {
+  ALL_PERMISSIONS,
+  normalizePermissionsForRole,
+  PERMISSION_LABELS,
+  shouldRoleUseGranularPermissions,
+  type UserPermission,
+} from "../../../lib/user-permissions";
 
-type UserItem = { id: string; email: string; name: string | null; role: string; state: string; createdAt: string };
-type CreateForm = { email: string; password: string; name: string; role: string };
-type EditForm = { name: string; role: string; state: string };
+type UserItem = { id: string; email: string; name: string | null; role: string; state: string; permissions: UserPermission[]; createdAt: string };
+type CreateForm = { email: string; password: string; name: string; role: string; permissions: UserPermission[] };
+type EditForm = { name: string; role: string; state: string; permissions: UserPermission[] };
 
 const INPUT = "w-full rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-text focus:border-ops-blue focus:outline-none";
 const ROLES = ["SUPER_ADMIN", "ADMIN", "SUPERVISOR", "OPERATOR", "TECHNICIAN", "VIEWER"];
@@ -28,8 +35,8 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<UserItem | null>(null);
-  const [createForm, setCreateForm] = useState<CreateForm>({ email: "", password: "", name: "", role: "OPERATOR" });
-  const [editForm, setEditForm] = useState<EditForm>({ name: "", role: "OPERATOR", state: "ACTIVE" });
+  const [createForm, setCreateForm] = useState<CreateForm>({ email: "", password: "", name: "", role: "OPERATOR", permissions: [] });
+  const [editForm, setEditForm] = useState<EditForm>({ name: "", role: "OPERATOR", state: "ACTIVE", permissions: [] });
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -43,15 +50,34 @@ export default function UsersPage() {
 
   function openCreate() {
     setEditing(null);
-    setCreateForm({ email: "", password: "", name: "", role: "OPERATOR" });
+    setCreateForm({ email: "", password: "", name: "", role: "OPERATOR", permissions: [] });
     setModalOpen(true);
   }
   function openEdit(item: UserItem) {
     setEditing(item);
-    setEditForm({ name: item.name ?? "", role: item.role, state: item.state });
+    setEditForm({ name: item.name ?? "", role: item.role, state: item.state, permissions: item.permissions ?? [] });
     setModalOpen(true);
   }
   function closeModal() { setModalOpen(false); }
+
+  function togglePermission(permission: UserPermission) {
+    if (editing) {
+      setEditForm((form) => ({
+        ...form,
+        permissions: form.permissions.includes(permission)
+          ? form.permissions.filter((value) => value !== permission)
+          : [...form.permissions, permission],
+      }));
+      return;
+    }
+
+    setCreateForm((form) => ({
+      ...form,
+      permissions: form.permissions.includes(permission)
+        ? form.permissions.filter((value) => value !== permission)
+        : [...form.permissions, permission],
+    }));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -60,12 +86,17 @@ export default function UsersPage() {
     try {
       if (editing) {
         await apiPatch(`/users/${editing.id}`, accessToken, {
-          name: editForm.name || undefined, role: editForm.role, state: editForm.state,
+          name: editForm.name || undefined,
+          role: editForm.role,
+          state: editForm.state,
+          permissions: normalizePermissionsForRole(editForm.role, editForm.permissions),
         });
       } else {
         await apiPost("/users", accessToken, {
           email: createForm.email, password: createForm.password,
-          name: createForm.name || undefined, role: createForm.role,
+          name: createForm.name || undefined,
+          role: createForm.role,
+          permissions: normalizePermissionsForRole(createForm.role, createForm.permissions),
         });
       }
       closeModal(); await load();
@@ -88,6 +119,7 @@ export default function UsersPage() {
                 <th className="px-4 py-3">Nombre</th>
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Rol</th>
+                <th className="px-4 py-3">Permisos</th>
                 <th className="px-4 py-3">Estado</th>
                 <th className="px-4 py-3" />
               </tr>
@@ -99,6 +131,13 @@ export default function UsersPage() {
                   <td className="px-4 py-3 text-ops-muted">{item.email}</td>
                   <td className="px-4 py-3">
                     <span className={`rounded border px-2 py-0.5 text-[9px] font-bold uppercase ${ROLE_COLOR[item.role] ?? ""}`}>{item.role}</span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-ops-muted">
+                    {shouldRoleUseGranularPermissions(item.role)
+                      ? item.permissions.length > 0
+                        ? `${item.permissions.length} asignados`
+                        : "Sin asignar"
+                      : "Acceso total"}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${item.state === "ACTIVE" ? "border-ops-emerald/30 bg-ops-emerald/10 text-ops-emerald" : "border-ops-border bg-ops-surface text-ops-muted"}`}>{item.state}</span>
@@ -135,10 +174,39 @@ export default function UsersPage() {
           <div className="space-y-1">
             <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Rol</label>
             <select className={INPUT} value={editing ? editForm.role : createForm.role}
-              onChange={(e) => editing ? setEditForm((f) => ({ ...f, role: e.target.value })) : setCreateForm((f) => ({ ...f, role: e.target.value }))}>
+              onChange={(e) => editing
+                ? setEditForm((f) => ({ ...f, role: e.target.value, permissions: normalizePermissionsForRole(e.target.value, f.permissions) }))
+                : setCreateForm((f) => ({ ...f, role: e.target.value, permissions: normalizePermissionsForRole(e.target.value, f.permissions) }))}>
               {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
+          {shouldRoleUseGranularPermissions(editing ? editForm.role : createForm.role) ? (
+            <div className="space-y-2">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Permisos granulares</label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {ALL_PERMISSIONS.map((permission) => {
+                  const selected = editing
+                    ? editForm.permissions.includes(permission)
+                    : createForm.permissions.includes(permission);
+                  return (
+                    <label key={permission} className={`flex items-start gap-2 rounded-ops border px-3 py-2 text-sm ${selected ? "border-ops-blue bg-ops-blue/10 text-ops-text" : "border-ops-border bg-ops-surface text-ops-muted"}`}>
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={selected}
+                        onChange={() => togglePermission(permission)}
+                      />
+                      <span>{PERMISSION_LABELS[permission]}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-xs text-ops-muted">
+              Este rol conserva acceso total por diseño. Los permisos granulares solo aplican a los demás roles.
+            </div>
+          )}
           {editing && (
             <div className="space-y-1">
               <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Estado</label>

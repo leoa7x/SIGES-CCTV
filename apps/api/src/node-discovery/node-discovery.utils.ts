@@ -53,6 +53,18 @@ const TYPE_HEURISTICS: Array<{
   },
 ];
 
+const IPV4_OCTET = "(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)";
+const IPV4_REGEX = new RegExp(`^${IPV4_OCTET}(\\.${IPV4_OCTET}){3}$`);
+const CIDR_REGEX = new RegExp(`^${IPV4_OCTET}(\\.${IPV4_OCTET}){3}\\/(3[0-2]|[12]?\\d)$`);
+
+export function isValidIp(value: string) {
+  return IPV4_REGEX.test(value.trim());
+}
+
+export function isValidCidr(value: string) {
+  return CIDR_REGEX.test(value.trim());
+}
+
 export function deriveSubnetFromIp(ip: string) {
   const octets = ip.trim().split(".");
   if (octets.length !== 4 || octets.some((part) => part === "" || Number.isNaN(Number(part)))) {

@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start -p 3000",
     "test:network-monitor": "ts-node --project tsconfig.test.json lib/network-monitor.test.ts",
-    "test:camera-preview": "ts-node --project tsconfig.test.json lib/camera-preview.test.ts"
+    "test:camera-preview": "ts-node --project tsconfig.test.json lib/camera-preview.test.ts",
+    "test:user-permissions": "ts-node --project tsconfig.test.json lib/user-permissions.test.ts"
   },
   "dependencies": {
     "maplibre-gl": "^5.24.0",

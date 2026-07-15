@@ -1,13 +1,13 @@
 import { Injectable } from "@nestjs/common";
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from "class-validator";
 import { Prisma, NodeDiscoveredDeviceStatus, NodeDiscoveryStatus, NodeAssetType } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { NodeAssetsService } from "../node-assets/node-assets.service";
-import { deriveSubnetFromIp, normalizeDiscoveredDevices } from "./node-discovery.utils";
+import { deriveSubnetFromIp, isValidCidr, isValidIp, normalizeDiscoveredDevices } from "./node-discovery.utils";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export class ConfirmDiscoveredDeviceDto {
   @IsOptional() @IsEnum(NodeAssetType) assetType?: NodeAssetType;
@@ -172,10 +172,22 @@ export class NodeDiscoveryService {
       return this.buildMockResults(targetSubnetCidr, targetIp);
     }
 
-    const command = commandTemplate
-      .replaceAll("{target}", targetSubnetCidr)
-      .replaceAll("{ip}", targetIp ?? "");
-    const { stdout } = await execAsync(command, {
+    if (!isValidCidr(targetSubnetCidr)) {
+      throw new Error(`Subred de escaneo inválida: ${targetSubnetCidr}`);
+    }
+    if (targetIp && !isValidIp(targetIp)) {
+      throw new Error(`IP de escaneo inválida: ${targetIp}`);
+    }
+
+    // Split the operator-configured template into argv tokens and substitute placeholders
+    // per-argument, then run via execFile (no shell) so scan input can never break out
+    // into shell metacharacters, regardless of the CIDR/IP validation above.
+    const [command, ...templateArgs] = commandTemplate.split(/\s+/).filter(Boolean);
+    const args = templateArgs.map((arg) =>
+      arg.replaceAll("{target}", targetSubnetCidr).replaceAll("{ip}", targetIp ?? ""),
+    );
+
+    const { stdout } = await execFileAsync(command, args, {
       env: {
         ...process.env,
         NODE_DISCOVERY_TARGET: targetSubnetCidr,

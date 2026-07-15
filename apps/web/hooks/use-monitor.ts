@@ -12,12 +12,12 @@ export interface StateChangeEvent {
   timestamp: string;
 }
 
-export function useMonitor(centerId: string | null) {
+export function useMonitor(centerId: string | null, accessToken: string | null) {
   const [lastEvent, setLastEvent] = useState<StateChangeEvent | null>(null);
 
   useEffect(() => {
-    if (!centerId) return;
-    const socket = getSocket();
+    if (!centerId || !accessToken) return;
+    const socket = getSocket(accessToken);
     socket.emit("subscribe", { centerId });
     const handler = (evt: StateChangeEvent) => {
       if (evt.centerId === centerId) setLastEvent(evt);
@@ -26,7 +26,7 @@ export function useMonitor(centerId: string | null) {
     return () => {
       socket.off("state-change", handler);
     };
-  }, [centerId]);
+  }, [centerId, accessToken]);
 
   return lastEvent;
 }
