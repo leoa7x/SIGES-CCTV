@@ -19,6 +19,7 @@ const NAV = [
 
 const ADMIN_NAV = [
   { href: "/admin/cities",   label: "Ciudades",  icon: "○" },
+  { href: "/admin/branding", label: "Branding",  icon: "◍" },
   { href: "/admin/centers",  label: "CMC",       icon: "◎" },
   { href: "/admin/routes",   label: "Rutas",     icon: "⌥" },
   { href: "/admin/nodes",    label: "Nodos",     icon: "◉" },

@@ -25,6 +25,7 @@ import { NodeDiscoveryModule } from "./node-discovery/node-discovery.module";
 import { NetworkTelemetryModule } from "./network-telemetry/network-telemetry.module";
 import { ObservabilityModule } from "./observability/observability.module";
 import { CameraPreviewModule } from "./camera-preview/camera-preview.module";
+import { BrandingModule } from "./branding/branding.module";
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { CameraPreviewModule } from "./camera-preview/camera-preview.module";
     NodesModule,
     CamerasModule,
     CameraPreviewModule,
+    BrandingModule,
     IncidentsModule,
     LogbookModule,
     DashboardModule,

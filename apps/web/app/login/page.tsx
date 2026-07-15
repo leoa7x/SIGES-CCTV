@@ -1,10 +1,23 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../components/auth-provider";
 import { getApiUrl } from "../../lib/api";
 import { SessionUser } from "../../lib/session";
+
+type PublicBranding = {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  loginMessage: string | null;
+  entity: {
+    id: string;
+    name: string;
+    type: "MUNICIPALITY" | "DEPARTMENT";
+    department: string | null;
+  };
+} | null;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,6 +27,25 @@ export default function LoginPage() {
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [branding, setBranding] = useState<PublicBranding>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch(`${getApiUrl()}/public/branding/active`)
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return res.json() as Promise<PublicBranding>;
+      })
+      .then((data) => {
+        if (!cancelled) setBranding(data);
+      })
+      .catch(() => {
+        if (!cancelled) setBranding(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -45,12 +77,21 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo area */}
         <div className="mb-8 text-center">
-          <p className="font-mono text-2xl font-bold tracking-wide text-ops-text">
-            SIGES<span className="text-ops-blue">-CCTV</span>
+          {branding?.logoUrl ? (
+            <img src={branding.logoUrl} alt={branding.name} className="mx-auto h-24 max-w-full object-contain" />
+          ) : (
+            <p className="font-mono text-2xl font-bold tracking-wide text-ops-text">
+              SIGES<span className="text-ops-blue">-CCTV</span>
+            </p>
+          )}
+          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.32em] text-ops-muted">
+            {branding?.loginMessage || "Sistema Integral de Gestión Operacional"}
           </p>
-          <p className="mt-1 text-xs font-semibold uppercase tracking-[0.32em] text-ops-muted">
-            Sistema Integral de Gestión Operacional
-          </p>
+          {branding?.entity && (
+            <p className="mt-2 text-[11px] text-ops-dim">
+              {branding.entity.name}
+            </p>
+          )}
         </div>
 
         {/* Card */}

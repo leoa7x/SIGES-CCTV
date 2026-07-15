@@ -1,17 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { OpsShell } from "../../../components/ops-shell";
 import { OpsModal } from "../../../components/ops-modal";
 import { useAuth } from "../../../components/auth-provider";
-import { apiGet, apiPatch, apiPost, apiPostFile } from "../../../lib/api";
+import { apiGet, apiPatch, apiPost } from "../../../lib/api";
 
 type Counts = { cameras: number; nodes: number; poles: number };
 type CityItem = {
   id: string; name: string; type: "MUNICIPALITY" | "DEPARTMENT";
   department: string | null; daneCode: string | null;
   population: number | null; areaSqKm: number | null;
-  contractObject: string | null; logoUrl: string | null;
+  contractObject: string | null;
   lat: number | null; lng: number | null; state: string;
   counts: Counts;
 };
@@ -43,9 +43,6 @@ export default function CitiesPage() {
     name: "", type: "MUNICIPALITY", department: "", daneCode: "",
     population: "", areaSqKm: "", contractObject: "", lat: "", lng: "", state: "ACTIVE",
   });
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -59,7 +56,6 @@ export default function CitiesPage() {
   function openCreate() {
     setEditing(null);
     setCreateForm(EMPTY_CREATE);
-    setLogoFile(null); setLogoPreview(null);
     setModalOpen(true);
   }
 
@@ -75,21 +71,10 @@ export default function CitiesPage() {
       lng: item.lng != null ? String(item.lng) : "",
       state: item.state,
     });
-    setLogoFile(null); setLogoPreview(item.logoUrl);
     setModalOpen(true);
   }
 
   function closeModal() { setModalOpen(false); }
-
-  function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0] ?? null;
-    setLogoFile(file);
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => setLogoPreview(ev.target?.result as string);
-      reader.readAsDataURL(file);
-    } else { setLogoPreview(null); }
-  }
 
   function parseOptionalNumber(s: string): number | undefined {
     const n = parseFloat(s);
@@ -105,7 +90,6 @@ export default function CitiesPage() {
     if (!accessToken) return;
     setSaving(true);
     try {
-      let cityId: string;
       if (editing) {
         const payload = {
           name: editForm.name, type: editForm.type,
@@ -119,7 +103,6 @@ export default function CitiesPage() {
           state: editForm.state,
         };
         await apiPatch(`/cities/${editing.id}`, accessToken, payload);
-        cityId = editing.id;
       } else {
         const payload = {
           name: createForm.name, type: createForm.type,
@@ -131,13 +114,7 @@ export default function CitiesPage() {
           lat: parseOptionalNumber(createForm.lat),
           lng: parseOptionalNumber(createForm.lng),
         };
-        const created = await apiPost<{ id: string }>("/cities", accessToken, payload);
-        cityId = created.id;
-      }
-      if (logoFile) {
-        const fd = new FormData();
-        fd.append("logo", logoFile);
-        await apiPostFile(`/cities/${cityId}/logo`, accessToken, fd);
+        await apiPost<{ id: string }>("/cities", accessToken, payload);
       }
       closeModal();
       await load();
@@ -167,7 +144,6 @@ export default function CitiesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-ops-border text-left text-[10px] font-semibold uppercase tracking-wide text-ops-muted">
-                <th className="px-4 py-3">Logo</th>
                 <th className="px-4 py-3">Nombre</th>
                 <th className="px-4 py-3">Tipo</th>
                 <th className="px-4 py-3 hidden sm:table-cell">DANE</th>
@@ -181,13 +157,6 @@ export default function CitiesPage() {
             <tbody className="divide-y divide-ops-border">
               {items.map((item) => (
                 <tr key={item.id} className="hover:bg-ops-surface">
-                  <td className="px-4 py-3">
-                    {item.logoUrl ? (
-                      <img src={item.logoUrl} alt="logo" className="h-8 w-8 rounded object-contain" />
-                    ) : (
-                      <div className="h-8 w-8 rounded border border-ops-border bg-ops-surface text-[9px] text-ops-dim flex items-center justify-center">N/A</div>
-                    )}
-                  </td>
                   <td className="px-4 py-3">
                     <p className="font-medium text-ops-text">{item.name}</p>
                     {item.department && <p className="text-[10px] text-ops-muted">{item.department}</p>}
@@ -301,22 +270,6 @@ export default function CitiesPage() {
                 onChange={(e) => editing ? setEditForm((f) => ({ ...f, lat: e.target.value })) : setCreateForm((f) => ({ ...f, lat: e.target.value }))} />
               <input className={INPUT} value={form.lng} placeholder="Longitud (ej. -72.0836)"
                 onChange={(e) => editing ? setEditForm((f) => ({ ...f, lng: e.target.value })) : setCreateForm((f) => ({ ...f, lng: e.target.value }))} />
-            </div>
-          </div>
-
-          {/* Logo upload */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Logo (alcaldía / gobernación)</label>
-            <div className="flex items-center gap-3">
-              {logoPreview && (
-                <img src={logoPreview} alt="preview" className="h-12 w-12 rounded border border-ops-border object-contain" />
-              )}
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoChange} />
-              <button type="button" onClick={() => fileInputRef.current?.click()}
-                className="rounded-ops border border-ops-border px-3 py-1.5 text-[11px] text-ops-muted hover:border-ops-blue hover:text-ops-blue">
-                {logoPreview ? "Cambiar imagen" : "Seleccionar imagen"}
-              </button>
-              {logoFile && <span className="text-[10px] text-ops-dim truncate max-w-32">{logoFile.name}</span>}
             </div>
           </div>
 

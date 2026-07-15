@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import {
   IsEnum,
   IsInt,
@@ -9,7 +9,6 @@ import {
 } from "class-validator";
 import { GeoEntityType } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
-import { StorageService } from "../storage/storage.service";
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -57,10 +56,7 @@ interface NominatimResult {
 
 @Injectable()
 export class CitiesService {
-  constructor(
-    private prisma: PrismaService,
-    private storage: StorageService,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   // ── Geocoding via Nominatim ────────────────────────────────────────────────
 
@@ -181,26 +177,5 @@ export class CitiesService {
       where: { id },
       data: dto as Parameters<typeof this.prisma.city.update>[0]["data"],
     });
-  }
-
-  // ── Logo upload ───────────────────────────────────────────────────────────
-
-  async uploadLogo(
-    id: string,
-    buffer: Buffer,
-    mimetype: string,
-  ): Promise<{ logoUrl: string }> {
-    // Ensure city exists
-    const city = await this.prisma.city.findUnique({ where: { id } });
-    if (!city) throw new NotFoundException(`City ${id} not found`);
-
-    let ext = mimetype.split("/")[1] ?? "png";
-    if (ext === "jpeg") ext = "jpg";
-
-    const key = `cities/${id}/logo.${ext}`;
-    const logoUrl = await this.storage.upload(key, buffer, mimetype);
-
-    await this.prisma.city.update({ where: { id }, data: { logoUrl } });
-    return { logoUrl };
   }
 }
