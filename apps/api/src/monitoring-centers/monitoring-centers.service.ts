@@ -72,7 +72,7 @@ export class MonitoringCentersService {
       where: projectId ? { projectId } : undefined,
       include: {
         project: { include: { city: true } },
-        _count: { select: { routes: true } },
+        _count: { select: { routes: true, centerAssets: true } },
       },
       orderBy: { name: "asc" },
     });
@@ -84,6 +84,7 @@ export class MonitoringCentersService {
       include: {
         project: { include: { city: true } },
         routes: { include: { _count: { select: { nodes: true } } } },
+        centerAssets: { orderBy: [{ assetType: "asc" }, { name: "asc" }] },
       },
     });
   }

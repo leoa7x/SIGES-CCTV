@@ -3,6 +3,31 @@ import test from "node:test";
 
 import { MonitoringCentersService } from "./monitoring-centers.service";
 
+test("findOne includes center assets for CMC topology and admin screens", async () => {
+  let includeArgs: Record<string, unknown> | null = null;
+
+  const prisma = {
+    monitoringCenter: {
+      findUniqueOrThrow: async (args: Record<string, unknown>) => {
+        includeArgs = args;
+        return { id: "center-1" };
+      },
+    },
+  };
+
+  const service = new MonitoringCentersService(prisma as any);
+  await service.findOne("center-1");
+
+  assert.deepEqual(includeArgs, {
+    where: { id: "center-1" },
+    include: {
+      project: { include: { city: true } },
+      routes: { include: { _count: { select: { nodes: true } } } },
+      centerAssets: { orderBy: [{ assetType: "asc" }, { name: "asc" }] },
+    },
+  });
+});
+
 test("update geocodes the CMC when coordinates are omitted and the project city is available", async () => {
   let updatedData: Record<string, unknown> | null = null;
 
