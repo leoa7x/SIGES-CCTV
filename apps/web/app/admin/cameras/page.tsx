@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { OpsShell } from "../../../components/ops-shell";
 import { OpsModal } from "../../../components/ops-modal";
+import { OpsNotice } from "../../../components/ops-notice";
 import { useAuth } from "../../../components/auth-provider";
+import { toUserFacingError } from "../../../lib/presentation";
 import {
   fetchCameraPreviewMedia,
   apiGet,
@@ -53,17 +55,21 @@ export default function CamerasPage() {
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const previewAbort = useRef<AbortController | null>(null);
   const previewImage = useRef<string | null>(null);
+  const [loadError, setLoadError] = useState("");
 
   const load = useCallback(async () => {
     if (!accessToken) return;
     setLoading(true);
+    setLoadError("");
     try {
       const [c, n] = await Promise.all([
         apiGet<CameraItem[]>("/cameras", accessToken),
         apiGet<NodeRef[]>("/nodes", accessToken),
       ]);
       setItems(c); setNodes(n);
-    } catch { } finally { setLoading(false); }
+    } catch (err) {
+      setLoadError(toUserFacingError(err, "No se pudieron cargar las cámaras."));
+    } finally { setLoading(false); }
   }, [accessToken]);
 
   useEffect(() => { load(); }, [load]);
@@ -119,9 +125,19 @@ export default function CamerasPage() {
         const status = await pollPreviewStatus(previewSession.sessionId, accessToken);
         if (cancelled) return;
         setPreviewStatus(status);
-        if (status.status === "starting" || status.status === "live") timer = setTimeout(checkStatus, 2_000);
+        if (status.status === "starting" || status.status === "live") {
+          timer = setTimeout(checkStatus, 2_000);
+        } else {
+          // The session ended (failed/expired) — drop the last MJPEG frame so
+          // the "Sesión vencida"/"Sin señal" message isn't hidden behind what
+          // looks like a still-live picture.
+          releasePreviewImage();
+        }
       } catch {
-        if (!cancelled) setPreviewStatus({ status: "failed" });
+        if (!cancelled) {
+          setPreviewStatus({ status: "failed" });
+          releasePreviewImage();
+        }
       }
     };
     timer = setTimeout(checkStatus, 500);
@@ -173,6 +189,11 @@ export default function CamerasPage() {
 
   return (
     <OpsShell eyebrow="Administración" title="Cámaras">
+      {loadError ? (
+        <div className="mb-4">
+          <OpsNotice tone="error" title="No se pudo cargar la información" message={loadError} onDismiss={() => setLoadError("")} />
+        </div>
+      ) : null}
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-ops-muted">{items.length} cámaras</p>
         <button onClick={openCreate} className="rounded-ops bg-ops-blue px-4 py-2 text-sm font-semibold text-white hover:bg-ops-blue/80">+ Nueva cámara</button>

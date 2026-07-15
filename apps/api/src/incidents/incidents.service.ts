@@ -1,7 +1,15 @@
-import { Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable } from "@nestjs/common";
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from "class-validator";
-import { IncidentSeverity, IncidentStatus } from "@prisma/client";
+import { IncidentSeverity, IncidentStatus, UserRole } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+
+// VIEWER is the read-only role — writing to the incident log must stay
+// restricted to staff who actually work incidents, not passive observers.
+function assertCanWriteIncidents(requesterRole: UserRole) {
+  if (requesterRole === UserRole.VIEWER) {
+    throw new ForbiddenException("Viewers cannot create or update incidents");
+  }
+}
 
 export class CreateIncidentDto {
   @IsString() @IsNotEmpty() title!: string;
@@ -47,7 +55,8 @@ export class IncidentsService {
     });
   }
 
-  create(dto: CreateIncidentDto) {
+  create(dto: CreateIncidentDto, requesterRole: UserRole) {
+    assertCanWriteIncidents(requesterRole);
     const { nodeId, cameraId, centerId, assignedUserId, ...rest } = dto;
     return this.prisma.incident.create({
       data: {
@@ -60,7 +69,8 @@ export class IncidentsService {
     });
   }
 
-  update(id: string, dto: UpdateIncidentDto) {
+  update(id: string, dto: UpdateIncidentDto, requesterRole: UserRole) {
+    assertCanWriteIncidents(requesterRole);
     const { assignedUserId, ...rest } = dto;
     return this.prisma.incident.update({
       where: { id },

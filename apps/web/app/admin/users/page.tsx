@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { OpsNotice } from "../../../components/ops-notice";
 import { OpsShell } from "../../../components/ops-shell";
 import { OpsModal } from "../../../components/ops-modal";
 import { useAuth } from "../../../components/auth-provider";
 import { apiGet, apiPatch, apiPost } from "../../../lib/api";
+import { formatLifecycleState, formatRoleLabel, toUserFacingError } from "../../../lib/presentation";
 import {
   ALL_PERMISSIONS,
   normalizePermissionsForRole,
@@ -38,12 +40,15 @@ export default function UsersPage() {
   const [createForm, setCreateForm] = useState<CreateForm>({ email: "", password: "", name: "", role: "OPERATOR", permissions: [] });
   const [editForm, setEditForm] = useState<EditForm>({ name: "", role: "OPERATOR", state: "ACTIVE", permissions: [] });
   const [saving, setSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const load = useCallback(async () => {
     if (!accessToken) return;
     setLoading(true);
+    setErrorMessage("");
     try { setItems(await apiGet<UserItem[]>("/users", accessToken)); }
-    catch { } finally { setLoading(false); }
+    catch (err) { setErrorMessage(toUserFacingError(err, "No se pudieron cargar los usuarios.")); }
+    finally { setLoading(false); }
   }, [accessToken]);
 
   useEffect(() => { load(); }, [load]);
@@ -83,6 +88,7 @@ export default function UsersPage() {
     e.preventDefault();
     if (!accessToken) return;
     setSaving(true);
+    setErrorMessage("");
     try {
       if (editing) {
         await apiPatch(`/users/${editing.id}`, accessToken, {
@@ -100,7 +106,9 @@ export default function UsersPage() {
         });
       }
       closeModal(); await load();
-    } catch (err) { console.error(err); } finally { setSaving(false); }
+    } catch (err) {
+      setErrorMessage(toUserFacingError(err, "No se pudo guardar el usuario."));
+    } finally { setSaving(false); }
   }
 
   return (
@@ -109,6 +117,11 @@ export default function UsersPage() {
         <p className="text-sm text-ops-muted">{items.length} usuarios</p>
         <button onClick={openCreate} className="rounded-ops bg-ops-blue px-4 py-2 text-sm font-semibold text-white hover:bg-ops-blue/80">+ Nuevo usuario</button>
       </div>
+      {errorMessage ? (
+        <div className="mb-4">
+          <OpsNotice tone="error" title="No se pudo completar la acción" message={errorMessage} onDismiss={() => setErrorMessage("")} />
+        </div>
+      ) : null}
       {loading ? (
         <div className="flex justify-center py-16"><div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" /></div>
       ) : (
@@ -130,7 +143,7 @@ export default function UsersPage() {
                   <td className="px-4 py-3 font-medium text-ops-text">{item.name ?? "—"}</td>
                   <td className="px-4 py-3 text-ops-muted">{item.email}</td>
                   <td className="px-4 py-3">
-                    <span className={`rounded border px-2 py-0.5 text-[9px] font-bold uppercase ${ROLE_COLOR[item.role] ?? ""}`}>{item.role}</span>
+                    <span className={`rounded border px-2 py-0.5 text-[9px] font-bold uppercase ${ROLE_COLOR[item.role] ?? ""}`}>{formatRoleLabel(item.role)}</span>
                   </td>
                   <td className="px-4 py-3 text-xs text-ops-muted">
                     {shouldRoleUseGranularPermissions(item.role)
@@ -140,7 +153,7 @@ export default function UsersPage() {
                       : "Acceso total"}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${item.state === "ACTIVE" ? "border-ops-emerald/30 bg-ops-emerald/10 text-ops-emerald" : "border-ops-border bg-ops-surface text-ops-muted"}`}>{item.state}</span>
+                    <span className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${item.state === "ACTIVE" ? "border-ops-emerald/30 bg-ops-emerald/10 text-ops-emerald" : "border-ops-border bg-ops-surface text-ops-muted"}`}>{formatLifecycleState(item.state)}</span>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button onClick={() => openEdit(item)} className="text-[11px] text-ops-blue hover:underline">Editar</button>
@@ -177,7 +190,7 @@ export default function UsersPage() {
               onChange={(e) => editing
                 ? setEditForm((f) => ({ ...f, role: e.target.value, permissions: normalizePermissionsForRole(e.target.value, f.permissions) }))
                 : setCreateForm((f) => ({ ...f, role: e.target.value, permissions: normalizePermissionsForRole(e.target.value, f.permissions) }))}>
-              {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+              {ROLES.map((r) => <option key={r} value={r}>{formatRoleLabel(r)}</option>)}
             </select>
           </div>
           {shouldRoleUseGranularPermissions(editing ? editForm.role : createForm.role) ? (
@@ -211,8 +224,8 @@ export default function UsersPage() {
             <div className="space-y-1">
               <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Estado</label>
               <select className={INPUT} value={editForm.state} onChange={(e) => setEditForm((f) => ({ ...f, state: e.target.value }))}>
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="INACTIVE">INACTIVE</option>
+                <option value="ACTIVE">{formatLifecycleState("ACTIVE")}</option>
+                <option value="INACTIVE">{formatLifecycleState("INACTIVE")}</option>
               </select>
             </div>
           )}

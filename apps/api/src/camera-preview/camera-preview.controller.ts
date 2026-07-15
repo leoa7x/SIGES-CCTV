@@ -1,15 +1,15 @@
 import { Controller, Get, Header, Param, Post, Req, Res, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
-import { UserRole } from "@prisma/client";
+import { Permission } from "@prisma/client";
 import type { Request, Response } from "express";
-import { Roles } from "../common/decorators/roles.decorator";
-import { RolesGuard } from "../common/guards/roles.guard";
+import { RequirePermissions } from "../common/decorators/permissions.decorator";
+import { PermissionsGuard } from "../common/guards/permissions.guard";
 import { CameraPreviewService } from "./camera-preview.service";
 
 type AuthenticatedRequest = Request & { user: { id: string } };
 
-@UseGuards(AuthGuard("jwt"), RolesGuard)
-@Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.SUPERVISOR)
+@UseGuards(AuthGuard("jwt"), PermissionsGuard)
+@RequirePermissions(Permission.CAMERA_PREVIEW)
 @Controller("cameras")
 export class CameraPreviewController {
   constructor(private readonly preview: CameraPreviewService) {}

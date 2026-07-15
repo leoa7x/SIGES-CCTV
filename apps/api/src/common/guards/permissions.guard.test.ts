@@ -31,6 +31,18 @@ test("PermissionsGuard allows ADMIN and SUPER_ADMIN to bypass granular permissio
   );
 });
 
+test("PermissionsGuard allows any authenticated user when a handler overrides with an empty permission list", () => {
+  const reflector = {
+    getAllAndOverride: () => [],
+  } as unknown as Reflector;
+  const guard = new PermissionsGuard(reflector);
+
+  assert.equal(
+    guard.canActivate(buildContext({ role: UserRole.VIEWER, permissions: [] })),
+    true,
+  );
+});
+
 test("PermissionsGuard requires matching permissions for non-admin roles", () => {
   const reflector = {
     getAllAndOverride: () => [Permission.MANAGE_USERS],

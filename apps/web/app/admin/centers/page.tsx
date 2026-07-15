@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { OpsShell } from "../../../components/ops-shell";
 import { OpsModal } from "../../../components/ops-modal";
+import { OpsNotice } from "../../../components/ops-notice";
 import { useAuth } from "../../../components/auth-provider";
 import { apiGet, apiPatch, apiPost } from "../../../lib/api";
+import { formatLifecycleState, toUserFacingError } from "../../../lib/presentation";
 
 type CenterItem = {
   id: string;
@@ -46,17 +48,21 @@ export default function CentersPage() {
     name: "", address: "", phone: "", contactName: "", lat: "", lng: "", state: "ACTIVE",
   });
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   const load = useCallback(async () => {
     if (!accessToken) return;
     setLoading(true);
+    setLoadError("");
     try {
       const [c, p] = await Promise.all([
         apiGet<CenterItem[]>("/monitoring-centers", accessToken),
         apiGet<ProjectRef[]>("/projects", accessToken),
       ]);
       setItems(c); setProjects(p);
-    } catch { } finally { setLoading(false); }
+    } catch (err) {
+      setLoadError(toUserFacingError(err, "No se pudieron cargar los centros de monitoreo."));
+    } finally { setLoading(false); }
   }, [accessToken]);
 
   useEffect(() => { load(); }, [load]);
@@ -116,11 +122,16 @@ export default function CentersPage() {
       }
       closeModal();
       await load();
-    } catch (err) { console.error(err); } finally { setSaving(false); }
+    } catch (err) { console.error(toUserFacingError(err, "No se pudo guardar el centro de monitoreo.")); } finally { setSaving(false); }
   }
 
   return (
     <OpsShell eyebrow="Administración" title="Centros de Monitoreo (CMC)">
+      {loadError ? (
+        <div className="mb-4">
+          <OpsNotice tone="error" title="No se pudo cargar la información" message={loadError} onDismiss={() => setLoadError("")} />
+        </div>
+      ) : null}
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-ops-muted">{items.length} centros</p>
         <button onClick={openCreate} className="rounded-ops bg-ops-blue px-4 py-2 text-sm font-semibold text-white hover:bg-ops-blue/80">
@@ -173,7 +184,7 @@ export default function CentersPage() {
                   <td className="px-4 py-3 tabular-nums text-ops-muted">{item._count.routes}</td>
                   <td className="px-4 py-3">
                     <span className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${item.state === "ACTIVE" ? "border-ops-emerald/30 bg-ops-emerald/10 text-ops-emerald" : "border-ops-border bg-ops-surface text-ops-muted"}`}>
-                      {item.state}
+                      {formatLifecycleState(item.state)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -247,9 +258,9 @@ export default function CentersPage() {
               <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Estado</label>
               <select className={INPUT} value={editForm.state}
                 onChange={(e) => setEditForm((f) => ({ ...f, state: e.target.value }))}>
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="INACTIVE">INACTIVE</option>
-                <option value="ARCHIVED">ARCHIVED</option>
+                <option value="ACTIVE">{formatLifecycleState("ACTIVE")}</option>
+                <option value="INACTIVE">{formatLifecycleState("INACTIVE")}</option>
+                <option value="ARCHIVED">{formatLifecycleState("ARCHIVED")}</option>
               </select>
             </div>
           )}

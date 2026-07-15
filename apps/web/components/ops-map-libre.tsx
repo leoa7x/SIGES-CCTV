@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { removeMapArtifacts } from "../lib/maplibre-cleanup";
+import { computeMapBounds } from "../lib/map-viewport";
 
 export type NodeGeo = {
   id: string;
@@ -230,16 +231,12 @@ export default function OpsMapLibre({
         map.getCanvas().style.cursor = "";
       });
 
-      if (nodes.length > 0) {
-        const lngs = nodes.map((n) => n.lng);
-        const lats = nodes.map((n) => n.lat);
-        map.fitBounds(
-          [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
-          { padding: 60, maxZoom: 14 }
-        );
+      const bounds = computeMapBounds(nodes, centers ?? []);
+      if (bounds) {
+        map.fitBounds(bounds, { padding: 60, maxZoom: 14 });
       }
     }
-  }, [nodes, mapReady]);
+  }, [nodes, centers, mapReady]);
 
   // Fiber layer setup — sources, layers, and animation loop
   useEffect(() => {

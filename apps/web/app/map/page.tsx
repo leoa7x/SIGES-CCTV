@@ -3,8 +3,10 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState, useCallback } from "react";
 import { OpsShell } from "../../components/ops-shell";
+import { OpsNotice } from "../../components/ops-notice";
 import { useAuth } from "../../components/auth-provider";
 import { apiGet, apiPatch, apiPost } from "../../lib/api";
+import { toUserFacingError } from "../../lib/presentation";
 import type { NodeGeo, CenterGeo, FiberSegmentGeo } from "../../components/ops-map-libre";
 import { useMonitorAll } from "../../hooks/use-monitor-all";
 
@@ -64,9 +66,11 @@ export default function MapPage() {
   const [drawWaypoints, setDrawWaypoints] = useState<[number, number][]>([]);
   const [savingSegment, setSavingSegment] = useState(false);
   const [toasts, setToasts] = useState<FiberToast[]>([]);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     if (!accessToken) { setLoading(false); return; }
+    setLoadError("");
     Promise.all([
       apiGet<NodeItem[]>("/nodes", accessToken),
       apiGet<CenterApiItem[]>("/monitoring-centers", accessToken),
@@ -89,7 +93,7 @@ export default function MapPage() {
             })),
         );
       })
-      .catch(console.error)
+      .catch((err) => setLoadError(toUserFacingError(err, "No se pudo cargar el mapa de red.")))
       .finally(() => setLoading(false));
   }, [accessToken]);
 
@@ -251,6 +255,11 @@ export default function MapPage() {
 
   return (
     <OpsShell eyebrow="GIS" title="Mapa de Red CCTV">
+      {loadError ? (
+        <div className="mb-3">
+          <OpsNotice tone="error" title="No se pudo cargar la información" message={loadError} onDismiss={() => setLoadError("")} />
+        </div>
+      ) : null}
       <div className="flex h-[calc(100vh-10rem)] gap-3">
         {/* Map container */}
         <div className="relative flex-1 overflow-hidden rounded-ops border border-ops-border bg-ops-panel">
@@ -415,7 +424,6 @@ export default function MapPage() {
       </p>
 
       {/* Fiber alert toasts — bottom-right stack */}
-      {/* TODO: add "Centrar en mapa" flyTo button once map instance is exposed via onMapReady prop */}
       {toasts.length > 0 && (
         <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
           {toasts.map((t) => (

@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { OpsNotice } from "../../../components/ops-notice";
 import { OpsShell } from "../../../components/ops-shell";
 import { OpsModal } from "../../../components/ops-modal";
 import { useAuth } from "../../../components/auth-provider";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../../../lib/api";
+import { formatLifecycleState, toUserFacingError } from "../../../lib/presentation";
 import { tabClass } from "../../../lib/ui";
 
 type RouteItem = {
@@ -241,6 +243,7 @@ export default function RoutesPage() {
   const [deletingPointId, setDeletingPointId] = useState("");
   const [deletingCableId, setDeletingCableId] = useState("");
   const [deletingSpliceId, setDeletingSpliceId] = useState("");
+  const [feedback, setFeedback] = useState<{ tone: "warning" | "error"; title: string; message: string } | null>(null);
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -358,6 +361,7 @@ export default function RoutesPage() {
     e.preventDefault();
     if (!accessToken) return;
     setSaving(true);
+    setFeedback(null);
     try {
       if (editing) {
         await apiPatch(`/routes/${editing.id}`, accessToken, editForm);
@@ -367,7 +371,7 @@ export default function RoutesPage() {
       setModalOpen(false);
       await load();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "No se pudo guardar la ruta.");
+      setFeedback({ tone: "error", title: "No se pudo guardar la ruta", message: toUserFacingError(error, "Verifica los datos e inténtalo de nuevo.") });
     } finally {
       setSaving(false);
     }
@@ -376,7 +380,11 @@ export default function RoutesPage() {
   async function handleDeleteRoute(item: RouteItem) {
     if (!accessToken) return;
     if (item._count.nodes > 0) {
-      window.alert(`No se puede eliminar ${item.identifier} porque todavía tiene ${item._count.nodes} nodos asociados.`);
+      setFeedback({
+        tone: "warning",
+        title: "Ruta bloqueada",
+        message: `No se puede eliminar ${item.identifier} porque todavía tiene ${item._count.nodes} nodos asociados.`,
+      });
       return;
     }
     if (!window.confirm(`Eliminar la ruta ${item.identifier} y toda su documentación de fibra?`)) return;
@@ -391,7 +399,7 @@ export default function RoutesPage() {
       }
       await load();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "No se pudo eliminar la ruta.");
+      setFeedback({ tone: "error", title: "No se pudo eliminar la ruta", message: toUserFacingError(error, "Inténtalo nuevamente en unos segundos.") });
     } finally {
       setDeletingRouteId("");
     }
@@ -401,6 +409,7 @@ export default function RoutesPage() {
     e.preventDefault();
     if (!accessToken || !routeDetail) return;
     setSaving(true);
+    setFeedback(null);
     try {
       if (pointForm.kind === "NODE") {
         const selectedNode = routeDetail.nodes.find((node) => node.id === pointForm.nodeId);
@@ -436,7 +445,7 @@ export default function RoutesPage() {
       }
       await loadRouteDetail(routeDetail.id);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "No se pudo guardar el punto.");
+      setFeedback({ tone: "error", title: "No se pudo guardar el punto", message: toUserFacingError(error, "Revisa la información del punto e inténtalo de nuevo.") });
     } finally {
       setSaving(false);
     }
@@ -446,6 +455,7 @@ export default function RoutesPage() {
     e.preventDefault();
     if (!accessToken || !routeDetail) return;
     setSaving(true);
+    setFeedback(null);
     try {
       await apiPost("/fiber-cables", accessToken, {
         routeId: routeDetail.id,
@@ -460,7 +470,7 @@ export default function RoutesPage() {
       });
       await loadRouteDetail(routeDetail.id);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "No se pudo guardar el cable.");
+      setFeedback({ tone: "error", title: "No se pudo guardar el cable", message: toUserFacingError(error, "Revisa el trazado y la capacidad del cable.") });
     } finally {
       setSaving(false);
     }
@@ -470,6 +480,7 @@ export default function RoutesPage() {
     e.preventDefault();
     if (!accessToken || !routeDetail || !legForm.spliceId) return;
     setSaving(true);
+    setFeedback(null);
     try {
       await apiPost(`/splices/${legForm.spliceId}/legs`, accessToken, {
         fiberCableId: legForm.fiberCableId,
@@ -481,7 +492,7 @@ export default function RoutesPage() {
       });
       await loadRouteDetail(routeDetail.id);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "No se pudo guardar la pata del empalme.");
+      setFeedback({ tone: "error", title: "No se pudo guardar la pata del empalme", message: toUserFacingError(error, "Verifica cable, dirección y reserva antes de reintentar.") });
     } finally {
       setSaving(false);
     }
@@ -491,6 +502,7 @@ export default function RoutesPage() {
     e.preventDefault();
     if (!accessToken || !routeDetail || !blockForm.spliceId) return;
     setSaving(true);
+    setFeedback(null);
     try {
       await apiPost(`/splices/${blockForm.spliceId}/block-inputs`, accessToken, {
         fromLegId: blockForm.fromLegId,
@@ -505,7 +517,7 @@ export default function RoutesPage() {
       await apiPost(`/splices/${blockForm.spliceId}/expand-blocks`, accessToken, {});
       await loadRouteDetail(routeDetail.id);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "No se pudo guardar el bloque de fusión.");
+      setFeedback({ tone: "error", title: "No se pudo guardar el bloque de fusión", message: toUserFacingError(error, "Revisa los rangos de fibras antes de reintentar.") });
     } finally {
       setSaving(false);
     }
@@ -515,6 +527,7 @@ export default function RoutesPage() {
     e.preventDefault();
     if (!accessToken || !routeDetail) return;
     setSaving(true);
+    setFeedback(null);
     try {
       if (editingPoint) {
         await apiPatch(`/fiber-points/${editingPoint.id}`, accessToken, {
@@ -540,7 +553,7 @@ export default function RoutesPage() {
       closeInventoryModal();
       await loadRouteDetail(routeDetail.id);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "No se pudo guardar el cambio.");
+      setFeedback({ tone: "error", title: "No se pudo guardar el cambio", message: toUserFacingError(error, "Verifica la información editada e inténtalo nuevamente.") });
     } finally {
       setSaving(false);
     }
@@ -558,7 +571,7 @@ export default function RoutesPage() {
       }
       await loadRouteDetail(routeDetail.id);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "No se pudo eliminar el punto.");
+      setFeedback({ tone: "error", title: "No se pudo eliminar el punto", message: toUserFacingError(error, "Inténtalo nuevamente en unos segundos.") });
     } finally {
       setDeletingPointId("");
     }
@@ -576,7 +589,7 @@ export default function RoutesPage() {
       }
       await loadRouteDetail(routeDetail.id);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "No se pudo eliminar el cable.");
+      setFeedback({ tone: "error", title: "No se pudo eliminar el cable", message: toUserFacingError(error, "Inténtalo nuevamente en unos segundos.") });
     } finally {
       setDeletingCableId("");
     }
@@ -597,7 +610,7 @@ export default function RoutesPage() {
       }
       await loadRouteDetail(routeDetail.id);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "No se pudo eliminar el empalme.");
+      setFeedback({ tone: "error", title: "No se pudo eliminar el empalme", message: toUserFacingError(error, "Inténtalo nuevamente en unos segundos.") });
     } finally {
       setDeletingSpliceId("");
     }
@@ -624,6 +637,11 @@ export default function RoutesPage() {
         <p className="text-sm text-ops-muted">{items.length} rutas</p>
         <button onClick={openCreate} className="rounded-ops bg-ops-blue px-4 py-2 text-sm font-semibold text-white hover:bg-ops-blue/80">+ Nueva ruta</button>
       </div>
+      {feedback ? (
+        <div className="mb-4">
+          <OpsNotice tone={feedback.tone} title={feedback.title} message={feedback.message} onDismiss={() => setFeedback(null)} />
+        </div>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_1.4fr] xl:items-start">
         <section className={`${PANEL} xl:sticky xl:top-6`}>
@@ -1072,8 +1090,8 @@ export default function RoutesPage() {
             <div className="space-y-1">
               <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Estado</label>
               <select className={INPUT} value={editForm.state} onChange={(e) => setEditForm((f) => ({ ...f, state: e.target.value }))}>
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="INACTIVE">INACTIVE</option>
+                <option value="ACTIVE">{formatLifecycleState("ACTIVE")}</option>
+                <option value="INACTIVE">{formatLifecycleState("INACTIVE")}</option>
               </select>
             </div>
           )}

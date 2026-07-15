@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { OpsShell } from "../../components/ops-shell";
 import { OpsModal } from "../../components/ops-modal";
+import { OpsNotice } from "../../components/ops-notice";
 import { useAuth } from "../../components/auth-provider";
 import { apiGet, apiPatch, apiPost } from "../../lib/api";
+import { formatLifecycleState, toUserFacingError } from "../../lib/presentation";
 
 type Project = {
   id: string; name: string; client: string; contract: string | null;
@@ -35,9 +37,12 @@ export default function ProjectsPage() {
   const [editForm, setEditForm] = useState<EditForm>({ name: "", client: "", contract: "", state: "ACTIVE" });
   const [saving, setSaving] = useState(false);
 
+  const [loadError, setLoadError] = useState("");
+
   const load = useCallback(async () => {
     if (!accessToken) return;
     setLoading(true);
+    setLoadError("");
     try {
       const [p, c] = await Promise.all([
         apiGet<Project[]>("/projects", accessToken),
@@ -45,7 +50,9 @@ export default function ProjectsPage() {
       ]);
       setProjects(p);
       setCities(c);
-    } catch { } finally { setLoading(false); }
+    } catch (err) {
+      setLoadError(toUserFacingError(err, "No se pudieron cargar los proyectos."));
+    } finally { setLoading(false); }
   }, [accessToken]);
 
   useEffect(() => { load(); }, [load]);
@@ -82,11 +89,16 @@ export default function ProjectsPage() {
       }
       closeModal();
       await load();
-    } catch (err) { console.error(err); } finally { setSaving(false); }
+    } catch (err) { console.error(toUserFacingError(err, "No se pudo guardar el proyecto.")); } finally { setSaving(false); }
   }
 
   return (
     <OpsShell eyebrow="Estructura" title="Proyectos">
+      {loadError ? (
+        <div className="mb-4">
+          <OpsNotice tone="error" title="No se pudo cargar la información" message={loadError} onDismiss={() => setLoadError("")} />
+        </div>
+      ) : null}
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-ops-muted">{projects.length} proyectos</p>
         <button onClick={openCreate} className="rounded-ops bg-ops-blue px-4 py-2 text-sm font-semibold text-white hover:bg-ops-blue/80">
@@ -108,7 +120,7 @@ export default function ProjectsPage() {
             <div key={p.id} className="rounded-ops border border-ops-border bg-ops-panel p-5 shadow-ops transition hover:border-ops-blue/30">
               <div className="mb-3 flex items-start justify-between gap-2">
                 <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase ${STATE_COLOR[p.state] ?? ""}`}>
-                  {p.state}
+                  {formatLifecycleState(p.state)}
                 </span>
                 <p className="text-right text-[10px] text-ops-dim">
                   {new Intl.DateTimeFormat("es-CO", { dateStyle: "short" }).format(new Date(p.startDate))}
@@ -171,9 +183,9 @@ export default function ProjectsPage() {
               <div className="space-y-1">
                 <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Estado</label>
                 <select className={INPUT} value={editForm.state} onChange={(e) => setEditForm((f) => ({ ...f, state: e.target.value }))}>
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="INACTIVE">INACTIVE</option>
-                  <option value="ARCHIVED">ARCHIVED</option>
+                  <option value="ACTIVE">{formatLifecycleState("ACTIVE")}</option>
+                  <option value="INACTIVE">{formatLifecycleState("INACTIVE")}</option>
+                  <option value="ARCHIVED">{formatLifecycleState("ARCHIVED")}</option>
                 </select>
               </div>
             </>

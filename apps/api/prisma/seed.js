@@ -37,8 +37,11 @@ const client_1 = require("@prisma/client");
 const bcrypt = __importStar(require("bcrypt"));
 const prisma = new client_1.PrismaClient();
 async function main() {
-    const email = process.env.SEED_ADMIN_EMAIL ?? "admin@sigescctv.co";
-    const password = process.env.SEED_ADMIN_PASSWORD ?? "Admin1234!";
+    const email = process.env.SEED_ADMIN_EMAIL;
+    const password = process.env.SEED_ADMIN_PASSWORD;
+    if (!email || !password) {
+        throw new Error("SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are required for db:seed");
+    }
     const existing = await prisma.user.findUnique({ where: { email } });
     if (!existing) {
         await prisma.user.create({

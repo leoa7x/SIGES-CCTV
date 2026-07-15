@@ -35,21 +35,42 @@ export class OpsGateway implements OnGatewayConnection, OnGatewayDisconnect, OnM
     this.consumer = kafka.consumer({ groupId: "siges-gateway-group" });
   }
 
+  private destroyed = false;
+
+  // Real-time state-change broadcasts are a nice-to-have on top of the REST
+  // API, not core functionality — if Redpanda is unreachable at boot, an
+  // unguarded await here would reject onModuleInit and take the ENTIRE API
+  // down with it (NestJS won't finish bootstrapping). Retry with backoff
+  // instead so the rest of the app stays up and this self-heals once the
+  // broker is reachable.
   async onModuleInit() {
-    await this.consumer.connect();
-    await this.consumer.subscribe({ topic: "siges.state-changes", fromBeginning: false });
-    await this.consumer.run({
-      eachMessage: async ({ message }) => {
-        if (!message.value) return;
-        const payload = JSON.parse(message.value.toString()) as StateChangePayload;
-        this.server.to(`cmc:${payload.centerId}`).emit("state-change", payload);
-      },
-    });
-    this.logger.log("Kafka consumer connected — listening on siges.state-changes");
+    await this.connectWithRetry();
+  }
+
+  private async connectWithRetry(delayMs = 5_000) {
+    if (this.destroyed) return;
+    try {
+      await this.consumer.connect();
+      await this.consumer.subscribe({ topic: "siges.state-changes", fromBeginning: false });
+      await this.consumer.run({
+        eachMessage: async ({ message }) => {
+          if (!message.value) return;
+          const payload = JSON.parse(message.value.toString()) as StateChangePayload;
+          this.server.to(`cmc:${payload.centerId}`).emit("state-change", payload);
+        },
+      });
+      this.logger.log("Kafka consumer connected — listening on siges.state-changes");
+    } catch (error) {
+      this.logger.warn(
+        `Kafka consumer unavailable, retrying in ${delayMs}ms: ${error instanceof Error ? error.message : error}`,
+      );
+      setTimeout(() => void this.connectWithRetry(Math.min(delayMs * 2, 60_000)), delayMs).unref();
+    }
   }
 
   async onModuleDestroy() {
-    await this.consumer.disconnect();
+    this.destroyed = true;
+    await this.consumer.disconnect().catch(() => undefined);
   }
 
   handleConnection(client: Socket) {

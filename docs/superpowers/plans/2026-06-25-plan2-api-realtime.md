@@ -755,7 +755,7 @@ Kafka consumer connected — listening on siges.state-changes
 # Obtener token primero
 TOKEN=$(curl -s -X POST http://localhost:4001/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@sigescctv.co","password":"Admin1234!"}' | jq -r .accessToken)
+  -d '{"email":"<admin-email>","password":"<admin-password>"}' | jq -r .accessToken)
 
 # Test internal endpoint con MONITOR_API_TOKEN de .env
 MONITOR_TOKEN=$(grep MONITOR_API_TOKEN /mnt/c/Users/ingel/SIGES-CCTV/.env 2>/dev/null | cut -d= -f2 || echo "test-monitor-token")

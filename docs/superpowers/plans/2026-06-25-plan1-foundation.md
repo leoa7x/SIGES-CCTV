@@ -394,14 +394,14 @@ Salida esperada: `SIGES-CCTV API running on port 4001`
 ```bash
 curl -s -X POST http://localhost:4001/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@sigescctv.co","password":"Admin1234!"}' | jq .
+  -d '{"email":"<admin-email>","password":"<admin-password>"}' | jq .
 ```
 
 Salida esperada:
 ```json
 {
   "accessToken": "eyJ...",
-  "user": { "id": "...", "email": "admin@sigescctv.co", "role": "SUPER_ADMIN" }
+  "user": { "id": "...", "email": "<admin-email>", "role": "SUPER_ADMIN" }
 }
 ```
 

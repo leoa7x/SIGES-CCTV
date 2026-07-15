@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { OpsShell } from "../../components/ops-shell";
 import { OpsModal } from "../../components/ops-modal";
+import { OpsNotice } from "../../components/ops-notice";
 import { useAuth } from "../../components/auth-provider";
 import { apiGet, apiPost } from "../../lib/api";
+import { toUserFacingError } from "../../lib/presentation";
 
 type Entry = {
   id: string; date: string; activityType: string; observations: string | null; result: string;
@@ -12,7 +14,7 @@ type Entry = {
   node: { code: string; name: string };
 };
 type NodeRef = { id: string; code: string; name: string };
-type UserRef = { id: string; name: string | null; email: string; role: string };
+type UserRef = { id: string; name: string | null; email: string };
 type CreateForm = { activityType: string; observations: string; result: string; technicianId: string; nodeId: string };
 
 const INPUT = "w-full rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-text focus:border-ops-blue focus:outline-none";
@@ -42,18 +44,22 @@ export default function LogbookPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<CreateForm>({ activityType: "INSPECTION", observations: "", result: "SATISFACTORY", technicianId: "", nodeId: "" });
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   const load = useCallback(async () => {
     if (!accessToken) return;
     setLoading(true);
+    setLoadError("");
     try {
       const [e, n, u] = await Promise.all([
         apiGet<Entry[]>("/logbook", accessToken),
         apiGet<NodeRef[]>("/nodes", accessToken),
-        apiGet<UserRef[]>("/users", accessToken),
+        apiGet<UserRef[]>("/users/technicians", accessToken),
       ]);
       setEntries(e); setNodes(n); setUsers(u);
-    } catch { } finally { setLoading(false); }
+    } catch (err) {
+      setLoadError(toUserFacingError(err, "No se pudo cargar la bitácora."));
+    } finally { setLoading(false); }
   }, [accessToken]);
 
   useEffect(() => { load(); }, [load]);
@@ -76,6 +82,11 @@ export default function LogbookPage() {
 
   return (
     <OpsShell eyebrow="Operaciones" title="Bitácora">
+      {loadError ? (
+        <div className="mb-4">
+          <OpsNotice tone="error" title="No se pudo cargar la información" message={loadError} onDismiss={() => setLoadError("")} />
+        </div>
+      ) : null}
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-ops-muted">{entries.length} entradas</p>
         <button onClick={openCreate} className="rounded-ops bg-ops-blue px-4 py-2 text-sm font-semibold text-white hover:bg-ops-blue/80">
@@ -143,7 +154,7 @@ export default function LogbookPage() {
             <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Técnico</label>
             <select className={INPUT} value={form.technicianId} onChange={(e) => setForm((f) => ({ ...f, technicianId: e.target.value }))} required>
               <option value="">Seleccionar…</option>
-              {users.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email} ({u.role})</option>)}
+              {users.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
             </select>
           </div>
           <div className="space-y-1">

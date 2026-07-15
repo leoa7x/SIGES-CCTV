@@ -1,6 +1,6 @@
-import { Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable } from "@nestjs/common";
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from "class-validator";
-import { ActivityType, EntryResult } from "@prisma/client";
+import { ActivityType, EntryResult, UserRole } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 
 export class CreateLogbookEntryDto {
@@ -26,7 +26,12 @@ export class LogbookService {
     });
   }
 
-  create(dto: CreateLogbookEntryDto) {
+  create(dto: CreateLogbookEntryDto, requesterRole: UserRole) {
+    // VIEWER is the read-only role — the field logbook is an audit trail of
+    // work performed and must stay restricted to staff who actually do it.
+    if (requesterRole === UserRole.VIEWER) {
+      throw new ForbiddenException("Viewers cannot create logbook entries");
+    }
     const { technicianId, nodeId, ...rest } = dto;
     return this.prisma.logbookEntry.create({
       data: {

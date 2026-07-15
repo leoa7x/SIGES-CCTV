@@ -11,6 +11,7 @@
     "test:camera-preview": "ts-node --project tsconfig.json src/camera-preview/camera-preview.service.test.ts",
     "test:branding": "ts-node --project tsconfig.json src/branding/branding.service.test.ts",
     "test:permissions": "ts-node --project tsconfig.json src/common/guards/permissions.guard.test.ts",
+    "test:users": "ts-node --project tsconfig.json src/users/users.service.test.ts",
     "test:discovery": "ts-node --project tsconfig.json src/node-discovery/node-discovery.utils.test.ts",
     "test:network-telemetry": "ts-node --project tsconfig.json src/network-telemetry/network-telemetry.service.test.ts",
     "test:observability": "ts-node --project tsconfig.json src/observability/observability.service.test.ts",

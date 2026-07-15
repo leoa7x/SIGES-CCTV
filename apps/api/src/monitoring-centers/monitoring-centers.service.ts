@@ -49,6 +49,24 @@ export class MonitoringCentersService {
     return null;
   }
 
+  private async resolveCoordinatesForCity(
+    cityName: string | undefined,
+    input: { name?: string; address?: string; lat?: number; lng?: number },
+  ): Promise<{ lat: number | undefined; lng: number | undefined }> {
+    let { lat, lng } = input;
+
+    if (lat != null && lng != null) return { lat, lng };
+    if (!cityName) return { lat, lng };
+
+    const searchTerm = input.address ?? input.name;
+    if (!searchTerm) return { lat, lng };
+
+    const coords = await this.geocode(searchTerm, cityName);
+    if (!coords) return { lat, lng };
+
+    return { lat: coords.lat, lng: coords.lng };
+  }
+
   findAll(projectId?: string) {
     return this.prisma.monitoringCenter.findMany({
       where: projectId ? { projectId } : undefined,
@@ -70,34 +88,45 @@ export class MonitoringCentersService {
     });
   }
 
+  private async resolveCoordinatesForProject(
+    projectId: string,
+    input: { name?: string; address?: string; lat?: number; lng?: number },
+  ): Promise<{ lat: number | undefined; lng: number | undefined }> {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      include: { city: true },
+    });
+    return this.resolveCoordinatesForCity(project?.city?.name, input);
+  }
+
   async create(dto: CreateCenterDto) {
     const { projectId, ...rest } = dto;
-    let { lat, lng } = rest;
-
-    if (lat == null || lng == null) {
-      const project = await this.prisma.project.findUnique({
-        where: { id: projectId },
-        include: { city: true },
-      });
-      if (project?.city) {
-        const searchTerm = rest.address ?? rest.name;
-        const coords = await this.geocode(searchTerm, project.city.name);
-        if (coords) {
-          lat = coords.lat;
-          lng = coords.lng;
-        }
-      }
-    }
+    const { lat, lng } = await this.resolveCoordinatesForProject(projectId, rest);
 
     return this.prisma.monitoringCenter.create({
       data: { ...rest, lat, lng, project: { connect: { id: projectId } } },
     });
   }
 
-  update(id: string, dto: UpdateCenterDto) {
+  async update(id: string, dto: UpdateCenterDto) {
+    let data = dto as Parameters<typeof this.prisma.monitoringCenter.update>[0]["data"];
+    if (dto.lat == null || dto.lng == null) {
+      const current = await this.prisma.monitoringCenter.findUniqueOrThrow({
+        where: { id },
+        include: { project: { include: { city: true } } },
+      });
+      const coords = await this.resolveCoordinatesForCity(current.project?.city?.name, {
+        name: dto.name ?? current.name,
+        address: dto.address ?? current.address ?? undefined,
+        lat: dto.lat,
+        lng: dto.lng,
+      });
+      data = { ...dto, lat: coords.lat, lng: coords.lng } as Parameters<typeof this.prisma.monitoringCenter.update>[0]["data"];
+    }
+
     return this.prisma.monitoringCenter.update({
       where: { id },
-      data: dto as Parameters<typeof this.prisma.monitoringCenter.update>[0]["data"],
+      data,
     });
   }
 }

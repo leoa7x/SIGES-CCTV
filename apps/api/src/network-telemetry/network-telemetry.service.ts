@@ -1,4 +1,5 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { timingSafeEqual } from "node:crypto";
 import {
   NetworkTelemetryAlertKind,
   NetworkTelemetryAlertSeverity,
@@ -14,6 +15,12 @@ import {
 } from "./network-telemetry.alerts";
 import { IngestNetworkTelemetryDto } from "./network-telemetry.ingest.dto";
 
+function isMatchingToken(expected: string, received: string): boolean {
+  const expectedBuf = Buffer.from(expected);
+  const receivedBuf = Buffer.from(received);
+  return expectedBuf.length === receivedBuf.length && timingSafeEqual(expectedBuf, receivedBuf);
+}
+
 @Injectable()
 export class NetworkTelemetryService {
   constructor(private prisma: PrismaService) {}
@@ -21,7 +28,7 @@ export class NetworkTelemetryService {
   async ingestWithCollectorAuth(authorization: string | undefined, dto: IngestNetworkTelemetryDto) {
     const expected = process.env.NETWORK_TELEMETRY_INGEST_TOKEN;
     const received = authorization?.replace(/^Bearer\s+/i, "");
-    if (!expected || received !== expected) {
+    if (!expected || !received || !isMatchingToken(expected, received)) {
       throw new UnauthorizedException("Invalid collector token");
     }
     return this.ingestSnapshot(dto);

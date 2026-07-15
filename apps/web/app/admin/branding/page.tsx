@@ -6,6 +6,7 @@ import { OpsModal } from "../../../components/ops-modal";
 import { OpsShell } from "../../../components/ops-shell";
 import { useAuth } from "../../../components/auth-provider";
 import { apiGet, apiPatch, apiPost, apiPostFile } from "../../../lib/api";
+import { formatLifecycleState } from "../../../lib/presentation";
 
 type CityRef = {
   id: string;
@@ -163,7 +164,7 @@ export default function BrandingPage() {
                     {profile.logoUrl ? (
                       <img src={profile.logoUrl} alt={profile.name} className="h-10 w-10 rounded object-contain" />
                     ) : (
-                      <div className="flex h-10 w-10 items-center justify-center rounded border border-ops-border bg-ops-surface text-[9px] text-ops-dim">N/A</div>
+                      <div className="flex h-10 w-10 items-center justify-center rounded border border-ops-border bg-ops-surface px-1 text-center text-[9px] text-ops-dim">Sin logo</div>
                     )}
                   </td>
                   <td className="px-4 py-3 font-medium text-ops-text">{profile.name}</td>
@@ -174,7 +175,7 @@ export default function BrandingPage() {
                   <td className="px-4 py-3 text-ops-muted">{profile.loginMessage ?? "—"}</td>
                   <td className="px-4 py-3">
                     <span className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${profile.isActive ? "border-ops-emerald/30 bg-ops-emerald/10 text-ops-emerald" : "border-ops-border bg-ops-surface text-ops-muted"}`}>
-                      {profile.isActive ? "ACTIVO" : "INACTIVO"}
+                      {formatLifecycleState(profile.isActive ? "ACTIVE" : "INACTIVE")}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">

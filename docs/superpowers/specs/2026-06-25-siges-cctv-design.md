@@ -371,7 +371,7 @@ MONITOR_ONVIF_INTERVAL=120
 ```bash
 docker compose up -d                        # postgres + redis + redpanda
 npm run db:push --workspace=apps/api        # aplica schema Prisma
-npm run db:seed --workspace=apps/api        # usuario admin@sigescctv.co / Admin1234!
+SEED_ADMIN_EMAIL=admin@entidad.gov.co SEED_ADMIN_PASSWORD='<define-una-clave-segura>' npm run db:seed --workspace=apps/api
 npm run dev --workspace=apps/api            # NestJS en :4001
 cd apps/monitor && go run .                 # daemon de polling
 npm run dev --workspace=apps/web            # Next.js en :3001

@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { OpsShell } from "../../components/ops-shell";
+import { OpsNotice } from "../../components/ops-notice";
 import { useAuth } from "../../components/auth-provider";
 import { apiGet } from "../../lib/api";
+import { toUserFacingError } from "../../lib/presentation";
 import { useMonitor } from "../../hooks/use-monitor";
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -81,15 +83,17 @@ export default function TopologyPage() {
   const [loading, setLoading] = useState(true);
   const [selectedCenterId, setSelectedCenterId] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [loadError, setLoadError] = useState("");
 
   // Real-time state updates for the selected CMC
   const lastEvent = useMonitor(selectedCenterId, accessToken);
 
   useEffect(() => {
     if (!accessToken) return;
+    setLoadError("");
     apiGet<NodeFull[]>("/nodes", accessToken)
       .then(setNodes)
-      .catch(console.error)
+      .catch((err) => setLoadError(toUserFacingError(err, "No se pudo cargar la topología.")))
       .finally(() => setLoading(false));
   }, [accessToken]);
 
@@ -129,6 +133,11 @@ export default function TopologyPage() {
 
   return (
     <OpsShell eyebrow="Red CCTV" title="Topología">
+      {loadError ? (
+        <div className="mb-4">
+          <OpsNotice tone="error" title="No se pudo cargar la información" message={loadError} onDismiss={() => setLoadError("")} />
+        </div>
+      ) : null}
       {loading ? (
         <div className="flex items-center gap-2 py-16 text-ops-muted">
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" />

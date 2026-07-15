@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../components/auth-provider";
 import { getApiUrl } from "../../lib/api";
+import { formatLoginSupportText, formatLoginTitle } from "../../lib/presentation";
 import { SessionUser } from "../../lib/session";
 
 type PublicBranding = {
@@ -97,9 +98,9 @@ export default function LoginPage() {
         {/* Card */}
         <div className="rounded-ops-lg border border-ops-border bg-ops-panel p-8 shadow-ops">
           <h2 className="mb-1 text-sm font-semibold uppercase tracking-widest text-ops-blue">
-            Acceso al sistema
+            {formatLoginTitle(branding?.entity?.name)}
           </h2>
-          <p className="mb-6 text-xs text-ops-muted">Ingresa con tu cuenta institucional</p>
+          <p className="mb-6 text-xs text-ops-muted">{formatLoginSupportText(branding?.entity?.name)}</p>
 
           <form className="space-y-4" onSubmit={handleSubmit} noValidate>
             <label className="block">
@@ -152,7 +153,7 @@ export default function LoginPage() {
         </div>
 
         <p className="mt-6 text-center text-[10px] text-ops-dim">
-          SIGES-CCTV · Uso restringido · Todos los derechos reservados
+          Plataforma SIGES-CCTV · Acceso restringido a personal autorizado
         </p>
       </div>
     </main>

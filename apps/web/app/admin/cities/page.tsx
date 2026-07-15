@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { OpsShell } from "../../../components/ops-shell";
 import { OpsModal } from "../../../components/ops-modal";
+import { OpsNotice } from "../../../components/ops-notice";
 import { useAuth } from "../../../components/auth-provider";
 import { apiGet, apiPatch, apiPost } from "../../../lib/api";
+import { formatLifecycleState, toUserFacingError } from "../../../lib/presentation";
 
 type Counts = { cameras: number; nodes: number; poles: number };
 type CityItem = {
@@ -44,11 +46,15 @@ export default function CitiesPage() {
     population: "", areaSqKm: "", contractObject: "", lat: "", lng: "", state: "ACTIVE",
   });
 
+  const [loadError, setLoadError] = useState("");
+
   const load = useCallback(async () => {
     if (!accessToken) return;
     setLoading(true);
+    setLoadError("");
     try { setItems(await apiGet<CityItem[]>("/cities", accessToken)); }
-    catch { } finally { setLoading(false); }
+    catch (err) { setLoadError(toUserFacingError(err, "No se pudieron cargar las ciudades.")); }
+    finally { setLoading(false); }
   }, [accessToken]);
 
   useEffect(() => { load(); }, [load]);
@@ -118,7 +124,7 @@ export default function CitiesPage() {
       }
       closeModal();
       await load();
-    } catch (err) { console.error(err); } finally { setSaving(false); }
+    } catch (err) { console.error(toUserFacingError(err, "No se pudo guardar la entidad geográfica.")); } finally { setSaving(false); }
   }
 
   const form = editing ? editForm : createForm;
@@ -128,6 +134,11 @@ export default function CitiesPage() {
 
   return (
     <OpsShell eyebrow="Administración" title="Ciudades y Departamentos">
+      {loadError ? (
+        <div className="mb-4">
+          <OpsNotice tone="error" title="No se pudo cargar la información" message={loadError} onDismiss={() => setLoadError("")} />
+        </div>
+      ) : null}
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-ops-muted">{items.length} entidades geográficas</p>
         <button onClick={openCreate} className="rounded-ops bg-ops-blue px-4 py-2 text-sm font-semibold text-white hover:bg-ops-blue/80">
@@ -172,7 +183,7 @@ export default function CitiesPage() {
                   <td className="px-4 py-3 hidden md:table-cell tabular-nums text-ops-muted">{item.counts?.poles ?? 0}</td>
                   <td className="px-4 py-3">
                     <span className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${item.state === "ACTIVE" ? "border-ops-emerald/30 bg-ops-emerald/10 text-ops-emerald" : "border-ops-border bg-ops-surface text-ops-muted"}`}>
-                      {item.state}
+                      {formatLifecycleState(item.state)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -278,9 +289,9 @@ export default function CitiesPage() {
             <div className="space-y-1">
               <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Estado</label>
               <select className={INPUT} value={editForm.state} onChange={(e) => setEditForm((f) => ({ ...f, state: e.target.value }))}>
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="INACTIVE">INACTIVE</option>
-                <option value="ARCHIVED">ARCHIVED</option>
+                <option value="ACTIVE">{formatLifecycleState("ACTIVE")}</option>
+                <option value="INACTIVE">{formatLifecycleState("INACTIVE")}</option>
+                <option value="ARCHIVED">{formatLifecycleState("ARCHIVED")}</option>
               </select>
             </div>
           )}

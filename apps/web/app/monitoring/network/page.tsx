@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OpsShell } from "../../../components/ops-shell";
+import { OpsNotice } from "../../../components/ops-notice";
 import { GrafanaPanelEmbed } from "../../../components/grafana-panel-embed";
 import { useAuth } from "../../../components/auth-provider";
 import { apiGet, apiPost, type GrafanaEmbedDescriptor } from "../../../lib/api";
@@ -15,6 +16,7 @@ import {
   type MonitorNodeDetail,
   type MonitorNodeListItem,
 } from "../../../lib/network-monitor";
+import { toUserFacingError } from "../../../lib/presentation";
 import { tabClass } from "../../../lib/ui";
 
 const PANEL = "rounded-ops border border-ops-border bg-ops-panel p-4";
@@ -238,6 +240,7 @@ export default function NetworkMonitoringPage() {
   const [filter, setFilter] = useState("");
   const [inventoryFilter, setInventoryFilter] = useState("");
   const [tab, setTab] = useState<"inventario" | "trafico" | "alertas">("inventario");
+  const [errorMessage, setErrorMessage] = useState("");
   const selectedNodeIdRef = useRef(selectedNodeId);
   const detailRequestIdRef = useRef(0);
 
@@ -356,12 +359,13 @@ export default function NetworkMonitoringPage() {
   async function handleRunDiscovery() {
     if (!accessToken || !detail) return;
     setRunningDiscovery(true);
+    setErrorMessage("");
     try {
       await apiPost(`/nodes/${detail.id}/discovery-jobs`, accessToken, {});
       await loadNodes();
       await loadDetail(detail.id);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "No se pudo ejecutar el discovery.");
+      setErrorMessage(toUserFacingError(error, "No se pudo ejecutar el discovery."));
     } finally {
       setRunningDiscovery(false);
     }
@@ -370,6 +374,7 @@ export default function NetworkMonitoringPage() {
   async function handleConfirm(device: DiscoveryDevice) {
     if (!accessToken || !detail) return;
     setResolvingDiscoveryId(device.id);
+    setErrorMessage("");
     try {
       await apiPost(`/node-discovery/devices/${device.id}/confirm`, accessToken, {
         assetType: device.candidateType || "SWITCH",
@@ -378,7 +383,7 @@ export default function NetworkMonitoringPage() {
       await loadNodes();
       await loadDetail(detail.id);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "No se pudo confirmar el dispositivo.");
+      setErrorMessage(toUserFacingError(error, "No se pudo confirmar el dispositivo."));
     } finally {
       setResolvingDiscoveryId("");
     }
@@ -387,11 +392,12 @@ export default function NetworkMonitoringPage() {
   async function handleDismiss(device: DiscoveryDevice) {
     if (!accessToken || !detail) return;
     setResolvingDiscoveryId(device.id);
+    setErrorMessage("");
     try {
       await apiPost(`/node-discovery/devices/${device.id}/dismiss`, accessToken, {});
       await loadDetail(detail.id);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "No se pudo descartar el dispositivo.");
+      setErrorMessage(toUserFacingError(error, "No se pudo descartar el dispositivo."));
     } finally {
       setResolvingDiscoveryId("");
     }
@@ -408,6 +414,9 @@ export default function NetworkMonitoringPage() {
   return (
     <OpsShell eyebrow="Centro de Operaciones" title="Monitoreo de Red">
       <div className="space-y-8">
+        {errorMessage ? (
+          <OpsNotice tone="error" title="Acción no completada" message={errorMessage} onDismiss={() => setErrorMessage("")} />
+        ) : null}
         <section className="relative overflow-hidden rounded-[28px] border border-ops-border bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.12),transparent_30%),radial-gradient(circle_at_top_right,rgba(37,99,235,0.18),transparent_35%),linear-gradient(135deg,#07111d,#0b1727_62%,#08131f)] p-6 shadow-ops">
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(148,163,184,0.04)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.04)_1px,transparent_1px)] bg-[size:32px_32px]" />
           <div className="relative max-w-2xl">

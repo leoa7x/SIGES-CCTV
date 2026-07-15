@@ -1,9 +1,19 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { GeoEntityType } from "@prisma/client";
 import { IsBoolean, IsNotEmpty, IsOptional, IsString } from "class-validator";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
+
+// Raster-only whitelist: this file is served from a public-read bucket and
+// surfaced unauthenticated on the login page (see PublicBrandingController),
+// so accepting SVG/HTML content types would let anyone with MANAGE_ORG store
+// a script that executes for every anonymous visitor of the login screen.
+const ALLOWED_LOGO_MIME_TYPES: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+};
 
 export class CreateBrandingProfileDto {
   @IsString() @IsNotEmpty() name!: string;
@@ -90,8 +100,10 @@ export class BrandingService {
     const profile = await this.prisma.brandingProfile.findUnique({ where: { id } });
     if (!profile) throw new NotFoundException(`Branding profile ${id} not found`);
 
-    let ext = mimetype.split("/")[1] ?? "png";
-    if (ext === "jpeg") ext = "jpg";
+    const ext = ALLOWED_LOGO_MIME_TYPES[mimetype];
+    if (!ext) {
+      throw new BadRequestException("Logo must be a PNG, JPEG, or WebP image");
+    }
 
     const key = `branding/${id}/logo.${ext}`;
     const logoUrl = await this.storage.upload(key, buffer, mimetype);

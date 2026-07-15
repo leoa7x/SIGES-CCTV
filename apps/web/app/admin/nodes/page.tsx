@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { OpsNotice } from "../../../components/ops-notice";
 import { OpsShell } from "../../../components/ops-shell";
 import { OpsModal } from "../../../components/ops-modal";
 import { GrafanaPanelEmbed } from "../../../components/grafana-panel-embed";
 import { useAuth } from "../../../components/auth-provider";
 import { apiDelete, apiGet, apiPatch, apiPost, type GrafanaEmbedDescriptor } from "../../../lib/api";
 import { buildGrafanaEmbedModel } from "../../../lib/network-monitor";
+import { toUserFacingError } from "../../../lib/presentation";
 import { tabClass } from "../../../lib/ui";
 
 type NodeItem = {
@@ -170,6 +172,7 @@ export default function NodesPage() {
   const [deletingAnalyticsId, setDeletingAnalyticsId] = useState("");
   const [runningDiscovery, setRunningDiscovery] = useState(false);
   const [resolvingDiscoveryId, setResolvingDiscoveryId] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   const [nodeForm, setNodeForm] = useState<NodeForm>({
     code: "",
@@ -452,6 +455,7 @@ export default function NodesPage() {
     if (!confirmed) return;
 
     setDeletingNode(true);
+    setErrorMessage("");
     try {
       await apiDelete(`/nodes/${detail.id}`, accessToken);
       setDetail(null);
@@ -459,6 +463,8 @@ export default function NodesPage() {
       const remaining = items.filter((item) => item.id !== detail.id);
       setSelectedNodeId(remaining[0]?.id ?? "");
       await load();
+    } catch (error) {
+      setErrorMessage(toUserFacingError(error, "No se pudo eliminar el nodo."));
     } finally {
       setDeletingNode(false);
     }
@@ -600,6 +606,11 @@ export default function NodesPage() {
           + Nuevo poste
         </button>
       </div>
+      {errorMessage ? (
+        <div className="mb-4">
+          <OpsNotice tone="warning" title="No se puede eliminar el nodo" message={errorMessage} onDismiss={() => setErrorMessage("")} />
+        </div>
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[1.05fr_1.45fr] xl:items-start">
         <section className="overflow-hidden rounded-ops border border-ops-border bg-ops-panel xl:sticky xl:top-6">

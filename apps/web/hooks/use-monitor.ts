@@ -18,12 +18,19 @@ export function useMonitor(centerId: string | null, accessToken: string | null) 
   useEffect(() => {
     if (!centerId || !accessToken) return;
     const socket = getSocket(accessToken);
-    socket.emit("subscribe", { centerId });
+    // Re-emit on every (re)connect, not just on mount — the socket.io client
+    // reconnects automatically after a backend restart or network blip, but
+    // room membership does not survive a reconnect, so without this the user
+    // silently stops receiving live updates with no error or indicator.
+    const subscribe = () => socket.emit("subscribe", { centerId });
+    if (socket.connected) subscribe();
+    socket.on("connect", subscribe);
     const handler = (evt: StateChangeEvent) => {
       if (evt.centerId === centerId) setLastEvent(evt);
     };
     socket.on("state-change", handler);
     return () => {
+      socket.off("connect", subscribe);
       socket.off("state-change", handler);
     };
   }, [centerId, accessToken]);

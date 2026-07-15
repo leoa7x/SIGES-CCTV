@@ -1,4 +1,11 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
+import { timingSafeEqual } from "node:crypto";
+
+function isMatchingToken(expected: string, received: string): boolean {
+  const expectedBuf = Buffer.from(expected);
+  const receivedBuf = Buffer.from(received);
+  return expectedBuf.length === receivedBuf.length && timingSafeEqual(expectedBuf, receivedBuf);
+}
 
 @Injectable()
 export class MonitorGuard implements CanActivate {
@@ -7,7 +14,7 @@ export class MonitorGuard implements CanActivate {
     const auth = req.headers["authorization"] ?? "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
     const expected = process.env.MONITOR_API_TOKEN ?? "";
-    if (!expected || token !== expected) throw new UnauthorizedException();
+    if (!expected || !token || !isMatchingToken(expected, token)) throw new UnauthorizedException();
     return true;
   }
 }

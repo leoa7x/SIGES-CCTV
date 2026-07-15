@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ConflictException, Injectable } from "@nestjs/common";
 import { IsBoolean, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Matches } from "class-validator";
 import { NodeAssetType, NodeState, NodeType } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -127,6 +127,11 @@ export class NodesService {
     const assetIds = node.assets.map((asset) => asset.id);
     const discoveryJobIds = node.discoveryJobs.map((job) => job.id);
     const pointIds = node.fiberPoints.map((point) => point.id);
+    const telemetrySnapshotCount = await this.prisma.networkTelemetrySnapshot.count({ where: { nodeId: id } });
+
+    if (telemetrySnapshotCount > 0) {
+      throw new ConflictException("No se puede eliminar el nodo porque todavía tiene historial de telemetría asociado. Debes borrar primero esos registros.");
+    }
 
     await this.deleteFiberTopologyForNodePoints(pointIds);
 
