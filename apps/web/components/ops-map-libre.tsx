@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
+import { removeMapArtifacts } from "../lib/maplibre-cleanup";
 
 export type NodeGeo = {
   id: string;
@@ -344,10 +345,11 @@ export default function OpsMapLibre({
         cancelAnimationFrame(animFrameRef.current);
         animFrameRef.current = null;
       }
-      ["fiber-drawing-line", "nodes-pole-halo", "fiber-online", "fiber-degraded", "fiber-offline"]
-        .forEach((id) => { if (map.getLayer(id)) map.removeLayer(id); });
-      ["fiber-drawing", "fiber-segments"]
-        .forEach((id) => { if (map.getSource(id)) map.removeSource(id); });
+      removeMapArtifacts(
+        map,
+        ["fiber-drawing-line", "nodes-pole-halo", "fiber-online", "fiber-degraded", "fiber-offline"],
+        ["fiber-drawing", "fiber-segments"],
+      );
     };
   }, [mapReady]);
 
