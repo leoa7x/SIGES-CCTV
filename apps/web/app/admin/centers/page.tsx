@@ -226,8 +226,8 @@ export default function CentersPage() {
           contactName: createForm.contactName || undefined,
           lat: parseOptionalNumber(createForm.lat),
           lng: parseOptionalNumber(createForm.lng),
-          primaryIp: createForm.primaryIp,
-          scanSubnetCidr: createForm.scanSubnetCidr,
+          primaryIp: createForm.primaryIp || undefined,
+          scanSubnetCidr: createForm.scanSubnetCidr || undefined,
           projectId: createForm.projectId,
         });
       }

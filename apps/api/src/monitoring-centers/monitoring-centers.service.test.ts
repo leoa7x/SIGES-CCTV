@@ -123,6 +123,15 @@ test("CMC scan targets require IPv4 and CIDR formats on create and update", asyn
   assert.deepEqual(updateErrors.map((error) => error.property).sort(), ["primaryIp", "scanSubnetCidr"]);
 });
 
+test("create accepts a CMC without discovery targets", async () => {
+  const dto = Object.assign(new CreateCenterDto(), {
+    name: "CMC Central",
+    projectId: "project-1",
+  });
+
+  assert.deepEqual(await validate(dto), []);
+});
+
 test("update geocodes the CMC when coordinates are omitted and the project city is available", async () => {
   let updatedData: Record<string, unknown> | null = null;
 
