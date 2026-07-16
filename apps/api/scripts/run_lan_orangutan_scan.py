@@ -7,7 +7,54 @@ import subprocess
 import shutil
 import sys
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
+
+VENDOR_INDEX_PATH = Path(__file__).resolve().parent / "data" / "mac_vendor_index.json"
+
+
+def normalize_mac(mac: str) -> str:
+    return "".join(character for character in mac.upper() if character in "0123456789ABCDEF")
+
+
+@lru_cache(maxsize=4)
+def _load_vendor_index_cached(index_path: str) -> dict[str, str]:
+    path = Path(index_path)
+    if not path.exists():
+        return {}
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        return {}
+
+    vendor_index: dict[str, str] = {}
+    for prefix, vendor in payload.items():
+        if not isinstance(prefix, str) or not isinstance(vendor, str):
+            continue
+        normalized_prefix = normalize_mac(prefix)
+        cleaned_vendor = vendor.strip()
+        if normalized_prefix and cleaned_vendor:
+            vendor_index[normalized_prefix] = cleaned_vendor
+    return vendor_index
+
+
+def load_vendor_index(index_path: Path | None = None) -> dict[str, str]:
+    return _load_vendor_index_cached(str(index_path or VENDOR_INDEX_PATH))
+
+
+def lookup_vendor_by_mac(mac: str, vendor_index: dict[str, str] | None = None) -> str:
+    normalized_mac = normalize_mac(mac)
+    if len(normalized_mac) < 6:
+        return ""
+
+    lookup = vendor_index if vendor_index is not None else load_vendor_index()
+    for prefix_length in (9, 7, 6):
+        if len(normalized_mac) < prefix_length:
+            continue
+        vendor = lookup.get(normalized_mac[:prefix_length])
+        if vendor:
+            return vendor
+    return ""
 
 
 def parse_ip_neigh_output(output: str, network: ipaddress.IPv4Network) -> list[dict[str, object]]:
@@ -135,6 +182,7 @@ def enrich_scan_result(cidr: str, result: dict[str, object]) -> dict[str, object
     if not isinstance(devices, list):
         return result
 
+    vendor_index = load_vendor_index()
     normalized_devices = [device for device in devices if isinstance(device, dict)]
     neigh_devices = run_ip_neigh_scan(cidr)
     merged = merge_devices(normalized_devices, neigh_devices)
@@ -150,6 +198,16 @@ def enrich_scan_result(cidr: str, result: dict[str, object]) -> dict[str, object
         result["scanner"] = "nmap+neighbor-enrichment+targeted-pn"
     elif neigh_devices:
         result["scanner"] = "nmap+neighbor-enrichment"
+
+    for device in merged:
+        mac = str(device.get("mac", "")).strip()
+        if not mac:
+            continue
+        vendor = lookup_vendor_by_mac(mac, vendor_index)
+        if vendor:
+            device["vendor"] = vendor
+        elif not str(device.get("vendor", "")).strip():
+            device["vendor"] = "Unknown"
 
     result["devices"] = merged
     result["device_count"] = len(merged)
