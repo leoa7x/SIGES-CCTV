@@ -357,6 +357,7 @@ export default function CentersPage() {
   const pendingDiscoveries = detail?.discoveryJobs.flatMap((job) =>
     job.discoveredDevices.filter((device) => device.status === "DISCOVERED"),
   ) ?? [];
+  const canRunCenterDiscovery = Boolean(detail?.primaryIp || detail?.scanSubnetCidr);
 
   return (
     <OpsShell eyebrow="Administración" title="Centros de Monitoreo (CMC)">
@@ -521,7 +522,7 @@ export default function CentersPage() {
           <button
             type="button"
             onClick={() => void handleRunCenterDiscovery()}
-            disabled={!detail || runningDiscovery}
+            disabled={!canRunCenterDiscovery || runningDiscovery}
             className="rounded-ops bg-ops-blue px-3 py-2 text-sm font-semibold text-white hover:bg-ops-blue/80 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {runningDiscovery ? "Escaneando…" : "Escanear ahora"}
