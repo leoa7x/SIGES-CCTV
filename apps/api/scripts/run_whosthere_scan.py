@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-import importlib.util
 import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 
 
 def main() -> int:
@@ -38,7 +36,11 @@ def main() -> int:
     parts = [part for part in command_template.split() if part]
     command = parts[0]
     args = [part.replace("{target}", target).replace("{ip}", primary_ip) for part in parts[1:]]
-    result = subprocess.run([command, *args], capture_output=True, text=True, check=False, env=os.environ.copy())
+    try:
+        result = subprocess.run([command, *args], capture_output=True, text=True, check=False, env=os.environ.copy())
+    except OSError as error:
+        print(json.dumps({"success": False, "error": str(error)}))
+        return 0
     if result.returncode != 0:
         print(json.dumps({"success": False, "error": result.stderr.strip() or "whosthere failed"}))
         return 0
