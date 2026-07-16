@@ -4,8 +4,13 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Matches,
 } from "class-validator";
 import { PrismaService } from "../prisma/prisma.service";
+
+const IPV4_OCTET = "(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)";
+const IPV4_PATTERN = new RegExp(`^${IPV4_OCTET}(\\.${IPV4_OCTET}){3}$`);
+const CIDR_PATTERN = new RegExp(`^${IPV4_OCTET}(\\.${IPV4_OCTET}){3}\\/(3[0-2]|[12]?\\d)$`);
 
 export class CreateCenterDto {
   @IsString() @IsNotEmpty() name!: string;
@@ -14,8 +19,8 @@ export class CreateCenterDto {
   @IsOptional() @IsString() contactName?: string;
   @IsOptional() @IsNumber() lat?: number;
   @IsOptional() @IsNumber() lng?: number;
-  @IsOptional() @IsString() primaryIp?: string;
-  @IsOptional() @IsString() scanSubnetCidr?: string;
+  @IsOptional() @IsString() @Matches(IPV4_PATTERN, { message: "primaryIp debe ser una IPv4 válida" }) primaryIp?: string;
+  @IsOptional() @IsString() @Matches(CIDR_PATTERN, { message: "scanSubnetCidr debe tener formato CIDR válido (ej. 192.168.1.0/24)" }) scanSubnetCidr?: string;
   @IsString() @IsNotEmpty() projectId!: string;
 }
 
@@ -27,8 +32,8 @@ export class UpdateCenterDto {
   @IsOptional() @IsNumber() lat?: number;
   @IsOptional() @IsNumber() lng?: number;
   @IsOptional() @IsString() state?: string;
-  @IsOptional() @IsString() primaryIp?: string;
-  @IsOptional() @IsString() scanSubnetCidr?: string;
+  @IsOptional() @IsString() @Matches(IPV4_PATTERN, { message: "primaryIp debe ser una IPv4 válida" }) primaryIp?: string;
+  @IsOptional() @IsString() @Matches(CIDR_PATTERN, { message: "scanSubnetCidr debe tener formato CIDR válido (ej. 192.168.1.0/24)" }) scanSubnetCidr?: string;
 }
 
 @Injectable()

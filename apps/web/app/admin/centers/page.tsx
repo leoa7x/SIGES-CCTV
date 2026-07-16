@@ -539,6 +539,15 @@ export default function CentersPage() {
           </div>
         ) : (
           <div className="space-y-2">
+            {detail.discoveryJobs.map((job) => (
+              <div key={job.id} className="rounded-ops border border-ops-border bg-ops-surface p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-ops-text">Job {job.status}</p>
+                  <p className="font-mono text-[11px] text-ops-muted">{job.targetSubnetCidr ?? job.targetIp ?? "sin objetivo registrado"}</p>
+                </div>
+                {job.errorMessage ? <p className="mt-2 text-[11px] text-ops-rose">{job.errorMessage}</p> : null}
+              </div>
+            ))}
             {pendingDiscoveries.map((device) => (
               <div key={device.id} className="rounded-ops border border-ops-border bg-ops-surface p-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">

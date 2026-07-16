@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ValidationPipe } from "@nestjs/common";
-import { getMetadataStorage } from "class-validator";
+import { getMetadataStorage, validate } from "class-validator";
 
-import { CreateCenterDto, MonitoringCentersService } from "./monitoring-centers.service";
+import { CreateCenterDto, MonitoringCentersService, UpdateCenterDto } from "./monitoring-centers.service";
 
 test("findOne includes CMC discovery backlog for admin detail", async () => {
   let includeArgs: Record<string, unknown> | null = null;
@@ -102,6 +102,25 @@ test("create retains and persists CMC scan target fields", async () => {
     scanSubnetCidr: "10.10.0.0/24",
     project: { connect: { id: "project-1" } },
   });
+});
+
+test("CMC scan targets require IPv4 and CIDR formats on create and update", async () => {
+  const createDto = Object.assign(new CreateCenterDto(), {
+    name: "CMC Central",
+    projectId: "project-1",
+    primaryIp: "not-an-ip",
+    scanSubnetCidr: "10.10.0.0/99",
+  });
+  const updateDto = Object.assign(new UpdateCenterDto(), {
+    primaryIp: "not-an-ip",
+    scanSubnetCidr: "10.10.0.0/99",
+  });
+
+  const createErrors = await validate(createDto);
+  const updateErrors = await validate(updateDto);
+
+  assert.deepEqual(createErrors.map((error) => error.property).sort(), ["primaryIp", "scanSubnetCidr"]);
+  assert.deepEqual(updateErrors.map((error) => error.property).sort(), ["primaryIp", "scanSubnetCidr"]);
 });
 
 test("update geocodes the CMC when coordinates are omitted and the project city is available", async () => {
