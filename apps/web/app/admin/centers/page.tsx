@@ -214,19 +214,25 @@ export default function CentersPage() {
           contactName: editForm.contactName || undefined,
           lat: parseOptionalNumber(editForm.lat),
           lng: parseOptionalNumber(editForm.lng),
-          primaryIp: editForm.primaryIp || undefined,
-          scanSubnetCidr: editForm.scanSubnetCidr || undefined,
+          primaryIp: editForm.primaryIp || null,
+          scanSubnetCidr: editForm.scanSubnetCidr || null,
           state: editForm.state,
         });
       } else {
-        await apiPost("/monitoring-centers", accessToken, {
+        const createdCenter = await apiPost<{ id: string }>("/monitoring-centers", accessToken, {
           name: createForm.name,
           address: createForm.address || undefined,
           phone: createForm.phone || undefined,
           contactName: createForm.contactName || undefined,
           lat: parseOptionalNumber(createForm.lat),
           lng: parseOptionalNumber(createForm.lng),
+          primaryIp: createForm.primaryIp,
+          scanSubnetCidr: createForm.scanSubnetCidr,
           projectId: createForm.projectId,
+        });
+        await apiPatch(`/monitoring-centers/${createdCenter.id}`, accessToken, {
+          primaryIp: createForm.primaryIp || null,
+          scanSubnetCidr: createForm.scanSubnetCidr || null,
         });
       }
       closeModal();
@@ -351,6 +357,10 @@ export default function CentersPage() {
       setResolvingDiscoveryId("");
     }
   }
+
+  const pendingDiscoveries = detail?.discoveryJobs.flatMap((job) =>
+    job.discoveredDevices.filter((device) => device.status === "DISCOVERED"),
+  ) ?? [];
 
   return (
     <OpsShell eyebrow="Administración" title="Centros de Monitoreo (CMC)">
@@ -532,7 +542,7 @@ export default function CentersPage() {
           </div>
         ) : (
           <div className="space-y-2">
-            {detail.discoveryJobs[0]?.discoveredDevices.filter((device) => device.status === "DISCOVERED").map((device) => (
+            {pendingDiscoveries.map((device) => (
               <div key={device.id} className="rounded-ops border border-ops-border bg-ops-surface p-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -564,8 +574,8 @@ export default function CentersPage() {
                 </div>
               </div>
             ))}
-            {(detail.discoveryJobs[0]?.discoveredDevices.filter((device) => device.status === "DISCOVERED").length ?? 0) === 0 ? (
-              <p className="text-sm text-ops-muted">No hay equipos pendientes por confirmar en el último escaneo.</p>
+            {pendingDiscoveries.length === 0 ? (
+              <p className="text-sm text-ops-muted">No hay equipos pendientes por confirmar en los escaneos recientes.</p>
             ) : null}
           </div>
         )}
