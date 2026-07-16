@@ -5,7 +5,7 @@ import { OpsShell } from "../../../components/ops-shell";
 import { OpsModal } from "../../../components/ops-modal";
 import { OpsNotice } from "../../../components/ops-notice";
 import { useAuth } from "../../../components/auth-provider";
-import { apiDelete, apiGet, apiPatch, apiPost, type CenterAsset } from "../../../lib/api";
+import { apiDelete, apiGet, apiPatch, apiPost, type CenterAsset, type CenterDiscoveryJob } from "../../../lib/api";
 import { formatLifecycleState, toUserFacingError } from "../../../lib/presentation";
 
 type CenterItem = {
@@ -16,6 +16,8 @@ type CenterItem = {
   contactName: string | null;
   lat: number | null;
   lng: number | null;
+  primaryIp: string | null;
+  scanSubnetCidr: string | null;
   state: string;
   project: { id: string; name: string; city: { name: string } };
   _count: { routes: number; centerAssets: number };
@@ -23,15 +25,16 @@ type CenterItem = {
 type CenterDetail = CenterItem & {
   routes: Array<{ id: string; identifier: string; _count: { nodes: number } }>;
   centerAssets: CenterAsset[];
+  discoveryJobs: CenterDiscoveryJob[];
 };
 type ProjectRef = { id: string; name: string };
 type CreateForm = {
   name: string; address: string; phone: string; contactName: string;
-  lat: string; lng: string; projectId: string;
+  lat: string; lng: string; primaryIp: string; scanSubnetCidr: string; projectId: string;
 };
 type EditForm = {
   name: string; address: string; phone: string; contactName: string;
-  lat: string; lng: string; state: string;
+  lat: string; lng: string; primaryIp: string; scanSubnetCidr: string; state: string;
 };
 type AssetForm = {
   assetType: string;
@@ -51,7 +54,7 @@ const ASSET_TYPES = ["CAMARA_FIJA", "CAMARA_PTZ", "SWITCH", "UPS", "OTHER"];
 const NODE_STATES = ["ONLINE", "DEGRADED", "OFFLINE", "MAINTENANCE"];
 
 const EMPTY_CREATE: CreateForm = {
-  name: "", address: "", phone: "", contactName: "", lat: "", lng: "", projectId: "",
+  name: "", address: "", phone: "", contactName: "", lat: "", lng: "", primaryIp: "", scanSubnetCidr: "", projectId: "",
 };
 const EMPTY_ASSET: AssetForm = {
   assetType: "SWITCH",
@@ -78,7 +81,7 @@ export default function CentersPage() {
   const [editing, setEditing] = useState<CenterItem | null>(null);
   const [createForm, setCreateForm] = useState<CreateForm>(EMPTY_CREATE);
   const [editForm, setEditForm] = useState<EditForm>({
-    name: "", address: "", phone: "", contactName: "", lat: "", lng: "", state: "ACTIVE",
+    name: "", address: "", phone: "", contactName: "", lat: "", lng: "", primaryIp: "", scanSubnetCidr: "", state: "ACTIVE",
   });
   const [selectedCenterId, setSelectedCenterId] = useState("");
   const [detail, setDetail] = useState<CenterDetail | null>(null);
@@ -89,6 +92,8 @@ export default function CentersPage() {
   const [saving, setSaving] = useState(false);
   const [savingAsset, setSavingAsset] = useState(false);
   const [deletingAssetId, setDeletingAssetId] = useState("");
+  const [runningDiscovery, setRunningDiscovery] = useState(false);
+  const [resolvingDiscoveryId, setResolvingDiscoveryId] = useState("");
   const [loadError, setLoadError] = useState("");
   const [feedback, setFeedback] = useState<Feedback>(null);
 
@@ -150,6 +155,8 @@ export default function CentersPage() {
       contactName: item.contactName ?? "",
       lat: item.lat != null ? String(item.lat) : "",
       lng: item.lng != null ? String(item.lng) : "",
+      primaryIp: item.primaryIp ?? "",
+      scanSubnetCidr: item.scanSubnetCidr ?? "",
       state: item.state,
     });
     setFeedback(null);
@@ -207,6 +214,8 @@ export default function CentersPage() {
           contactName: editForm.contactName || undefined,
           lat: parseOptionalNumber(editForm.lat),
           lng: parseOptionalNumber(editForm.lng),
+          primaryIp: editForm.primaryIp || undefined,
+          scanSubnetCidr: editForm.scanSubnetCidr || undefined,
           state: editForm.state,
         });
       } else {
@@ -286,6 +295,60 @@ export default function CentersPage() {
       });
     } finally {
       setDeletingAssetId("");
+    }
+  }
+
+  async function handleRunCenterDiscovery() {
+    if (!accessToken || !detail) return;
+    setRunningDiscovery(true);
+    try {
+      await apiPost(`/monitoring-centers/${detail.id}/discovery-jobs`, accessToken, {});
+      await loadDetail(detail.id);
+    } catch (err) {
+      setFeedback({
+        tone: "error",
+        title: "No se pudo ejecutar el discovery del CMC",
+        message: toUserFacingError(err, "No se pudo ejecutar el discovery del CMC."),
+      });
+    } finally {
+      setRunningDiscovery(false);
+    }
+  }
+
+  async function handleConfirmDiscovery(deviceId: string, device: CenterDiscoveryJob["discoveredDevices"][number]) {
+    if (!accessToken || !detail) return;
+    setResolvingDiscoveryId(deviceId);
+    try {
+      await apiPost(`/center-discovery/devices/${deviceId}/confirm`, accessToken, {
+        assetType: device.candidateType || "SWITCH",
+        name: device.name || device.hostname || device.candidateType || "Equipo descubierto",
+      });
+      await Promise.all([load(), loadDetail(detail.id)]);
+    } catch (err) {
+      setFeedback({
+        tone: "error",
+        title: "No se pudo confirmar el equipo descubierto",
+        message: toUserFacingError(err, "No se pudo confirmar el equipo descubierto."),
+      });
+    } finally {
+      setResolvingDiscoveryId("");
+    }
+  }
+
+  async function handleDismissDiscovery(deviceId: string) {
+    if (!accessToken || !detail) return;
+    setResolvingDiscoveryId(deviceId);
+    try {
+      await apiPost(`/center-discovery/devices/${deviceId}/dismiss`, accessToken, {});
+      await loadDetail(detail.id);
+    } catch (err) {
+      setFeedback({
+        tone: "error",
+        title: "No se pudo descartar el equipo descubierto",
+        message: toUserFacingError(err, "No se pudo descartar el equipo descubierto."),
+      });
+    } finally {
+      setResolvingDiscoveryId("");
     }
   }
 
@@ -441,6 +504,73 @@ export default function CentersPage() {
         )}
       </section>
 
+      <section className="mt-6 rounded-ops border border-ops-border bg-ops-panel p-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-ops-text">Descubrimientos del CMC</p>
+            <p className="text-xs text-ops-muted">
+              {detail?.scanSubnetCidr ?? detail?.primaryIp ?? "Configura una IP principal o subnet CIDR para escanear."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleRunCenterDiscovery()}
+            disabled={!detail || runningDiscovery}
+            className="rounded-ops bg-ops-blue px-3 py-2 text-sm font-semibold text-white hover:bg-ops-blue/80 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {runningDiscovery ? "Escaneando…" : "Escanear ahora"}
+          </button>
+        </div>
+
+        {loadingDetail ? null : !detail ? (
+          <div className="rounded-ops border border-dashed border-ops-border bg-ops-surface px-4 py-6 text-sm text-ops-muted">
+            Selecciona un CMC para consultar descubrimientos.
+          </div>
+        ) : detail.discoveryJobs.length === 0 ? (
+          <div className="rounded-ops border border-dashed border-ops-border bg-ops-surface px-4 py-6 text-sm text-ops-muted">
+            Todavía no hay escaneos ejecutados para este CMC.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {detail.discoveryJobs[0]?.discoveredDevices.filter((device) => device.status === "DISCOVERED").map((device) => (
+              <div key={device.id} className="rounded-ops border border-ops-border bg-ops-surface p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-ops-text">{device.name ?? device.hostname ?? device.ip ?? "Equipo descubierto"}</p>
+                    <p className="mt-1 text-[11px] text-ops-muted">
+                      {device.candidateType ?? "CANDIDATO"} · {device.ip ?? "sin IP"} · {device.mac ?? "sin MAC"} · confianza {device.discoveryConfidence}
+                    </p>
+                    <p className="mt-1 text-[10px] text-ops-dim">{device.vendor ?? "sin marca"} · {device.model ?? "sin modelo"}</p>
+                    {device.matchedAsset ? <p className="mt-1 text-[10px] text-ops-blue">Relacionado con {device.matchedAsset.assetType} · {device.matchedAsset.name}</p> : null}
+                  </div>
+                  <div className="flex gap-3 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => void handleConfirmDiscovery(device.id, device)}
+                      disabled={resolvingDiscoveryId === device.id}
+                      className="text-ops-blue hover:underline disabled:opacity-50"
+                    >
+                      {resolvingDiscoveryId === device.id ? "Procesando…" : "Confirmar"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDismissDiscovery(device.id)}
+                      disabled={resolvingDiscoveryId === device.id}
+                      className="text-ops-rose hover:underline disabled:opacity-50"
+                    >
+                      Descartar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {(detail.discoveryJobs[0]?.discoveredDevices.filter((device) => device.status === "DISCOVERED").length ?? 0) === 0 ? (
+              <p className="text-sm text-ops-muted">No hay equipos pendientes por confirmar en el último escaneo.</p>
+            ) : null}
+          </div>
+        )}
+      </section>
+
       <OpsModal open={modalOpen} title={editing ? "Editar CMC" : "Nuevo CMC"} onClose={closeModal} saving={saving}>
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Name */}
@@ -493,6 +623,19 @@ export default function CentersPage() {
                 onChange={(e) => editing ? setEditForm((f) => ({ ...f, lat: e.target.value })) : setCreateForm((f) => ({ ...f, lat: e.target.value }))} />
               <input className={INPUT} value={editing ? editForm.lng : createForm.lng} placeholder="Longitud (ej. -72.0836)"
                 onChange={(e) => editing ? setEditForm((f) => ({ ...f, lng: e.target.value })) : setCreateForm((f) => ({ ...f, lng: e.target.value }))} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">IP principal</label>
+              <input className={INPUT} value={editing ? editForm.primaryIp : createForm.primaryIp} placeholder="10.10.10.1"
+                onChange={(e) => editing ? setEditForm((f) => ({ ...f, primaryIp: e.target.value })) : setCreateForm((f) => ({ ...f, primaryIp: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Subnet CIDR</label>
+              <input className={INPUT} value={editing ? editForm.scanSubnetCidr : createForm.scanSubnetCidr} placeholder="10.10.10.0/24"
+                onChange={(e) => editing ? setEditForm((f) => ({ ...f, scanSubnetCidr: e.target.value })) : setCreateForm((f) => ({ ...f, scanSubnetCidr: e.target.value }))} />
             </div>
           </div>
 

@@ -53,6 +53,28 @@ export type CenterAsset = {
   notes?: string | null;
 };
 
+export type CenterDiscoveryJob = {
+  id: string;
+  status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
+  targetIp: string | null;
+  targetSubnetCidr: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  discoveredDevices: Array<{
+    id: string;
+    status: "DISCOVERED" | "CONFIRMED" | "DISMISSED" | "MERGED";
+    candidateType: string | null;
+    name: string | null;
+    ip: string | null;
+    mac: string | null;
+    vendor: string | null;
+    model: string | null;
+    hostname: string | null;
+    discoveryConfidence: number;
+    matchedAsset?: { id: string; name: string; assetType: string } | null;
+  }>;
+};
+
 export async function apiGet<T>(path: string, token: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
