@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ValidationPipe } from "@nestjs/common";
+import { ConflictException } from "@nestjs/common";
 import { getMetadataStorage, validate } from "class-validator";
 
 import { CreateCenterDto, MonitoringCentersService, UpdateCenterDto } from "./monitoring-centers.service";
@@ -96,6 +97,9 @@ test("create retains and persists CMC scan target fields", async () => {
 
   assert.deepEqual(createdData, {
     name: "CMC Central",
+    address: undefined,
+    phone: undefined,
+    contactName: undefined,
     lat: 4.14,
     lng: -73.62,
     primaryIp: "10.10.0.1",
@@ -166,4 +170,66 @@ test("update geocodes the CMC when coordinates are omitted and the project city 
     lat: 4.142,
     lng: -73.6266,
   });
+});
+
+test("remove rejects deleting a CMC with dependent routes, assets, discoveries, or incidents", async () => {
+  let deleted = false;
+
+  const prisma = {
+    monitoringCenter: {
+      findUniqueOrThrow: async () => ({
+        id: "center-1",
+        name: "CMC Central",
+        _count: {
+          routes: 2,
+          centerAssets: 3,
+          discoveryJobs: 1,
+          incidents: 4,
+        },
+      }),
+      delete: async () => {
+        deleted = true;
+        return { id: "center-1" };
+      },
+    },
+  };
+
+  const service = new MonitoringCentersService(prisma as any);
+
+  await assert.rejects(
+    () => service.remove("center-1"),
+    (error: unknown) => error instanceof ConflictException
+      && error.message === "No se puede eliminar el CMC CMC Central porque todavía tiene dependencias asociadas. Registros pendientes: 2 rutas, 3 equipos, 1 escaneo y 4 incidentes.",
+  );
+
+  assert.equal(deleted, false);
+});
+
+test("remove deletes a CMC when it has no dependent records", async () => {
+  let deletedId = "";
+
+  const prisma = {
+    monitoringCenter: {
+      findUniqueOrThrow: async () => ({
+        id: "center-1",
+        name: "CMC Central",
+        _count: {
+          routes: 0,
+          centerAssets: 0,
+          discoveryJobs: 0,
+          incidents: 0,
+        },
+      }),
+      delete: async ({ where }: { where: { id: string } }) => {
+        deletedId = where.id;
+        return { id: where.id };
+      },
+    },
+  };
+
+  const service = new MonitoringCentersService(prisma as any);
+  const result = await service.remove("center-1");
+
+  assert.equal(deletedId, "center-1");
+  assert.deepEqual(result, { ok: true });
 });

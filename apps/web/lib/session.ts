@@ -1,3 +1,5 @@
+import type { UserPermission } from "./user-permissions";
+
 export const AUTH_STORAGE_KEY = "siges_auth";
 
 export type UserRole = "SUPER_ADMIN" | "ADMIN" | "SUPERVISOR" | "OPERATOR" | "TECHNICIAN" | "VIEWER";
@@ -7,6 +9,7 @@ export type SessionUser = {
   email: string;
   name: string | null;
   role: UserRole;
+  permissions: UserPermission[];
 };
 
 export type AuthState = {

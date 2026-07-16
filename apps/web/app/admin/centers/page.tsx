@@ -7,7 +7,7 @@ import { OpsNotice } from "../../../components/ops-notice";
 import { useAuth } from "../../../components/auth-provider";
 import { apiDelete, apiGet, apiPatch, apiPost, type CenterAsset, type CenterDiscoveryJob } from "../../../lib/api";
 import { getPendingCenterDiscoveries } from "../../../lib/center-discovery-view";
-import { formatLifecycleState, toUserFacingError } from "../../../lib/presentation";
+import { formatLifecycleState, formatRelativeTime, toUserFacingError } from "../../../lib/presentation";
 
 type CenterItem = {
   id: string;
@@ -93,6 +93,7 @@ export default function CentersPage() {
   const [saving, setSaving] = useState(false);
   const [savingAsset, setSavingAsset] = useState(false);
   const [deletingAssetId, setDeletingAssetId] = useState("");
+  const [deletingCenterId, setDeletingCenterId] = useState("");
   const [runningDiscovery, setRunningDiscovery] = useState(false);
   const [resolvingDiscoveryId, setResolvingDiscoveryId] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -108,7 +109,7 @@ export default function CentersPage() {
         apiGet<ProjectRef[]>("/projects", accessToken),
       ]);
       setItems(c); setProjects(p);
-      setSelectedCenterId((current) => current || c[0]?.id || "");
+      setSelectedCenterId((current) => (current && c.some((item) => item.id === current) ? current : c[0]?.id || ""));
     } catch (err) {
       setLoadError(toUserFacingError(err, "No se pudieron cargar los centros de monitoreo."));
     } finally { setLoading(false); }
@@ -283,6 +284,33 @@ export default function CentersPage() {
     }
   }
 
+  async function handleDeleteCenter(item: CenterItem) {
+    if (!accessToken) return;
+    if (!window.confirm(`¿Eliminar el CMC "${item.name}"?`)) return;
+    setDeletingCenterId(item.id);
+    try {
+      await apiDelete(`/monitoring-centers/${item.id}`, accessToken);
+      if (selectedCenterId === item.id) {
+        setSelectedCenterId("");
+        setDetail(null);
+      }
+      await load();
+      setFeedback({
+        tone: "info",
+        title: "CMC eliminado",
+        message: `El centro ${item.name} fue eliminado correctamente.`,
+      });
+    } catch (err) {
+      setFeedback({
+        tone: "error",
+        title: "No se pudo eliminar el CMC",
+        message: toUserFacingError(err, "No se pudo eliminar el centro de monitoreo."),
+      });
+    } finally {
+      setDeletingCenterId("");
+    }
+  }
+
   async function handleDeleteAsset(asset: CenterAsset) {
     if (!accessToken || !detail) return;
     if (!window.confirm(`¿Eliminar el equipo "${asset.name}" del CMC?`)) return;
@@ -431,6 +459,13 @@ export default function CentersPage() {
                     <div className="flex justify-end gap-3">
                       <button onClick={() => selectCenter(item.id)} className="text-[11px] text-ops-muted hover:text-ops-text hover:underline">Equipos</button>
                       <button onClick={() => openEdit(item)} className="text-[11px] text-ops-blue hover:underline">Editar</button>
+                      <button
+                        onClick={() => void handleDeleteCenter(item)}
+                        disabled={deletingCenterId === item.id}
+                        className="text-[11px] text-ops-rose hover:underline disabled:opacity-50"
+                      >
+                        {deletingCenterId === item.id ? "Eliminando…" : "Eliminar"}
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -486,6 +521,11 @@ export default function CentersPage() {
                     </div>
                     <p className="mt-1 text-[11px] text-ops-muted">
                       {asset.ip ?? "sin IP"} · {asset.mac ?? "sin MAC"} · {asset.vendor ?? "sin fabricante"} · {asset.model ?? "sin modelo"}
+                    </p>
+                    <p className="mt-1 text-[10px] text-ops-dim">
+                      {asset.ip || asset.mac
+                        ? `Visto ${formatRelativeTime(asset.lastSeenAt)} en el último escaneo`
+                        : "Sin IP/MAC — no se monitorea automáticamente"}
                     </p>
                     {asset.hostname || asset.notes ? (
                       <p className="mt-1 text-[11px] text-ops-dim">

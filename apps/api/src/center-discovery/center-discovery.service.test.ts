@@ -104,6 +104,87 @@ test("confirmDevice falls back to IP after a MAC lookup misses", async () => {
   ]);
 });
 
+test("reconcileCenterAssets marks a matched asset ONLINE and refreshes lastSeenAt", async () => {
+  const updateCalls: Record<string, unknown>[] = [];
+  const prisma = {
+    centerAsset: {
+      findMany: async (args: Record<string, unknown>) => {
+        updateCalls.push({ findManyArgs: args });
+        return [{ id: "asset-1", ip: null, mac: "AA:BB:CC:11:22:33", operativeState: "OFFLINE", lastSeenAt: null }];
+      },
+      update: async (args: Record<string, unknown>) => {
+        updateCalls.push(args);
+        return {};
+      },
+    },
+  };
+
+  const service = new CenterDiscoveryService(prisma as any, {} as any);
+  await (service as any).reconcileCenterAssets("center-1", [
+    { ip: "10.10.0.15", mac: "aa-bb-cc-11-22-33", candidateType: null, name: null, vendor: null, model: null, hostname: null, discoveryConfidence: 50, rawPayload: {} },
+  ]);
+
+  const update = updateCalls.find((call) => "where" in call) as any;
+  assert.equal(update.where.id, "asset-1");
+  assert.equal(update.data.operativeState, "ONLINE");
+  assert.ok(update.data.lastSeenAt instanceof Date);
+});
+
+test("reconcileCenterAssets marks a stale unmatched asset OFFLINE", async () => {
+  let updateArgs: Record<string, unknown> | null = null;
+  const staleLastSeen = new Date(Date.now() - 60 * 60 * 1000); // 1 hour ago
+  const prisma = {
+    centerAsset: {
+      findMany: async () => [{ id: "asset-2", ip: "10.10.0.20", mac: null, operativeState: "ONLINE", lastSeenAt: staleLastSeen }],
+      update: async (args: Record<string, unknown>) => {
+        updateArgs = args;
+        return {};
+      },
+    },
+  };
+
+  const service = new CenterDiscoveryService(prisma as any, {} as any);
+  await (service as any).reconcileCenterAssets("center-1", []);
+
+  assert.deepEqual(updateArgs, { where: { id: "asset-2" }, data: { operativeState: "OFFLINE" } });
+});
+
+test("reconcileCenterAssets leaves a recently-seen unmatched asset alone (avoids single-miss flapping)", async () => {
+  let updateCalled = false;
+  const recentLastSeen = new Date(Date.now() - 60 * 1000); // 1 minute ago
+  const prisma = {
+    centerAsset: {
+      findMany: async () => [{ id: "asset-3", ip: "10.10.0.21", mac: null, operativeState: "ONLINE", lastSeenAt: recentLastSeen }],
+      update: async () => {
+        updateCalled = true;
+        return {};
+      },
+    },
+  };
+
+  const service = new CenterDiscoveryService(prisma as any, {} as any);
+  await (service as any).reconcileCenterAssets("center-1", []);
+
+  assert.equal(updateCalled, false);
+});
+
+test("reconcileCenterAssets excludes MAINTENANCE/DEGRADED assets from automated state changes", async () => {
+  let findManyArgs: Record<string, unknown> | null = null;
+  const prisma = {
+    centerAsset: {
+      findMany: async (args: Record<string, unknown>) => {
+        findManyArgs = args;
+        return [];
+      },
+    },
+  };
+
+  const service = new CenterDiscoveryService(prisma as any, {} as any);
+  await (service as any).reconcileCenterAssets("center-1", []);
+
+  assert.deepEqual((findManyArgs as any).where.operativeState, { in: ["ONLINE", "OFFLINE"] });
+});
+
 test("executeDiscovery uses LAN_ORANGUTAN_CMD when configured for CMC discovery", async () => {
   const tempDir = await mkdtemp(join(tmpdir(), "center-discovery-"));
   const scriptPath = join(tempDir, "fake-orangutan.py");

@@ -2,13 +2,25 @@ import { Injectable } from "@nestjs/common";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { IsEnum, IsOptional, IsString } from "class-validator";
-import { NodeAssetSource, NodeAssetType, NodeDiscoveredDeviceStatus, NodeDiscoveryStatus, Prisma } from "@prisma/client";
+import { NodeAssetSource, NodeAssetType, NodeDiscoveredDeviceStatus, NodeDiscoveryStatus, NodeState, Prisma } from "@prisma/client";
 
 import { CenterAssetsService } from "../center-assets/center-assets.service";
+import type { NormalizedDiscoveredDevice } from "../node-discovery/node-discovery.utils";
 import { PrismaService } from "../prisma/prisma.service";
-import { deriveSubnetFromIp, isValidCidr, isValidIp, normalizeCenterDiscoveredDevices } from "./center-discovery.utils";
+import { deriveSubnetFromIp, isValidCidr, isValidIp, normalizeCenterDiscoveredDevices, normalizeMacAddress } from "./center-discovery.utils";
 
 const execFileAsync = promisify(execFile);
+
+// How long a known asset can go unseen by a scan before it's marked OFFLINE.
+// Deliberately independent of the scheduler's own interval so a single missed
+// scan (network blip, transient probe failure) doesn't flip an asset's state —
+// it takes roughly two missed cycles at the default 5-minute interval.
+const CENTER_ASSET_STALE_MS = Number(process.env.CENTER_ASSET_STALE_MS) || 10 * 60 * 1000;
+
+// Only these two states are automation-owned. MAINTENANCE/DEGRADED reflect a
+// human judgment call (a technician flagged the device, or is working on it)
+// and must not be silently overwritten by a reachability probe.
+const AUTO_MANAGED_STATES: NodeState[] = [NodeState.ONLINE, NodeState.OFFLINE];
 
 export class ConfirmCenterDiscoveredDeviceDto {
   @IsOptional() @IsEnum(NodeAssetType) assetType?: NodeAssetType;
@@ -42,6 +54,7 @@ export class CenterDiscoveryService {
     try {
       const rawDevices = await this.executeDiscovery(targetSubnetCidr, center.primaryIp || undefined);
       const normalized = normalizeCenterDiscoveredDevices(rawDevices);
+      await this.reconcileCenterAssets(centerId, normalized);
       if (normalized.length > 0) {
         await this.prisma.centerDiscoveredDevice.createMany({
           data: normalized.map((device) => ({
@@ -130,6 +143,48 @@ export class CenterDiscoveryService {
       data: { status: NodeDiscoveredDeviceStatus.DISMISSED },
     });
     return { ok: true };
+  }
+
+  /**
+   * Turns a scan into a live health signal for already-confirmed equipment:
+   * assets seen in this scan get ONLINE + a fresh lastSeenAt; assets that
+   * keep missing scans past CENTER_ASSET_STALE_MS get flipped to OFFLINE.
+   * Without this, `operativeState` is whatever an operator last typed by
+   * hand and never reflects reality again.
+   */
+  private async reconcileCenterAssets(centerId: string, discovered: NormalizedDiscoveredDevice[]) {
+    const assets = await this.prisma.centerAsset.findMany({
+      where: {
+        centerId,
+        operativeState: { in: AUTO_MANAGED_STATES },
+        OR: [{ ip: { not: null } }, { mac: { not: null } }],
+      },
+      select: { id: true, ip: true, mac: true, operativeState: true, lastSeenAt: true },
+    });
+    if (assets.length === 0) return;
+
+    const seenMacs = new Set(discovered.map((device) => normalizeMacAddress(device.mac)).filter(Boolean));
+    const seenIps = new Set(discovered.map((device) => device.ip).filter((ip): ip is string => Boolean(ip)));
+    const now = new Date();
+
+    const updates = assets.map((asset) => {
+      const isSeen = (Boolean(asset.mac) && seenMacs.has(normalizeMacAddress(asset.mac))) || (Boolean(asset.ip) && seenIps.has(asset.ip!));
+
+      if (isSeen) {
+        return this.prisma.centerAsset.update({
+          where: { id: asset.id },
+          data: { lastSeenAt: now, ...(asset.operativeState !== NodeState.ONLINE ? { operativeState: NodeState.ONLINE } : {}) },
+        });
+      }
+
+      const isStale = !asset.lastSeenAt || now.getTime() - asset.lastSeenAt.getTime() > CENTER_ASSET_STALE_MS;
+      if (isStale && asset.operativeState !== NodeState.OFFLINE) {
+        return this.prisma.centerAsset.update({ where: { id: asset.id }, data: { operativeState: NodeState.OFFLINE } });
+      }
+      return null;
+    });
+
+    await Promise.all(updates.filter(Boolean));
   }
 
   private async executeDiscovery(targetSubnetCidr: string, targetIp?: string) {

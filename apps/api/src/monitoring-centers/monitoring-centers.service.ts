@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ConflictException, Injectable } from "@nestjs/common";
 import {
   IsNotEmpty,
   IsNumber,
@@ -153,5 +153,31 @@ export class MonitoringCentersService {
       where: { id },
       data,
     });
+  }
+
+  async remove(id: string) {
+    const center = await this.prisma.monitoringCenter.findUniqueOrThrow({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            routes: true,
+            centerAssets: true,
+            discoveryJobs: true,
+            incidents: true,
+          },
+        },
+      },
+    });
+
+    const { routes, centerAssets, discoveryJobs, incidents } = center._count;
+    if (routes > 0 || centerAssets > 0 || discoveryJobs > 0 || incidents > 0) {
+      throw new ConflictException(
+        `No se puede eliminar el CMC ${center.name} porque todavía tiene dependencias asociadas. Registros pendientes: ${routes} rutas, ${centerAssets} equipos, ${discoveryJobs} escaneo${discoveryJobs === 1 ? "" : "s"} y ${incidents} incidentes.`,
+      );
+    }
+
+    await this.prisma.monitoringCenter.delete({ where: { id } });
+    return { ok: true };
   }
 }

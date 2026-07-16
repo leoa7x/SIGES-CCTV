@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeCenterDiscoveredDevices } from "./center-discovery.utils";
+import { normalizeCenterDiscoveredDevices, normalizeMacAddress } from "./center-discovery.utils";
 
 test("normalizeCenterDiscoveredDevices maps WhosThere-like payloads into internal discovered devices", () => {
   const devices = normalizeCenterDiscoveredDevices([
@@ -37,4 +37,11 @@ test("normalizeCenterDiscoveredDevices maps WhosThere-like payloads into interna
       },
     },
   ]);
+});
+
+test("normalizeMacAddress makes differently-formatted MACs comparable", () => {
+  assert.equal(normalizeMacAddress("aa:bb:cc:00:11:22"), "AABBCC001122");
+  assert.equal(normalizeMacAddress("AA-BB-CC-00-11-22"), "AABBCC001122");
+  assert.equal(normalizeMacAddress(null), "");
+  assert.equal(normalizeMacAddress(undefined), "");
 });

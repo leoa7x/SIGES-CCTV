@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { Permission } from "@prisma/client";
 import { RequirePermissions } from "../common/decorators/permissions.decorator";
@@ -18,5 +18,6 @@ export class MonitoringCentersController {
   @Get(":id") findOne(@Param("id") id: string) { return this.service.findOne(id); }
   @RequirePermissions(Permission.MANAGE_ORG) @Post() create(@Body() dto: CreateCenterDto) { return this.service.create(dto); }
   @RequirePermissions(Permission.MANAGE_ORG) @Patch(":id") update(@Param("id") id: string, @Body() dto: UpdateCenterDto) { return this.service.update(id, dto); }
+  @RequirePermissions(Permission.MANAGE_ORG) @Delete(":id") remove(@Param("id") id: string) { return this.service.remove(id); }
   @RequirePermissions(Permission.RUN_DISCOVERY) @Post(":id/discovery-jobs") runDiscovery(@Param("id") id: string) { return this.centerDiscoveryService.runForCenter(id); }
 }

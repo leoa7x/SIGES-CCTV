@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { useAuth } from "./auth-provider";
-import { ADMIN_NAV, NAV, type SidebarNavItem } from "../lib/sidebar-icons";
+import { getVisibleAdminNav, NAV, type SidebarNavItem } from "../lib/sidebar-icons";
 
 const SIDEBAR_PINNED_KEY = "siges-sidebar-pinned";
 
@@ -79,6 +79,7 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
   }
 
   const expanded = pinned || hovering || focused;
+  const visibleAdminNav = getVisibleAdminNav(user.role, user.permissions);
 
   return (
     <div className="flex min-h-screen bg-ops-bg text-ops-text">
@@ -155,7 +156,7 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
             );
           })}
 
-          {(user.role === "SUPER_ADMIN" || user.role === "ADMIN") && (
+          {visibleAdminNav.length > 0 && (
             <>
               {expanded ? (
                 <p className="px-3 pb-1 pt-4 text-[9px] font-bold uppercase tracking-widest text-ops-dim">
@@ -164,7 +165,7 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
               ) : (
                 <div className="mx-2 my-3 border-t border-ops-border" />
               )}
-              {ADMIN_NAV.map((item) => {
+              {visibleAdminNav.map((item) => {
                 const isActive = pathname.startsWith(item.href);
                 return (
                   <Link

@@ -773,6 +773,71 @@ enum LogSource {
   MANUAL
 }
 
+enum OpsBackupKind {
+  AUTOMATIC
+  MANUAL_PROTECTED
+  PRE_UPDATE
+}
+
+enum OpsOperationStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum OpsRestoreScope {
+  FULL_SYSTEM
+  DATABASE_ONLY
+  OBJECTS_ONLY
+  CONFIG_ONLY
+}
+
+model OpsLifecycleSettings {
+  id                     String   @id @default(uuid())
+  backupRootPath         String
+  automaticBackupEnabled Boolean  @default(true)
+  automaticBackupHour    Int      @default(23)
+  automaticRetentionCount Int     @default(15)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model OpsBackupRecord {
+  id             String             @id @default(uuid())
+  kind           OpsBackupKind
+  status         OpsOperationStatus @default(PENDING)
+  backupPath     String
+  manifestPath   String?
+  versionLabel   String?
+  sourceHostname String?
+  createdAt      DateTime           @default(now())
+  finishedAt     DateTime?
+  errorMessage   String?
+}
+
+model OpsRestoreRecord {
+  id            String             @id @default(uuid())
+  scope         OpsRestoreScope
+  status        OpsOperationStatus @default(PENDING)
+  backupRecordId String?
+  backupPath    String
+  createdAt     DateTime           @default(now())
+  finishedAt    DateTime?
+  errorMessage  String?
+}
+
+model OpsUpdateRecord {
+  id                String             @id @default(uuid())
+  versionLabel      String
+  packagePath       String
+  preUpdateBackupId String?
+  status            OpsOperationStatus @default(PENDING)
+  createdAt         DateTime           @default(now())
+  finishedAt        DateTime?
+  errorMessage      String?
+}
+
 // ─── Shared enums ─────────────────────────────────────────────────────────────
 
 enum GeoEntityType {
