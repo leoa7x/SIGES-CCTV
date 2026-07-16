@@ -7,6 +7,7 @@ import { OpsModal } from "../../../components/ops-modal";
 import { GrafanaPanelEmbed } from "../../../components/grafana-panel-embed";
 import { useAuth } from "../../../components/auth-provider";
 import { apiDelete, apiGet, apiPatch, apiPost, type GrafanaEmbedDescriptor } from "../../../lib/api";
+import { getNodeDetailViewState } from "../../../lib/node-detail-state";
 import { buildGrafanaEmbedModel } from "../../../lib/network-monitor";
 import { toUserFacingError } from "../../../lib/presentation";
 import { tabClass } from "../../../lib/ui";
@@ -101,6 +102,12 @@ type NodeDetail = {
   analyticsAssignments: AnalyticsAssignment[];
 };
 
+type TelemetryDependencyDetail = {
+  snapshots: number;
+  assetSamples: number;
+  alerts: number;
+};
+
 type NodeForm = {
   code: string;
   name: string;
@@ -147,6 +154,17 @@ const STATE_COLOR: Record<string, string> = {
   MAINTENANCE: "border-ops-border bg-ops-surface text-ops-muted",
 };
 
+function parseTelemetryDependencyDetail(message: string): TelemetryDependencyDetail | null {
+  const match = message.match(/Registros pendientes:\s+(\d+)\s+snapshots,\s+(\d+)\s+muestras de activos y\s+(\d+)\s+alertas/i);
+  if (!match) return null;
+
+  return {
+    snapshots: Number(match[1]),
+    assetSamples: Number(match[2]),
+    alerts: Number(match[3]),
+  };
+}
+
 function formatDate(value?: string | null) {
   if (!value) return "—";
   return new Intl.DateTimeFormat("es-CO", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
@@ -173,6 +191,9 @@ export default function NodesPage() {
   const [runningDiscovery, setRunningDiscovery] = useState(false);
   const [resolvingDiscoveryId, setResolvingDiscoveryId] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [deleteNodeModalOpen, setDeleteNodeModalOpen] = useState(false);
+  const [telemetryDependencyDetail, setTelemetryDependencyDetail] = useState<TelemetryDependencyDetail | null>(null);
+  const [cleaningTelemetry, setCleaningTelemetry] = useState(false);
 
   const [nodeForm, setNodeForm] = useState<NodeForm>({
     code: "",
@@ -228,6 +249,17 @@ export default function NodesPage() {
     () => nodeEmbedDescriptor ? buildGrafanaEmbedModel(nodeEmbedDescriptor) : null,
     [nodeEmbedDescriptor],
   );
+
+  const detailViewState = useMemo(
+    () => getNodeDetailViewState({
+      isLoadingList: loading,
+      isLoadingDetail: loadingDetail,
+      hasItems: items.length > 0,
+      hasDetail: detail !== null,
+    }),
+    [loading, loadingDetail, items.length, detail],
+  );
+  const readyDetail = detailViewState === "ready" ? detail : null;
 
   const filteredItems = useMemo(() => {
     const q = nodeFilter.trim().toLowerCase();
@@ -450,23 +482,47 @@ export default function NodesPage() {
   }
 
   async function handleDeleteNode() {
-    if (!accessToken || !detail) return;
-    const confirmed = window.confirm(`Eliminar el nodo ${detail.code} y todo lo asociado: equipos, cámaras, analíticas, descubrimientos e incidencias relacionadas?`);
-    if (!confirmed) return;
+    setDeleteNodeModalOpen(true);
+  }
 
+  async function confirmDeleteNode() {
+    if (!accessToken || !detail) return;
     setDeletingNode(true);
     setErrorMessage("");
+    setTelemetryDependencyDetail(null);
     try {
       await apiDelete(`/nodes/${detail.id}`, accessToken);
+      setDeleteNodeModalOpen(false);
       setDetail(null);
       setSelectedAssetId("");
       const remaining = items.filter((item) => item.id !== detail.id);
       setSelectedNodeId(remaining[0]?.id ?? "");
       await load();
     } catch (error) {
-      setErrorMessage(toUserFacingError(error, "No se pudo eliminar el nodo."));
+      const message = toUserFacingError(error, "No se pudo eliminar el nodo.");
+      const dependencyDetail = parseTelemetryDependencyDetail(message);
+      if (dependencyDetail) {
+        setTelemetryDependencyDetail(dependencyDetail);
+      } else {
+        setDeleteNodeModalOpen(false);
+        setErrorMessage(message);
+      }
     } finally {
       setDeletingNode(false);
+    }
+  }
+
+  async function handleClearTelemetryAndDeleteNode() {
+    if (!accessToken || !detail) return;
+    setCleaningTelemetry(true);
+    setErrorMessage("");
+    try {
+      await apiDelete(`/nodes/${detail.id}/telemetry-history`, accessToken);
+      await confirmDeleteNode();
+    } catch (error) {
+      setErrorMessage(toUserFacingError(error, "No se pudo limpiar el historial de telemetría del nodo."));
+    } finally {
+      setCleaningTelemetry(false);
     }
   }
 
@@ -678,10 +734,17 @@ export default function NodesPage() {
         </section>
 
         <section className="space-y-4">
-          {!detail || loadingDetail ? (
+          {detailViewState === "loading" ? (
             <div className={PANEL}>
               <div className="flex justify-center py-12">
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" />
+              </div>
+            </div>
+          ) : detailViewState === "empty" ? (
+            <div className={PANEL}>
+              <div className="py-12 text-center">
+                <p className="text-sm font-semibold text-ops-text">No quedan nodos registrados.</p>
+                <p className="mt-2 text-sm text-ops-muted">Crea un nuevo poste para continuar administrando inventario, discovery y observabilidad.</p>
               </div>
             </div>
           ) : (
@@ -689,22 +752,22 @@ export default function NodesPage() {
               <div className="grid gap-4 lg:grid-cols-3">
                 <div className={PANEL}>
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Poste</p>
-                  <p className="mt-2 font-mono text-sm text-ops-text">{detail.code}</p>
-                  <p className="text-lg font-semibold text-ops-text">{detail.name}</p>
-                  <p className="mt-2 text-sm text-ops-muted">{detail.route.identifier} · {detail.route.center.name}</p>
+                  <p className="mt-2 font-mono text-sm text-ops-text">{readyDetail!.code}</p>
+                  <p className="text-lg font-semibold text-ops-text">{readyDetail!.name}</p>
+                  <p className="mt-2 text-sm text-ops-muted">{readyDetail!.route.identifier} · {readyDetail!.route.center.name}</p>
                 </div>
                 <div className={PANEL}>
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Red del nodo</p>
-                  <p className="mt-2 font-mono text-sm text-ops-text">{detail.primaryIp ?? "Sin IP principal"}</p>
-                  <p className="text-sm text-ops-muted">{detail.scanSubnetCidr ?? "Sin subred explícita"}</p>
-                  <p className="mt-2 text-[11px] text-ops-dim">Lat {detail.lat} · Lng {detail.lng}</p>
+                  <p className="mt-2 font-mono text-sm text-ops-text">{readyDetail!.primaryIp ?? "Sin IP principal"}</p>
+                  <p className="text-sm text-ops-muted">{readyDetail!.scanSubnetCidr ?? "Sin subred explícita"}</p>
+                  <p className="mt-2 text-[11px] text-ops-dim">Lat {readyDetail!.lat} · Lng {readyDetail!.lng}</p>
                 </div>
                 <div className={PANEL}>
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">Estado</p>
-                  <span className={`mt-2 inline-block rounded border px-2 py-0.5 text-[10px] font-semibold ${STATE_COLOR[detail.operativeState] ?? STATE_COLOR.MAINTENANCE}`}>
-                    {detail.operativeState}
+                  <span className={`mt-2 inline-block rounded border px-2 py-0.5 text-[10px] font-semibold ${STATE_COLOR[readyDetail!.operativeState] ?? STATE_COLOR.MAINTENANCE}`}>
+                    {readyDetail!.operativeState}
                   </span>
-                  <p className="mt-2 text-sm text-ops-muted">{detail.hasPole ? "Montado en poste" : "Sin marca de poste"}</p>
+                  <p className="mt-2 text-sm text-ops-muted">{readyDetail!.hasPole ? "Montado en poste" : "Sin marca de poste"}</p>
                   <p className="text-[11px] text-ops-dim">Tipo base: POSTE</p>
                   <button
                     type="button"
@@ -719,13 +782,13 @@ export default function NodesPage() {
 
               <div className="flex flex-wrap gap-2">
                 <button type="button" className={tabClass(detailTab === "equipos")} onClick={() => setDetailTab("equipos")}>
-                  Equipos · {detail.assets.length}
+                  Equipos · {readyDetail!.assets.length}
                 </button>
                 <button type="button" className={tabClass(detailTab === "descubrimientos")} onClick={() => setDetailTab("descubrimientos")}>
-                  Descubrimientos · {detail.discoveryJobs.length}
+                  Descubrimientos · {readyDetail!.discoveryJobs.length}
                 </button>
                 <button type="button" className={tabClass(detailTab === "analiticas")} onClick={() => setDetailTab("analiticas")}>
-                  Analíticas · {detail.analyticsAssignments.length}
+                  Analíticas · {readyDetail!.analyticsAssignments.length}
                 </button>
                 <button type="button" className={tabClass(detailTab === "observabilidad")} onClick={() => setDetailTab("observabilidad")}>
                   Observabilidad
@@ -740,9 +803,9 @@ export default function NodesPage() {
                       <button onClick={resetAssetForm} className="text-[11px] text-ops-blue hover:underline">Nuevo activo</button>
                     </div>
                     <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
-                      {detail.assets.length === 0 ? (
+                      {readyDetail!.assets.length === 0 ? (
                         <p className="text-sm text-ops-muted">Aún no hay inventario oficial para este poste.</p>
-                      ) : detail.assets.map((asset) => (
+                      ) : readyDetail!.assets.map((asset) => (
                         <div key={asset.id} className="rounded-ops border border-ops-border bg-ops-surface p-3">
                           <div className="flex items-start justify-between gap-3">
                             <div>
@@ -831,11 +894,11 @@ export default function NodesPage() {
                     {runningDiscovery ? "Escaneando…" : "Escanear ahora"}
                   </button>
                 </div>
-                    {detail.discoveryJobs.length === 0 ? (
+                    {readyDetail!.discoveryJobs.length === 0 ? (
                       <p className="text-sm text-ops-muted">Todavía no hay escaneos ejecutados para este nodo.</p>
                     ) : (
                       <div className="max-h-[65vh] space-y-3 overflow-y-auto pr-1">
-                        {detail.discoveryJobs.map((job) => (
+                        {readyDetail!.discoveryJobs.map((job) => (
                           <div key={job.id} className="rounded-ops border border-ops-border bg-ops-surface p-3">
                             <div className="flex items-center justify-between gap-3">
                               <div>
@@ -889,7 +952,7 @@ export default function NodesPage() {
                 <div className={PANEL}>
                     <p className="mb-4 text-sm font-semibold text-ops-text">Analíticas del nodo</p>
                     <div className="mb-3 flex flex-wrap gap-2">
-                      {detail.analyticsAssignments.map((assignment) => (
+                      {readyDetail!.analyticsAssignments.map((assignment) => (
                         <span key={assignment.id} className="inline-flex items-center gap-2 rounded border border-ops-blue/30 bg-ops-blue/10 px-2 py-0.5 text-[10px] text-ops-blue">
                           {assignment.customLabel || assignment.analyticsCatalog.name}
                           <button
@@ -902,7 +965,7 @@ export default function NodesPage() {
                           </button>
                         </span>
                       ))}
-                      {detail.analyticsAssignments.length === 0 && <p className="text-sm text-ops-muted">Sin analíticas generales aún.</p>}
+                      {readyDetail!.analyticsAssignments.length === 0 && <p className="text-sm text-ops-muted">Sin analíticas generales aún.</p>}
                     </div>
                     <form onSubmit={submitNodeAnalytics} className="space-y-3">
                       <select className={INPUT} value={nodeAnalyticsForm.analyticsCatalogId} onChange={(e) => setNodeAnalyticsForm((f) => ({ ...f, analyticsCatalogId: e.target.value }))}>
@@ -922,7 +985,7 @@ export default function NodesPage() {
                     <p className="mb-4 text-sm font-semibold text-ops-text">Analíticas por equipo</p>
                     <select className={INPUT} value={selectedAssetId} onChange={(e) => setSelectedAssetId(e.target.value)}>
                       <option value="">Seleccionar activo…</option>
-                      {detail.assets.map((asset) => <option key={asset.id} value={asset.id}>{asset.assetType} · {asset.name}</option>)}
+                      {readyDetail!.assets.map((asset) => <option key={asset.id} value={asset.id}>{asset.assetType} · {asset.name}</option>)}
                     </select>
                     {selectedAsset ? (
                       <>
@@ -1024,6 +1087,64 @@ export default function NodesPage() {
             </button>
           </div>
         </form>
+      </OpsModal>
+
+      <OpsModal
+        open={deleteNodeModalOpen}
+        title={detail ? `Eliminar ${detail.code}` : "Eliminar nodo"}
+        onClose={() => {
+          if (deletingNode || cleaningTelemetry) return;
+          setDeleteNodeModalOpen(false);
+          setTelemetryDependencyDetail(null);
+        }}
+        saving={deletingNode || cleaningTelemetry}
+      >
+        {detail ? (
+          <div className="space-y-4">
+            <div className="space-y-2 text-sm text-ops-muted">
+              <p>Esta acción eliminará el nodo y todo lo asociado: equipos, cámaras, analíticas, descubrimientos e incidencias relacionadas.</p>
+              {telemetryDependencyDetail ? (
+                <div className="rounded-ops border border-ops-amber/30 bg-ops-amber/10 p-3">
+                  <p className="font-semibold text-ops-text">Antes de borrar el nodo debes limpiar la telemetría pendiente.</p>
+                  <p className="mt-1">Registros detectados: {telemetryDependencyDetail.snapshots} snapshots, {telemetryDependencyDetail.assetSamples} muestras de activos y {telemetryDependencyDetail.alerts} alertas.</p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteNodeModalOpen(false);
+                  setTelemetryDependencyDetail(null);
+                }}
+                className="rounded-ops border border-ops-border px-4 py-2 text-sm text-ops-muted hover:text-ops-text"
+                disabled={deletingNode || cleaningTelemetry}
+              >
+                Cancelar
+              </button>
+              {telemetryDependencyDetail ? (
+                <button
+                  type="button"
+                  onClick={handleClearTelemetryAndDeleteNode}
+                  className="rounded-ops bg-ops-amber px-4 py-2 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
+                  disabled={deletingNode || cleaningTelemetry}
+                >
+                  {cleaningTelemetry ? "Limpiando historial…" : "Limpiar historial y eliminar nodo"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={confirmDeleteNode}
+                  className="rounded-ops bg-ops-rose px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                  disabled={deletingNode || cleaningTelemetry}
+                >
+                  {deletingNode ? "Validando eliminación…" : "Eliminar nodo"}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : null}
       </OpsModal>
     </OpsShell>
   );

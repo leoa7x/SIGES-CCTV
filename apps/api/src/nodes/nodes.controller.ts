@@ -15,5 +15,6 @@ export class NodesController {
   @Get(":id") findOne(@Param("id") id: string) { return this.service.findOne(id); }
   @RequirePermissions(Permission.MANAGE_NODES) @Post() create(@Body() dto: CreateNodeDto) { return this.service.create(dto); }
   @RequirePermissions(Permission.MANAGE_NODES) @Patch(":id") update(@Param("id") id: string, @Body() dto: UpdateNodeDto) { return this.service.update(id, dto); }
+  @RequirePermissions(Permission.MANAGE_NODES) @Delete(":id/telemetry-history") clearTelemetryHistory(@Param("id") id: string) { return this.service.clearTelemetryHistory(id); }
   @RequirePermissions(Permission.MANAGE_NODES) @Delete(":id") remove(@Param("id") id: string) { return this.service.remove(id); }
 }

@@ -128,9 +128,13 @@ export class NodesService {
     const discoveryJobIds = node.discoveryJobs.map((job) => job.id);
     const pointIds = node.fiberPoints.map((point) => point.id);
     const telemetrySnapshotCount = await this.prisma.networkTelemetrySnapshot.count({ where: { nodeId: id } });
+    const telemetryAssetSampleCount = await this.prisma.networkTelemetryAssetSample.count({ where: { nodeId: id } });
+    const telemetryAlertCount = await this.prisma.networkTelemetryAlert.count({ where: { nodeId: id } });
 
-    if (telemetrySnapshotCount > 0) {
-      throw new ConflictException("No se puede eliminar el nodo porque todavía tiene historial de telemetría asociado. Debes borrar primero esos registros.");
+    if (telemetrySnapshotCount > 0 || telemetryAssetSampleCount > 0 || telemetryAlertCount > 0) {
+      throw new ConflictException(
+        `No se puede eliminar el nodo porque todavía tiene historial de telemetría asociado. Registros pendientes: ${telemetrySnapshotCount} snapshots, ${telemetryAssetSampleCount} muestras de activos y ${telemetryAlertCount} alertas. Debes borrar primero esos registros.`,
+      );
     }
 
     await this.deleteFiberTopologyForNodePoints(pointIds);
@@ -164,6 +168,31 @@ export class NodesService {
     ]);
 
     return { ok: true };
+  }
+
+  async clearTelemetryHistory(id: string) {
+    await this.prisma.node.findUniqueOrThrow({ where: { id }, select: { id: true } });
+
+    const [snapshots, assetSamples, alerts] = await Promise.all([
+      this.prisma.networkTelemetrySnapshot.count({ where: { nodeId: id } }),
+      this.prisma.networkTelemetryAssetSample.count({ where: { nodeId: id } }),
+      this.prisma.networkTelemetryAlert.count({ where: { nodeId: id } }),
+    ]);
+
+    await this.prisma.$transaction([
+      this.prisma.networkTelemetryAlert.deleteMany({ where: { nodeId: id } }),
+      this.prisma.networkTelemetryAssetSample.deleteMany({ where: { nodeId: id } }),
+      this.prisma.networkTelemetrySnapshot.deleteMany({ where: { nodeId: id } }),
+    ]);
+
+    return {
+      ok: true,
+      removed: {
+        snapshots,
+        assetSamples,
+        alerts,
+      },
+    };
   }
 
   private async deleteFiberTopologyForNodePoints(pointIds: string[]) {

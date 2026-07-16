@@ -55,7 +55,7 @@ export class CenterDiscoveryService {
         where: { id: job.id },
         data: {
           status: NodeDiscoveryStatus.COMPLETED,
-          rawSummary: { source: "whosthere", discoveredCount: normalized.length },
+          rawSummary: { source: process.env.LAN_ORANGUTAN_CMD ? "orangutan" : "mock", discoveredCount: normalized.length },
           finishedAt: new Date(),
         },
       });
@@ -133,22 +133,60 @@ export class CenterDiscoveryService {
   }
 
   private async executeDiscovery(targetSubnetCidr: string, targetIp?: string) {
+    const commandTemplate = process.env.LAN_ORANGUTAN_CMD?.trim();
+    if (!commandTemplate) {
+      return this.buildMockResults(targetSubnetCidr, targetIp);
+    }
+
     if (!isValidCidr(targetSubnetCidr)) {
       throw new Error(`Subred de escaneo invalida: ${targetSubnetCidr}`);
     }
     if (targetIp && !isValidIp(targetIp)) {
       throw new Error(`IP de escaneo invalida: ${targetIp}`);
     }
-    const { stdout } = await execFileAsync("python3", ["scripts/run_whosthere_scan.py", targetSubnetCidr, targetIp ?? ""], {
+
+    const [command, ...templateArgs] = commandTemplate.split(/\s+/).filter(Boolean);
+    const args = templateArgs.map((arg) =>
+      arg.replaceAll("{target}", targetSubnetCidr).replaceAll("{ip}", targetIp ?? ""),
+    );
+
+    const { stdout } = await execFileAsync(command, args, {
+      env: {
+        ...process.env,
+        CENTER_DISCOVERY_TARGET: targetSubnetCidr,
+        CENTER_DISCOVERY_IP: targetIp ?? "",
+      },
       maxBuffer: 10 * 1024 * 1024,
     });
-    const parsed = JSON.parse(stdout) as { success?: boolean; error?: string; devices?: unknown };
-    if (parsed.success === false) {
-      throw new Error(parsed.error || "WhosThere scan failed");
+
+    const parsed = JSON.parse(stdout);
+    if (Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>[];
     }
-    if (!Array.isArray(parsed.devices)) {
-      throw new Error("WhosThere debe devolver JSON con arreglo de devices");
+    if (parsed && typeof parsed === "object" && Array.isArray((parsed as { devices?: unknown }).devices)) {
+      const result = parsed as { success?: boolean; error?: string; devices: Record<string, unknown>[] };
+      if (result.success === false) {
+        throw new Error(result.error || "LAN-Orangutan scan failed");
+      }
+      return result.devices;
     }
-    return parsed.devices as Record<string, unknown>[];
+    throw new Error("LAN-Orangutan debe devolver JSON con arreglo de devices");
+  }
+
+  private buildMockResults(targetSubnetCidr: string, targetIp?: string) {
+    const prefix = targetSubnetCidr.split("/")[0].split(".").slice(0, 3).join(".");
+    return [
+      {
+        ip: `${prefix}.10`,
+        mac: "AA:00:00:00:10:10",
+        vendor: "Cisco",
+        hostname: "core-cmc",
+        model: "CBS250-24P-4G",
+        type: "switch",
+        confidence: 82,
+        target: targetSubnetCidr,
+        primaryIp: targetIp ?? "",
+      },
+    ] satisfies Record<string, unknown>[];
   }
 }
