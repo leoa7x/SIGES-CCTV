@@ -20,6 +20,7 @@ model User {
   incidents      Incident[]     @relation("AssignedIncidents")
   logbookEntries LogbookEntry[]
   discoveryJobs  NodeDiscoveryJob[]
+  centerDiscoveryJobs CenterDiscoveryJob[]
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 }
@@ -97,21 +98,24 @@ model Project {
 }
 
 model MonitoringCenter {
-  id          String      @id @default(uuid())
-  name        String
-  address     String?
-  phone       String?
-  contactName String?
-  lat         Float?
-  lng         Float?
-  state       EntityState @default(ACTIVE)
-  projectId   String
-  project     Project     @relation(fields: [projectId], references: [id])
-  routes      Route[]
-  incidents   Incident[]  @relation("CenterIncidents")
-  centerAssets CenterAsset[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id             String               @id @default(uuid())
+  name           String
+  address        String?
+  phone          String?
+  contactName    String?
+  lat            Float?
+  lng            Float?
+  primaryIp      String?
+  scanSubnetCidr String?
+  state          EntityState          @default(ACTIVE)
+  projectId      String
+  project        Project              @relation(fields: [projectId], references: [id])
+  routes         Route[]
+  incidents      Incident[]           @relation("CenterIncidents")
+  centerAssets   CenterAsset[]
+  discoveryJobs  CenterDiscoveryJob[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 }
 
 // ─── Network topology ─────────────────────────────────────────────────────────
@@ -278,8 +282,47 @@ model CenterAsset {
   source         NodeAssetSource   @default(MANUAL)
   lastSeenAt     DateTime?
   notes          String?
+  discoveredDevices CenterDiscoveredDevice[]
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
+}
+
+model CenterDiscoveryJob {
+  id                String                    @id @default(uuid())
+  centerId          String
+  center            MonitoringCenter          @relation(fields: [centerId], references: [id])
+  requestedByUserId String?
+  requestedByUser   User?                     @relation(fields: [requestedByUserId], references: [id])
+  status            NodeDiscoveryStatus
+  targetIp          String?
+  targetSubnetCidr  String?
+  rawSummary        Json?
+  errorMessage      String?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  discoveredDevices CenterDiscoveredDevice[]
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+}
+
+model CenterDiscoveredDevice {
+  id                   String                     @id @default(uuid())
+  centerDiscoveryJobId String
+  centerDiscoveryJob   CenterDiscoveryJob         @relation(fields: [centerDiscoveryJobId], references: [id])
+  matchedAssetId       String?
+  matchedAsset         CenterAsset?               @relation(fields: [matchedAssetId], references: [id])
+  candidateType        NodeAssetType?
+  name                 String?
+  ip                   String?
+  mac                  String?
+  vendor               String?
+  model                String?
+  hostname             String?
+  discoveryConfidence  Int                        @default(50)
+  rawPayload           Json
+  status               NodeDiscoveredDeviceStatus @default(DISCOVERED)
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
 }
 
 model NodeDiscoveryJob {

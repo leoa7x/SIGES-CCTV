@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { MonitoringCentersService } from "./monitoring-centers.service";
 
-test("findOne includes center assets for CMC topology and admin screens", async () => {
+test("findOne includes CMC discovery backlog for admin detail", async () => {
   let includeArgs: Record<string, unknown> | null = null;
 
   const prisma = {
@@ -24,6 +24,16 @@ test("findOne includes center assets for CMC topology and admin screens", async 
       project: { include: { city: true } },
       routes: { include: { _count: { select: { nodes: true } } } },
       centerAssets: { orderBy: [{ assetType: "asc" }, { name: "asc" }] },
+      discoveryJobs: {
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        include: {
+          discoveredDevices: {
+            orderBy: { createdAt: "desc" },
+            include: { matchedAsset: { select: { id: true, name: true, assetType: true } } },
+          },
+        },
+      },
     },
   });
 });

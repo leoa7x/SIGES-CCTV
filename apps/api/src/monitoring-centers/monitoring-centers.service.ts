@@ -85,6 +85,16 @@ export class MonitoringCentersService {
         project: { include: { city: true } },
         routes: { include: { _count: { select: { nodes: true } } } },
         centerAssets: { orderBy: [{ assetType: "asc" }, { name: "asc" }] },
+        discoveryJobs: {
+          orderBy: { createdAt: "desc" },
+          take: 5,
+          include: {
+            discoveredDevices: {
+              orderBy: { createdAt: "desc" },
+              include: { matchedAsset: { select: { id: true, name: true, assetType: true } } },
+            },
+          },
+        },
       },
     });
   }
