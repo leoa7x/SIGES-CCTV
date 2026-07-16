@@ -14,6 +14,9 @@ def main() -> int:
     primary_ip = sys.argv[2] if len(sys.argv) > 2 else ""
     command_template = os.environ.get("WHOSTHERE_CMD", "").strip()
     if not command_template:
+        if os.environ.get("NODE_ENV") == "production":
+            print(json.dumps({"success": False, "error": "WHOSTHERE_CMD must be configured in production"}))
+            return 0
         prefix = target.split("/")[0].rsplit(".", 1)[0]
         print(json.dumps({
             "success": True,
