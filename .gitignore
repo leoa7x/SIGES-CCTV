@@ -10,5 +10,6 @@ dist/
 Thumbs.db
 *.log
 *.tsbuildinfo
+__pycache__/
 prisma/migrations/
 tools/LAN-Orangutan/
