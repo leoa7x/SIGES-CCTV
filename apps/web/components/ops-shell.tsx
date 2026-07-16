@@ -4,28 +4,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { useAuth } from "./auth-provider";
+import { ADMIN_NAV, NAV, type SidebarNavItem } from "../lib/sidebar-icons";
 
 const SIDEBAR_PINNED_KEY = "siges-sidebar-pinned";
-
-const NAV = [
-  { href: "/dashboard",  label: "Dashboard",  icon: "⬡" },
-  { href: "/monitoring/network", label: "Monitoreo Red", icon: "◌" },
-  { href: "/map",        label: "Mapa GIS",    icon: "◈" },
-  { href: "/topology",   label: "Topología",   icon: "◫" },
-  { href: "/projects",   label: "Proyectos",   icon: "◧" },
-  { href: "/incidents",  label: "Incidentes",  icon: "⚠" },
-  { href: "/logbook",    label: "Bitácora",    icon: "≡" },
-];
-
-const ADMIN_NAV = [
-  { href: "/admin/cities",   label: "Ciudades",  icon: "○" },
-  { href: "/admin/branding", label: "Branding",  icon: "◍" },
-  { href: "/admin/centers",  label: "CMC",       icon: "◎" },
-  { href: "/admin/routes",   label: "Rutas",     icon: "⌥" },
-  { href: "/admin/nodes",    label: "Nodos",     icon: "◉" },
-  { href: "/admin/cameras",  label: "Cámaras",   icon: "⊙" },
-  { href: "/admin/users",    label: "Usuarios",  icon: "⊕" },
-];
 
 function SigesLogo() {
   return (
@@ -52,6 +33,18 @@ type OpsShellProps = {
   title?: string;
   eyebrow?: string;
 };
+
+function SidebarIcon({ item }: { item: SidebarNavItem }) {
+  if (item.iconSrc) {
+    return (
+      <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
+        <img src={item.iconSrc} alt="" aria-hidden="true" className="h-[18px] w-[18px] object-contain" />
+      </span>
+    );
+  }
+
+  return <span className="font-mono text-base leading-none">{item.icon}</span>;
+}
 
 export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
   const pathname = usePathname();
@@ -156,7 +149,7 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
                     : "text-ops-muted hover:bg-ops-surface hover:text-ops-text"
                 }`}
               >
-                <span className="font-mono text-base leading-none">{item.icon}</span>
+                <SidebarIcon item={item} />
                 {expanded && <span className="whitespace-nowrap">{item.label}</span>}
               </Link>
             );
@@ -184,7 +177,7 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
                         : "text-ops-muted hover:bg-ops-surface hover:text-ops-text"
                     }`}
                   >
-                    <span className="font-mono text-base leading-none">{item.icon}</span>
+                    <SidebarIcon item={item} />
                     {expanded && <span className="whitespace-nowrap">{item.label}</span>}
                   </Link>
                 );

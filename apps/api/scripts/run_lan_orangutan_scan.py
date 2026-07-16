@@ -1,4 +1,17 @@
 #!/usr/bin/env python3
+"""
+Wrapper around the vendored LAN-Orangutan scanner (tools/LAN-Orangutan).
+
+All SIGES-specific enrichment lives HERE, not in the vendored scanner:
+- neighbor-table (`ip neigh`) supplementation for hosts nmap's -sn pass
+  missed (e.g. devices that ignore discovery pings but are actually up)
+- a targeted `nmap -Pn` re-probe for exactly those missing hosts
+- offline MAC vendor lookup against data/mac_vendor_index.json
+
+Keeping this out of tools/LAN-Orangutan/scanner/scan.py on purpose: that
+file is third-party vendored code, refreshed independently of this repo,
+so any local patch made there would be silently lost on the next refresh.
+"""
 import importlib.util
 import ipaddress
 import json
