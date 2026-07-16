@@ -25,6 +25,8 @@ export class UpdateCenterDto {
   @IsOptional() @IsNumber() lat?: number;
   @IsOptional() @IsNumber() lng?: number;
   @IsOptional() @IsString() state?: string;
+  @IsOptional() @IsString() primaryIp?: string;
+  @IsOptional() @IsString() scanSubnetCidr?: string;
 }
 
 @Injectable()
@@ -121,7 +123,12 @@ export class MonitoringCentersService {
 
   async update(id: string, dto: UpdateCenterDto) {
     let data = dto as Parameters<typeof this.prisma.monitoringCenter.update>[0]["data"];
-    if (dto.lat == null || dto.lng == null) {
+    const hasCoordinateInputs =
+      dto.name !== undefined ||
+      dto.address !== undefined ||
+      dto.lat !== undefined ||
+      dto.lng !== undefined;
+    if (hasCoordinateInputs && (dto.lat == null || dto.lng == null)) {
       const current = await this.prisma.monitoringCenter.findUniqueOrThrow({
         where: { id },
         include: { project: { include: { city: true } } },

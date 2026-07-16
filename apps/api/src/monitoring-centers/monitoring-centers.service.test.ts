@@ -38,6 +38,30 @@ test("findOne includes CMC discovery backlog for admin detail", async () => {
   });
 });
 
+test("update persists CMC scan target fields", async () => {
+  let updatedData: Record<string, unknown> | null = null;
+
+  const prisma = {
+    monitoringCenter: {
+      update: async ({ data }: { data: Record<string, unknown> }) => {
+        updatedData = data;
+        return { id: "center-1", ...data };
+      },
+    },
+  };
+
+  const service = new MonitoringCentersService(prisma as any);
+  await service.update("center-1", {
+    primaryIp: "10.10.0.1",
+    scanSubnetCidr: "10.10.0.0/24",
+  } as any);
+
+  assert.deepEqual(updatedData, {
+    primaryIp: "10.10.0.1",
+    scanSubnetCidr: "10.10.0.0/24",
+  });
+});
+
 test("update geocodes the CMC when coordinates are omitted and the project city is available", async () => {
   let updatedData: Record<string, unknown> | null = null;
 
