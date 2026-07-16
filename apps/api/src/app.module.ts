@@ -27,6 +27,7 @@ import { ObservabilityModule } from "./observability/observability.module";
 import { CameraPreviewModule } from "./camera-preview/camera-preview.module";
 import { BrandingModule } from "./branding/branding.module";
 import { CenterAssetsModule } from "./center-assets/center-assets.module";
+import { CenterDiscoveryModule } from "./center-discovery/center-discovery.module";
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { CenterAssetsModule } from "./center-assets/center-assets.module";
     CameraPreviewModule,
     BrandingModule,
     CenterAssetsModule,
+    CenterDiscoveryModule,
     IncidentsModule,
     LogbookModule,
     DashboardModule,
