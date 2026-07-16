@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { CenterAssetsService } from "./center-assets.service";
 
-test("create stores a manual center asset linked to its CMC", async () => {
+test("create preserves an explicitly supplied center asset source", async () => {
   let createArgs: Record<string, unknown> | null = null;
 
   const prisma = {
@@ -27,8 +27,8 @@ test("create stores a manual center asset linked to its CMC", async () => {
     assetType: "SWITCH",
     name: "Core Switch CMC",
     ip: "10.10.10.2",
-    source: "DISCOVERED",
-  } as any);
+    source: "DISCOVERY",
+  });
 
   assert.deepEqual(createArgs, {
     data: {
@@ -36,7 +36,7 @@ test("create stores a manual center asset linked to its CMC", async () => {
       name: "Core Switch CMC",
       ip: "10.10.10.2",
       center: { connect: { id: "center-1" } },
-      source: "MANUAL",
+      source: "DISCOVERY",
       lastSeenAt: (createArgs as any).data.lastSeenAt,
     },
     include: {

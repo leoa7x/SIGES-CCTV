@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { IsEnum, IsOptional, IsString } from "class-validator";
-import { NodeAssetType, NodeDiscoveredDeviceStatus, NodeDiscoveryStatus, Prisma } from "@prisma/client";
+import { NodeAssetSource, NodeAssetType, NodeDiscoveredDeviceStatus, NodeDiscoveryStatus, Prisma } from "@prisma/client";
 
 import { CenterAssetsService } from "../center-assets/center-assets.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -88,16 +88,18 @@ export class CenterDiscoveryService {
       include: { centerDiscoveryJob: { select: { centerId: true } } },
     });
     const centerId = device.centerDiscoveryJob.centerId;
-    const existing = await this.prisma.centerAsset.findFirst({
-      where: {
-        centerId,
-        OR: [
-          ...(device.mac ? [{ mac: device.mac }] : []),
-          ...(device.ip ? [{ ip: device.ip }] : []),
-        ],
-      },
-      select: { id: true },
-    });
+    const existingByMac = device.mac
+      ? await this.prisma.centerAsset.findFirst({
+          where: { centerId, mac: device.mac },
+          select: { id: true },
+        })
+      : null;
+    const existing = existingByMac || (device.ip
+      ? await this.prisma.centerAsset.findFirst({
+          where: { centerId, ip: device.ip },
+          select: { id: true },
+        })
+      : null);
     const payload = {
       assetType: dto.assetType ?? device.candidateType ?? NodeAssetType.SWITCH,
       name: dto.name?.trim() || device.name || device.hostname || "Equipo CMC",
@@ -106,6 +108,7 @@ export class CenterDiscoveryService {
       vendor: device.vendor ?? undefined,
       model: device.model ?? undefined,
       hostname: device.hostname ?? undefined,
+      source: device.vendor || device.model ? NodeAssetSource.DISCOVERY_ENRICHED : NodeAssetSource.DISCOVERY,
     };
     const asset = existing
       ? await this.centerAssetsService.update(existing.id, payload)
