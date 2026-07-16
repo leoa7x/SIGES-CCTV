@@ -14,6 +14,8 @@ export class CreateCenterDto {
   @IsOptional() @IsString() contactName?: string;
   @IsOptional() @IsNumber() lat?: number;
   @IsOptional() @IsNumber() lng?: number;
+  @IsOptional() @IsString() primaryIp?: string;
+  @IsOptional() @IsString() scanSubnetCidr?: string;
   @IsString() @IsNotEmpty() projectId!: string;
 }
 

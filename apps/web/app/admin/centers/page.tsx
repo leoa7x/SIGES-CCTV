@@ -219,7 +219,7 @@ export default function CentersPage() {
           state: editForm.state,
         });
       } else {
-        const createdCenter = await apiPost<{ id: string }>("/monitoring-centers", accessToken, {
+        await apiPost("/monitoring-centers", accessToken, {
           name: createForm.name,
           address: createForm.address || undefined,
           phone: createForm.phone || undefined,
@@ -229,10 +229,6 @@ export default function CentersPage() {
           primaryIp: createForm.primaryIp,
           scanSubnetCidr: createForm.scanSubnetCidr,
           projectId: createForm.projectId,
-        });
-        await apiPatch(`/monitoring-centers/${createdCenter.id}`, accessToken, {
-          primaryIp: createForm.primaryIp || null,
-          scanSubnetCidr: createForm.scanSubnetCidr || null,
         });
       }
       closeModal();

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ValidationPipe } from "@nestjs/common";
+import { getMetadataStorage } from "class-validator";
 
-import { MonitoringCentersService } from "./monitoring-centers.service";
+import { CreateCenterDto, MonitoringCentersService } from "./monitoring-centers.service";
 
 test("findOne includes CMC discovery backlog for admin detail", async () => {
   let includeArgs: Record<string, unknown> | null = null;
@@ -59,6 +61,46 @@ test("update persists CMC scan target fields", async () => {
   assert.deepEqual(updatedData, {
     primaryIp: "10.10.0.1",
     scanSubnetCidr: "10.10.0.0/24",
+  });
+});
+
+test("create retains and persists CMC scan target fields", async () => {
+  let createdData: Record<string, unknown> | null = null;
+  const prisma = {
+    project: { findUnique: async () => null },
+    monitoringCenter: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        createdData = data;
+        return { id: "center-1", ...data };
+      },
+    },
+  };
+
+  const validationProperties = getMetadataStorage()
+    .getTargetValidationMetadatas(CreateCenterDto, "", false, false)
+    .map((metadata) => metadata.propertyName);
+  assert.ok(validationProperties.includes("primaryIp"));
+  assert.ok(validationProperties.includes("scanSubnetCidr"));
+
+  const dto = await new ValidationPipe({ whitelist: true, transform: true }).transform({
+    name: "CMC Central",
+    projectId: "project-1",
+    lat: 4.14,
+    lng: -73.62,
+    primaryIp: "10.10.0.1",
+    scanSubnetCidr: "10.10.0.0/24",
+  }, { type: "body", metatype: CreateCenterDto });
+
+  const service = new MonitoringCentersService(prisma as any);
+  await service.create(dto);
+
+  assert.deepEqual(createdData, {
+    name: "CMC Central",
+    lat: 4.14,
+    lng: -73.62,
+    primaryIp: "10.10.0.1",
+    scanSubnetCidr: "10.10.0.0/24",
+    project: { connect: { id: "project-1" } },
   });
 });
 
