@@ -114,6 +114,7 @@ model MonitoringCenter {
   incidents      Incident[]           @relation("CenterIncidents")
   centerAssets   CenterAsset[]
   discoveryJobs  CenterDiscoveryJob[]
+  externalFindings ExternalDiscoveryFinding[]
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
 }
@@ -208,6 +209,18 @@ enum NodeDiscoveryStatus {
   RUNNING
   COMPLETED
   FAILED
+}
+
+enum ExternalFindingStatus {
+  PENDING
+  IGNORED
+  CONFIRMED
+}
+
+enum ExternalFindingSource {
+  SCAN
+  NTOPNG
+  SCAN_AND_NTOPNG
 }
 
 enum NodeDiscoveredDeviceStatus {
@@ -323,6 +336,33 @@ model CenterDiscoveredDevice {
   status               NodeDiscoveredDeviceStatus @default(DISCOVERED)
   createdAt            DateTime                   @default(now())
   updatedAt            DateTime                   @updatedAt
+}
+
+model ExternalDiscoveryFinding {
+  id                    String                @id @default(uuid())
+  centerId              String
+  center                MonitoringCenter      @relation(fields: [centerId], references: [id])
+  identityKey           String                @unique
+  source                ExternalFindingSource @default(SCAN)
+  ip                    String?
+  mac                   String?
+  vendor                String?
+  model                 String?
+  hostname              String?
+  candidateType         NodeAssetType?
+  discoveryConfidence   Int?
+  outsideExpectedSubnet Boolean               @default(true)
+  expectedSubnetCidr    String?
+  observedFromTargetIp  String?
+  status                ExternalFindingStatus @default(PENDING)
+  firstSeenAt           DateTime
+  lastSeenAt            DateTime
+  lastDiscoveryJobId    String?
+  notes                 String?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@index([centerId, status])
 }
 
 model NodeDiscoveryJob {

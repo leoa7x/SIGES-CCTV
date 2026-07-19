@@ -5,9 +5,10 @@ import { IsEnum, IsOptional, IsString } from "class-validator";
 import { NodeAssetSource, NodeAssetType, NodeDiscoveredDeviceStatus, NodeDiscoveryStatus, NodeState, Prisma } from "@prisma/client";
 
 import { CenterAssetsService } from "../center-assets/center-assets.service";
+import { ExternalDiscoveryService } from "../external-discovery/external-discovery.service";
 import type { NormalizedDiscoveredDevice } from "../node-discovery/node-discovery.utils";
 import { PrismaService } from "../prisma/prisma.service";
-import { deriveSubnetFromIp, isValidCidr, isValidIp, normalizeCenterDiscoveredDevices, normalizeMacAddress } from "./center-discovery.utils";
+import { deriveSubnetFromIp, isIpWithinCidr, isValidCidr, isValidIp, normalizeCenterDiscoveredDevices, normalizeMacAddress } from "./center-discovery.utils";
 
 const execFileAsync = promisify(execFile);
 
@@ -32,6 +33,7 @@ export class CenterDiscoveryService {
   constructor(
     private prisma: PrismaService,
     private centerAssetsService: CenterAssetsService,
+    private externalDiscoveryService: Pick<ExternalDiscoveryService, "upsertScanFindings"> = { upsertScanFindings: async () => undefined },
   ) {}
 
   async runForCenter(centerId: string, requestedByUserId?: string) {
@@ -54,21 +56,49 @@ export class CenterDiscoveryService {
     try {
       const rawDevices = await this.executeDiscovery(targetSubnetCidr, center.primaryIp || undefined);
       const normalized = normalizeCenterDiscoveredDevices(rawDevices);
-      await this.reconcileCenterAssets(centerId, normalized);
-      if (normalized.length > 0) {
+      const inRangeDevices = targetSubnetCidr
+        ? normalized.filter((device) => !device.ip || isIpWithinCidr(device.ip, targetSubnetCidr))
+        : normalized;
+      const externalDevices = targetSubnetCidr
+        ? normalized.filter((device) => device.ip && !isIpWithinCidr(device.ip, targetSubnetCidr))
+        : [];
+
+      await this.reconcileCenterAssets(centerId, inRangeDevices);
+      if (inRangeDevices.length > 0) {
         await this.prisma.centerDiscoveredDevice.createMany({
-          data: normalized.map((device) => ({
+          data: inRangeDevices.map((device) => ({
             centerDiscoveryJobId: job.id,
             ...device,
             rawPayload: device.rawPayload as Prisma.InputJsonValue,
           })),
         });
       }
+      if (externalDevices.length > 0) {
+        await this.externalDiscoveryService.upsertScanFindings(
+          centerId,
+          targetSubnetCidr || null,
+          center.primaryIp || null,
+          externalDevices.map((device) => ({
+            ip: device.ip,
+            mac: device.mac,
+            vendor: device.vendor,
+            model: device.model,
+            hostname: device.hostname,
+            candidateType: device.candidateType,
+            discoveryConfidence: device.discoveryConfidence,
+          })),
+          "SCAN",
+        );
+      }
       await this.prisma.centerDiscoveryJob.update({
         where: { id: job.id },
         data: {
           status: NodeDiscoveryStatus.COMPLETED,
-          rawSummary: { source: process.env.LAN_ORANGUTAN_CMD ? "orangutan" : "mock", discoveredCount: normalized.length },
+          rawSummary: {
+            source: process.env.LAN_ORANGUTAN_CMD ? "orangutan" : "mock",
+            discoveredCount: inRangeDevices.length,
+            externalCount: externalDevices.length,
+          },
           finishedAt: new Date(),
         },
       });
@@ -152,7 +182,7 @@ export class CenterDiscoveryService {
    * Without this, `operativeState` is whatever an operator last typed by
    * hand and never reflects reality again.
    */
-  private async reconcileCenterAssets(centerId: string, discovered: NormalizedDiscoveredDevice[]) {
+  protected async reconcileCenterAssets(centerId: string, discovered: NormalizedDiscoveredDevice[]) {
     const assets = await this.prisma.centerAsset.findMany({
       where: {
         centerId,
@@ -187,10 +217,13 @@ export class CenterDiscoveryService {
     await Promise.all(updates.filter(Boolean));
   }
 
-  private async executeDiscovery(targetSubnetCidr: string, targetIp?: string) {
+  protected async executeDiscovery(targetSubnetCidr: string, targetIp?: string) {
     const commandTemplate = process.env.LAN_ORANGUTAN_CMD?.trim();
     if (!commandTemplate) {
-      return this.buildMockResults(targetSubnetCidr, targetIp);
+      if (process.env.DISCOVERY_ALLOW_MOCK === "true") {
+        return this.buildMockResults(targetSubnetCidr, targetIp);
+      }
+      throw new Error("LAN_ORANGUTAN_CMD no está configurado para discovery real.");
     }
 
     if (!isValidCidr(targetSubnetCidr)) {
@@ -228,7 +261,7 @@ export class CenterDiscoveryService {
     throw new Error("LAN-Orangutan debe devolver JSON con arreglo de devices");
   }
 
-  private buildMockResults(targetSubnetCidr: string, targetIp?: string) {
+  protected buildMockResults(targetSubnetCidr: string, targetIp?: string) {
     const prefix = targetSubnetCidr.split("/")[0].split(".").slice(0, 3).join(".");
     return [
       {

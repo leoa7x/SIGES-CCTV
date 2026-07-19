@@ -22,8 +22,11 @@ import { tabClass } from "../../../lib/ui";
 
 const PANEL = "rounded-ops border border-ops-border bg-ops-panel p-4";
 const INPUT = "w-full rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-text focus:border-ops-blue focus:outline-none";
-const PANEL_HUD = "rounded-ops border border-ops-border bg-[radial-gradient(circle_at_top,rgba(29,78,216,0.16),transparent_42%),linear-gradient(180deg,rgba(11,19,33,0.98),rgba(9,15,27,0.98))] p-4 shadow-ops";
-const PANEL_GRID = "rounded-ops border border-ops-border bg-[linear-gradient(180deg,rgba(9,15,27,0.98),rgba(6,10,19,0.98)),linear-gradient(90deg,rgba(148,163,184,0.06)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.06)_1px,transparent_1px)] bg-[size:auto,24px_24px,24px_24px] p-4 shadow-ops";
+// A single calmer surface for panels that previously used heavy per-panel
+// gradients/grid textures (PANEL_HUD, PANEL_GRID) — same identifiers so every
+// call site below stays untouched; only the visual treatment changed.
+const PANEL_HUD = "rounded-ops border border-ops-border bg-ops-surface p-4";
+const PANEL_GRID = "rounded-ops border border-ops-border bg-ops-panel p-4";
 
 const ALERT_STYLES = {
   critical: "border-ops-rose/30 bg-ops-rose/10 text-ops-rose",
@@ -129,7 +132,7 @@ function DiscoveryTrendChart({
           const confirmedHeight = (item.confirmed / max) * 100;
           const dismissedHeight = (item.dismissed / max) * 100;
           return (
-            <div key={item.id} className="rounded-ops border border-ops-border bg-[linear-gradient(180deg,rgba(15,23,42,0.8),rgba(2,6,23,0.98))] p-2">
+            <div key={item.id} className="rounded-ops border border-ops-border bg-ops-surface p-2">
               <div className="flex h-28 items-end justify-center gap-1">
                 <div className="w-3 rounded-t bg-ops-blue" style={{ height: `${discoveredHeight}%` }} title={`Pendientes ${item.discovered}`} />
                 <div className="w-3 rounded-t bg-ops-emerald" style={{ height: `${confirmedHeight}%` }} title={`Confirmados ${item.confirmed}`} />
@@ -168,7 +171,7 @@ function TelemetryStrip({
   const safeSegments = segments.length > 0 ? segments : [0];
   const max = Math.max(1, ...safeSegments);
   return (
-    <div className="rounded-ops border border-ops-border bg-[linear-gradient(180deg,rgba(15,23,42,0.76),rgba(2,6,23,0.96))] p-3">
+    <div className="rounded-ops border border-ops-border bg-ops-surface p-3">
       <p className="text-[10px] uppercase tracking-[0.22em] text-ops-muted">{title}</p>
       <p className={`mt-2 text-2xl font-semibold ${accentClass}`}>{value}</p>
       <div className="mt-3 flex h-12 items-end gap-1">
@@ -428,21 +431,14 @@ export default function NetworkMonitoringPage() {
         {errorMessage ? (
           <OpsNotice tone="error" title="Acción no completada" message={errorMessage} onDismiss={() => setErrorMessage("")} />
         ) : null}
-        <section className="relative overflow-hidden rounded-[28px] border border-ops-border bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.12),transparent_30%),radial-gradient(circle_at_top_right,rgba(37,99,235,0.18),transparent_35%),linear-gradient(135deg,#07111d,#0b1727_62%,#08131f)] p-6 shadow-ops">
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(148,163,184,0.04)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.04)_1px,transparent_1px)] bg-[size:32px_32px]" />
-          <div className="relative max-w-2xl">
-            <div className="max-w-2xl">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-cyan-200/80">Comando Operativo De Red</p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-4xl">Inventario vivo, discovery correlacionado y telemetría con contexto operativo.</h2>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">
-                Base operacional para NOC: qué equipos existen, cuáles están vivos, qué quedó pendiente y cómo se comporta el nodo.
-              </p>
-              <p className="mt-4 text-xs font-medium text-slate-400">
-                Cobertura: {model.summary.totalNodes} nodos visibles · Discovery: {model.observability.pendingDiscoveries} pendientes · Observabilidad: {model.observability.analyticsConfigured} analíticas configuradas
-              </p>
-            </div>
+        <section className="rounded-ops border border-ops-border bg-[linear-gradient(135deg,#07111d,#0b1727_62%,#08131f)] p-5 shadow-ops">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+            <h2 className="text-xl font-semibold tracking-tight text-white">Monitoreo de Red</h2>
+            <p className="text-xs font-medium text-slate-400">
+              {model.summary.totalNodes} nodos · {model.observability.pendingDiscoveries} discovery pendientes · {model.observability.analyticsConfigured} analíticas
+            </p>
           </div>
-          <div className="relative mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
             <StatCard label="Nodos" value={model.summary.totalNodes} sub={`${model.summary.onlineNodes} en línea`} />
             <StatCard label="Degradados" value={model.summary.degradedNodes} sub="requieren revisión" />
             <StatCard label="Fuera de línea" value={model.summary.offlineNodes} sub="impacto operativo" />
@@ -452,12 +448,10 @@ export default function NetworkMonitoringPage() {
           </div>
         </section>
 
-        <section className="rounded-[26px] border border-ops-border bg-[linear-gradient(180deg,rgba(8,18,32,0.98),rgba(5,11,22,0.98))] p-4 shadow-ops">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-muted">Observabilidad Global</p>
-              <h2 className="mt-1 text-lg font-semibold text-ops-text">Comando de red y telemetría consolidada</h2>
-            </div>
+        <section className={PANEL}>
+          <div className="mb-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-muted">Observabilidad Global</p>
+            <h2 className="mt-1 text-base font-semibold text-ops-text">Comando de red y telemetría consolidada</h2>
           </div>
           <GrafanaPanelEmbed
             title={networkEmbed?.title ?? "Comando de red"}
@@ -492,8 +486,8 @@ export default function NetworkMonitoringPage() {
                     onClick={() => setSelectedNodeId(node.id)}
                     className={`group relative w-full overflow-hidden rounded-ops border p-3 text-left transition-colors ${
                       node.id === selectedNodeId
-                        ? "border-ops-blue bg-[linear-gradient(90deg,rgba(29,78,216,0.24),rgba(15,23,42,0.84)_45%,rgba(2,6,23,0.96))] shadow-ops-glow-blue"
-                        : "border-ops-border bg-[linear-gradient(180deg,rgba(15,23,42,0.76),rgba(2,6,23,0.96))] hover:border-ops-blue/40"
+                        ? "border-ops-blue bg-ops-blue/10 shadow-ops-glow-blue"
+                        : "border-ops-border bg-ops-surface hover:border-ops-blue/40"
                     }`}
                   >
                     {node.id === selectedNodeId && <span className="absolute inset-y-0 left-0 w-1 bg-ops-blue" />}
@@ -516,12 +510,6 @@ export default function NetworkMonitoringPage() {
                       <span>{node._count.discoveryJobs} scans</span>
                       <span className="text-ops-border">/</span>
                       <span>{node._count.analyticsAssignments} analíticas</span>
-                    </div>
-                    <div className="mt-2 h-1 overflow-hidden rounded-full bg-black/30">
-                      <div
-                        className={`${node.operativeState === "ONLINE" ? "bg-ops-emerald" : node.operativeState === "DEGRADED" ? "bg-ops-amber" : "bg-ops-rose"} h-full rounded-full`}
-                        style={{ width: `${node._count.assets === 0 ? 18 : Math.min(100, 28 + node._count.assets * 11)}%` }}
-                      />
                     </div>
                   </button>
                 ))}
@@ -581,7 +569,7 @@ export default function NetworkMonitoringPage() {
                       <div className="mb-3 flex items-center justify-between">
                         <div>
                           <p className="text-sm font-semibold text-ops-text">Inventario correlacionado</p>
-                          <p className="text-xs text-ops-muted">Equipos oficiales + hallazgos de discovery pendientes de confirmar.</p>
+                          <p className="text-xs text-ops-muted">Equipos oficiales y hallazgos de discovery.</p>
                         </div>
                         <span className="rounded-full border border-ops-border px-2 py-1 text-[10px] text-ops-muted">{filteredInventory.length} / {model.inventory.length}</span>
                       </div>
@@ -646,7 +634,7 @@ export default function NetworkMonitoringPage() {
                       <div className="max-h-[55vh] space-y-3 overflow-y-auto pr-1">
                       {latestJob?.discoveredDevices.filter((device) => device.status === "DISCOVERED").length ? (
                         latestJob.discoveredDevices.filter((device) => device.status === "DISCOVERED").map((device) => (
-                          <div key={device.id} className="rounded-ops border border-ops-border bg-[linear-gradient(180deg,rgba(15,23,42,0.8),rgba(2,6,23,0.96))] p-3">
+                          <div key={device.id} className="rounded-ops border border-ops-border bg-ops-surface p-3">
                             <div className="flex flex-wrap items-start justify-between gap-3">
                               <div>
                                 <p className="text-sm font-medium text-ops-text">{device.name || device.hostname || device.ip || "Dispositivo descubierto"}</p>
@@ -690,7 +678,7 @@ export default function NetworkMonitoringPage() {
                         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <p className="text-sm font-semibold text-ops-text">Actividad reciente del nodo</p>
-                            <p className="text-xs text-ops-muted">Bytes de entrada/salida, hosts y flujos activos en las últimas capturas.</p>
+                            <p className="text-xs text-ops-muted">Bytes, hosts y flujos por captura.</p>
                           </div>
                           <span className="rounded-full border border-ops-border px-2 py-1 text-[10px] text-ops-muted">
                             {detail?.code} · {detail?.route.identifier}
@@ -718,7 +706,7 @@ export default function NetworkMonitoringPage() {
 
                       <div className={PANEL_GRID}>
                         <p className="text-sm font-semibold text-ops-text">Estado rápido de telemetría</p>
-                        <p className="mb-4 text-xs text-ops-muted">Cobertura de datos antes de entrar al detalle completo.</p>
+                        <p className="mb-4 text-xs text-ops-muted">Resumen antes del detalle.</p>
                         <SignalMatrix
                           items={[
                             { label: "Última captura", value: formatDate(telemetrySummary?.capturedAt), tone: "text-ops-text" },
@@ -733,7 +721,7 @@ export default function NetworkMonitoringPage() {
                     <div className="grid gap-4 xl:grid-cols-[1.1fr_1fr]">
                       <div className={PANEL_GRID}>
                         <p className="text-sm font-semibold text-ops-text">Tráfico por protocolo</p>
-                        <p className="mb-4 text-xs text-ops-muted">Protocolos con mayor volumen en el último snapshot de telemetría.</p>
+                        <p className="mb-4 text-xs text-ops-muted">Mayor volumen del último snapshot.</p>
                         {(telemetrySummary?.topProtocols.length ?? 0) > 0 ? (
                           <MiniBarChart
                             items={telemetrySummary?.topProtocols.map((item) => ({ label: item.name, value: item.bytes })) ?? []}
@@ -746,7 +734,7 @@ export default function NetworkMonitoringPage() {
 
                       <div className={PANEL_GRID}>
                         <p className="text-sm font-semibold text-ops-text">Destinos principales</p>
-                        <p className="mb-4 text-xs text-ops-muted">Destinos con mayor volumen en el último snapshot de telemetría.</p>
+                        <p className="mb-4 text-xs text-ops-muted">Mayor volumen del último snapshot.</p>
                         {(telemetrySummary?.topDestinations.length ?? 0) > 0 ? (
                           <MiniBarChart
                             items={telemetrySummary?.topDestinations.map((item) => ({ label: `${item.target} (${item.kind})`, value: item.bytes })) ?? []}
@@ -761,7 +749,7 @@ export default function NetworkMonitoringPage() {
                     <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
                       <div className={PANEL_GRID}>
                         <p className="text-sm font-semibold text-ops-text">Hosts por captura</p>
-                        <p className="mb-4 text-xs text-ops-muted">Evolución de hosts activos reportados por la telemetría del nodo.</p>
+                        <p className="mb-4 text-xs text-ops-muted">Evolución de hosts activos.</p>
                         {telemetryTimeseries.length > 0 ? (
                           <MiniBarChart
                             items={telemetryTimeseries.map((point) => ({ label: formatDate(point.capturedAt), value: point.activeHosts }))}
@@ -774,7 +762,7 @@ export default function NetworkMonitoringPage() {
 
                       <div className={PANEL_GRID}>
                         <p className="text-sm font-semibold text-ops-text">Activos observados</p>
-                        <p className="mb-4 text-xs text-ops-muted">Clasificación de los hosts informados por el último snapshot.</p>
+                        <p className="mb-4 text-xs text-ops-muted">Clasificación del último snapshot.</p>
                         {observabilityAssets.length > 0 ? (
                           <MiniBarChart
                             items={["OFFICIAL", "DISCOVERY", "UNMATCHED"].map((source) => ({
@@ -794,7 +782,7 @@ export default function NetworkMonitoringPage() {
                         <div className="mb-4 flex items-start justify-between gap-3">
                           <div>
                             <p className="text-sm font-semibold text-ops-text">Tendencia de discovery</p>
-                            <p className="text-xs text-ops-muted">Resultado de los escaneos recientes para contextualizar la cobertura observada.</p>
+                            <p className="text-xs text-ops-muted">Resultado de escaneos recientes.</p>
                           </div>
                           <span className="rounded-full border border-ops-border bg-black/20 px-2 py-1 text-[10px] text-ops-muted">{model.charts.discoveryTrend.length}</span>
                         </div>
@@ -806,12 +794,9 @@ export default function NetworkMonitoringPage() {
                       </div>
 
                       <div className={PANEL_GRID}>
-                        <div className="mb-4 flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-ops-text">Lectura de cobertura</p>
-                            <p className="text-xs text-ops-muted">La clasificación permite distinguir activos oficiales, hallazgos y hosts aún sin correlación.</p>
-                          </div>
-                          <span className="rounded-full border border-ops-border bg-black/20 px-2 py-1 text-[10px] text-ops-muted">SIGES</span>
+                        <div className="mb-4">
+                          <p className="text-sm font-semibold text-ops-text">Lectura de cobertura</p>
+                          <p className="text-xs text-ops-muted">Oficial, discovery y sin correlación.</p>
                         </div>
                         <SignalMatrix
                           items={[
@@ -828,13 +813,13 @@ export default function NetworkMonitoringPage() {
                       <div className="mb-4 flex items-center justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-ops-text">Actividad operativa del nodo</p>
-                          <p className="text-xs text-ops-muted">Hosts y volumen observados en el último snapshot de telemetría.</p>
+                          <p className="text-xs text-ops-muted">Hosts y volumen del último snapshot.</p>
                         </div>
                         <span className="rounded-full border border-ops-border bg-black/20 px-2 py-1 text-[10px] text-ops-muted">{observabilityAssets.length} hosts</span>
                       </div>
                       <div className="grid max-h-[70vh] gap-3 overflow-y-auto pr-1 xl:grid-cols-2">
                         {observabilityAssets.map((asset) => (
-                          <div key={asset.id} className="rounded-ops border border-ops-border bg-[linear-gradient(180deg,rgba(15,23,42,0.72),rgba(2,6,23,0.96))] p-3">
+                          <div key={asset.id} className="rounded-ops border border-ops-border bg-ops-surface p-3">
                             <div className="flex items-center justify-between gap-3">
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-medium text-ops-text">{asset.nodeAsset?.name ?? asset.hostname ?? asset.ip ?? asset.mac ?? "Host observado"}</p>
@@ -874,7 +859,7 @@ export default function NetworkMonitoringPage() {
                       <div className="mb-4 flex items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-ops-text">Alertas de telemetría</p>
-                          <p className="text-xs text-ops-muted">Incidentes activos derivados de los snapshots de SIGES para este nodo.</p>
+                          <p className="text-xs text-ops-muted">Incidentes activos de este nodo.</p>
                         </div>
                         <span className="rounded-full border border-ops-border bg-black/20 px-2 py-1 text-[10px] text-ops-muted">{telemetryAlerts.length} activas</span>
                       </div>
@@ -903,7 +888,7 @@ export default function NetworkMonitoringPage() {
                       <div className="mb-4 flex items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-ops-text">Condiciones operativas</p>
-                          <p className="text-xs text-ops-muted">Hallazgos de inventario, discovery y configuración que requieren seguimiento.</p>
+                          <p className="text-xs text-ops-muted">Hallazgos que requieren seguimiento.</p>
                         </div>
                         <span className="rounded-full border border-ops-border bg-black/20 px-2 py-1 text-[10px] text-ops-muted">{model.alerts.length} abiertas</span>
                       </div>

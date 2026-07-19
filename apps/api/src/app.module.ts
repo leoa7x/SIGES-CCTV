@@ -28,6 +28,7 @@ import { CameraPreviewModule } from "./camera-preview/camera-preview.module";
 import { BrandingModule } from "./branding/branding.module";
 import { CenterAssetsModule } from "./center-assets/center-assets.module";
 import { CenterDiscoveryModule } from "./center-discovery/center-discovery.module";
+import { ExternalDiscoveryModule } from "./external-discovery/external-discovery.module";
 import { OpsLifecycleModule } from "./ops-lifecycle/ops-lifecycle.module";
 
 @Module({
@@ -46,6 +47,7 @@ import { OpsLifecycleModule } from "./ops-lifecycle/ops-lifecycle.module";
     BrandingModule,
     CenterAssetsModule,
     CenterDiscoveryModule,
+    ExternalDiscoveryModule,
     OpsLifecycleModule,
     IncidentsModule,
     LogbookModule,

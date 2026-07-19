@@ -166,10 +166,13 @@ export class NodeDiscoveryService {
     return { ok: true };
   }
 
-  private async executeDiscovery(targetSubnetCidr: string, targetIp?: string) {
+  protected async executeDiscovery(targetSubnetCidr: string, targetIp?: string) {
     const commandTemplate = process.env.LAN_ORANGUTAN_CMD?.trim();
     if (!commandTemplate) {
-      return this.buildMockResults(targetSubnetCidr, targetIp);
+      if (process.env.DISCOVERY_ALLOW_MOCK === "true") {
+        return this.buildMockResults(targetSubnetCidr, targetIp);
+      }
+      throw new Error("LAN_ORANGUTAN_CMD no está configurado para discovery real.");
     }
 
     if (!isValidCidr(targetSubnetCidr)) {
@@ -210,7 +213,7 @@ export class NodeDiscoveryService {
     throw new Error("LAN-Orangutan debe devolver JSON con arreglo de devices");
   }
 
-  private buildMockResults(targetSubnetCidr: string, targetIp?: string) {
+  protected buildMockResults(targetSubnetCidr: string, targetIp?: string) {
     const prefix = targetSubnetCidr.split("/")[0].split(".").slice(0, 3).join(".");
     return [
       {

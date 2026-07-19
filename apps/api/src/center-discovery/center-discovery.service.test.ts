@@ -225,3 +225,101 @@ test("executeDiscovery uses LAN_ORANGUTAN_CMD when configured for CMC discovery"
     await rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("executeDiscovery fails explicitly when no real scanner is configured", async () => {
+  const originalCommand = process.env.LAN_ORANGUTAN_CMD;
+  const originalAllowMock = process.env.DISCOVERY_ALLOW_MOCK;
+  delete process.env.LAN_ORANGUTAN_CMD;
+  delete process.env.DISCOVERY_ALLOW_MOCK;
+
+  try {
+    const service = new CenterDiscoveryService({} as any, {} as any, { upsertScanFindings: async () => undefined } as any);
+    await assert.rejects(
+      () => (service as any).executeDiscovery("172.16.45.0/24", "172.16.45.1"),
+      /LAN_ORANGUTAN_CMD no está configurado/,
+    );
+  } finally {
+    if (originalCommand == null) delete process.env.LAN_ORANGUTAN_CMD;
+    else process.env.LAN_ORANGUTAN_CMD = originalCommand;
+    if (originalAllowMock == null) delete process.env.DISCOVERY_ALLOW_MOCK;
+    else process.env.DISCOVERY_ALLOW_MOCK = originalAllowMock;
+  }
+});
+
+test("runForCenter stores out-of-subnet discoveries separately from official CMC findings", async () => {
+  let externalArgs: unknown[] = [];
+  let createdDevices: Record<string, unknown>[] = [];
+  let updatedSummary: { status: string; rawSummary: Record<string, unknown>; finishedAt: Date } | null = null;
+
+  class TestService extends CenterDiscoveryService {
+    protected override async executeDiscovery() {
+      return [
+        { ip: "172.16.45.10", mac: "AA:BB:CC:11:22:33", hostname: "in-range", type: "switch", confidence: 80 },
+        { ip: "172.16.46.10", mac: "AA:BB:CC:11:22:44", hostname: "external", type: "switch", confidence: 70 },
+      ];
+    }
+
+    protected override async reconcileCenterAssets() {
+      return;
+    }
+  }
+
+  const prisma = {
+    monitoringCenter: {
+      findUniqueOrThrow: async () => ({
+        id: "center-1",
+        primaryIp: "172.16.45.1",
+        scanSubnetCidr: "172.16.45.0/24",
+      }),
+    },
+    centerDiscoveryJob: {
+      create: async () => ({ id: "job-1" }),
+      update: async ({ data }: { data: { status: string; rawSummary: Record<string, unknown>; finishedAt: Date } }) => {
+        updatedSummary = data;
+        return {};
+      },
+      findUniqueOrThrow: async () => ({ id: "job-1", discoveredDevices: [] }),
+    },
+    centerDiscoveredDevice: {
+      createMany: async ({ data }: { data: Record<string, unknown>[] }) => {
+        createdDevices = data;
+        return { count: data.length };
+      },
+    },
+  };
+
+  const externalDiscoveryService = {
+    upsertScanFindings: async (...args: unknown[]) => {
+      externalArgs = args;
+    },
+  };
+
+  const service = new TestService(prisma as any, {} as any, externalDiscoveryService as any);
+  await service.runForCenter("center-1");
+
+  assert.equal(createdDevices.length, 1);
+  assert.equal(createdDevices[0]?.ip, "172.16.45.10");
+  assert.deepEqual(externalArgs, [
+    "center-1",
+    "172.16.45.0/24",
+    "172.16.45.1",
+    [{
+      ip: "172.16.46.10",
+      mac: "AA:BB:CC:11:22:44",
+      vendor: null,
+      model: null,
+      hostname: "external",
+      candidateType: "SWITCH",
+      discoveryConfidence: 70,
+    }],
+    "SCAN",
+  ]);
+  assert.ok(updatedSummary);
+  const summary = updatedSummary as unknown as { status: string; rawSummary: Record<string, unknown>; finishedAt: Date };
+  assert.deepEqual(summary, {
+    status: "COMPLETED",
+    rawSummary: { source: "mock", discoveredCount: 1, externalCount: 1 },
+    finishedAt: summary.finishedAt,
+  });
+  assert.ok(summary.finishedAt instanceof Date);
+});

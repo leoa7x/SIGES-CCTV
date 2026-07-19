@@ -73,6 +73,14 @@ export function deriveSubnetFromIp(ip: string) {
   return `${octets[0]}.${octets[1]}.${octets[2]}.0/24`;
 }
 
+export function isIpWithinCidr(ip: string, cidr: string) {
+  if (!isValidIp(ip) || !isValidCidr(cidr)) return false;
+  const [networkIp, prefixText] = cidr.trim().split("/");
+  const prefix = Number(prefixText);
+  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+  return (ipToNumber(ip) & mask) === (ipToNumber(networkIp) & mask);
+}
+
 export function normalizeDiscoveredDevices(rawDevices: RawDiscoveredDevice[]): NormalizedDiscoveredDevice[] {
   return rawDevices.map((device) => {
     const hostname = readString(device, ["hostname", "hostName", "dns", "name"]);
@@ -153,4 +161,8 @@ function readNumber(source: RawDiscoveredDevice, keys: string[], fallback: numbe
     }
   }
   return fallback;
+}
+
+function ipToNumber(ip: string) {
+  return ip.trim().split(".").reduce((value, octet) => (value << 8) + Number(octet), 0) >>> 0;
 }
