@@ -72,11 +72,20 @@ type NetworkTelemetryAssetView = {
 
 type NetworkTelemetryAlert = {
   id: string;
+  kind?: string;
   severity: "INFO" | "WARNING" | "CRITICAL";
   title: string;
   detail: string;
   lastSeenAt: string;
 };
+
+function outageAlertTitle(alert: NetworkTelemetryAlert) {
+  if (alert.kind === "NODE_UNREACHABLE") return "Nodo fuera de línea";
+  if (alert.kind === "CENTER_UNREACHABLE") return "CMC sin conectividad";
+  if (alert.kind === "NODE_ASSET_UNREACHABLE") return "Activo del nodo sin respuesta";
+  if (alert.kind === "CENTER_ASSET_UNREACHABLE") return "Activo del CMC sin respuesta";
+  return "Alerta operativa activa";
+}
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub: string }) {
   return (
@@ -263,6 +272,11 @@ export default function NetworkMonitoringPage() {
 
   const latestJob = detail?.discoveryJobs[0] ?? null;
   const model = useMemo(() => buildNetworkMonitorModel(nodes, detail, centerAssets), [nodes, detail, centerAssets]);
+  const outageAlerts = useMemo(
+    () => telemetryAlerts.filter((alert) => alert.kind?.includes("UNREACHABLE")),
+    [telemetryAlerts],
+  );
+  const primaryOutageAlert = outageAlerts[0] ?? null;
   const networkEmbed = useMemo(
     () => networkEmbedDescriptor ? buildGrafanaEmbedModel(networkEmbedDescriptor) : null,
     [networkEmbedDescriptor],
@@ -554,6 +568,14 @@ export default function NetworkMonitoringPage() {
                     </div>
                   </div>
                 </div>
+
+                {primaryOutageAlert ? (
+                  <OpsNotice
+                    tone="error"
+                    title={outageAlertTitle(primaryOutageAlert)}
+                    message={`${primaryOutageAlert.detail} Última detección: ${formatDate(primaryOutageAlert.lastSeenAt)}.`}
+                  />
+                ) : null}
 
                 <div className="border-y border-ops-border bg-black/20 px-3 py-2">
                   <div className="flex flex-wrap gap-2">

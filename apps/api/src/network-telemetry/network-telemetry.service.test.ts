@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { NetworkTelemetryAlertKind } from "@prisma/client";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { NetworkTelemetryService } from "./network-telemetry.service";
+
+test("heartbeat alert enums stay exposed through Prisma types", () => {
+  assert.equal(NetworkTelemetryAlertKind.NODE_SILENT, "NODE_SILENT");
+});
 
 const baseDto = {
   nodeId: "node-1",

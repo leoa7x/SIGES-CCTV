@@ -108,6 +108,10 @@ model MonitoringCenter {
   primaryIp      String?
   scanSubnetCidr String?
   state          EntityState          @default(ACTIVE)
+  operativeState NodeState            @default(ONLINE)
+  heartbeatFailureCount Int           @default(0)
+  lastHeartbeatAt DateTime?
+  lastHeartbeatAttemptAt DateTime?
   projectId      String
   project        Project              @relation(fields: [projectId], references: [id])
   routes         Route[]
@@ -115,6 +119,7 @@ model MonitoringCenter {
   centerAssets   CenterAsset[]
   discoveryJobs  CenterDiscoveryJob[]
   externalFindings ExternalDiscoveryFinding[]
+  operationalAlerts OperationalAlert[]
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
 }
@@ -171,6 +176,10 @@ model Node {
   telemetrySnapshots  NetworkTelemetrySnapshot[]
   telemetrySamples    NetworkTelemetryAssetSample[]
   telemetryAlerts     NetworkTelemetryAlert[]
+  heartbeatFailureCount Int                  @default(0)
+  lastHeartbeatAt       DateTime?
+  lastHeartbeatAttemptAt DateTime?
+  operationalAlerts     OperationalAlert[]
   createdAt           DateTime                  @default(now())
   updatedAt           DateTime                  @updatedAt
 }
@@ -249,6 +258,13 @@ enum NetworkTelemetryAlertKind {
   NEW_DESTINATION
 }
 
+enum OperationalAlertKind {
+  NODE_UNREACHABLE
+  CENTER_UNREACHABLE
+  NODE_ASSET_UNREACHABLE
+  CENTER_ASSET_UNREACHABLE
+}
+
 enum NetworkTelemetryAlertSeverity {
   INFO
   WARNING
@@ -274,6 +290,10 @@ model NodeAsset {
   analyticsAssignments NodeAssetAnalyticsAssignment[]
   telemetrySamples    NetworkTelemetryAssetSample[]
   telemetryAlerts     NetworkTelemetryAlert[]
+  heartbeatFailureCount Int                      @default(0)
+  lastHeartbeatAt       DateTime?
+  lastHeartbeatAttemptAt DateTime?
+  operationalAlerts     OperationalAlert[]
   createdAt            DateTime                      @default(now())
   updatedAt            DateTime                      @updatedAt
 
@@ -295,7 +315,11 @@ model CenterAsset {
   source         NodeAssetSource   @default(MANUAL)
   lastSeenAt     DateTime?
   notes          String?
+  heartbeatFailureCount Int        @default(0)
+  lastHeartbeatAt       DateTime?
+  lastHeartbeatAttemptAt DateTime?
   discoveredDevices CenterDiscoveredDevice[]
+  operationalAlerts OperationalAlert[]
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 }
@@ -511,6 +535,36 @@ model NetworkTelemetryAlert {
   @@index([nodeId, isActive])
   @@index([kind, isActive])
   @@unique([nodeId, kind, title])
+}
+
+model OperationalAlert {
+  id                 String                        @id @default(uuid())
+  scopeKey           String                        @unique
+  nodeId             String?
+  node               Node?                         @relation(fields: [nodeId], references: [id])
+  monitoringCenterId String?
+  monitoringCenter   MonitoringCenter?             @relation(fields: [monitoringCenterId], references: [id])
+  nodeAssetId        String?
+  nodeAsset          NodeAsset?                    @relation(fields: [nodeAssetId], references: [id])
+  centerAssetId      String?
+  centerAsset        CenterAsset?                  @relation(fields: [centerAssetId], references: [id])
+  kind               OperationalAlertKind
+  severity           NetworkTelemetryAlertSeverity
+  title              String
+  detail             String
+  metadataJson       Json?
+  firstSeenAt        DateTime
+  lastSeenAt         DateTime
+  isActive           Boolean                       @default(true)
+  resolvedAt         DateTime?
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+
+  @@index([nodeId, isActive])
+  @@index([monitoringCenterId, isActive])
+  @@index([nodeAssetId, isActive])
+  @@index([centerAssetId, isActive])
+  @@index([kind, isActive])
 }
 
 

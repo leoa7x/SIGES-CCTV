@@ -4,6 +4,7 @@ import {
   NetworkTelemetryAlertKind,
   NetworkTelemetryAlertSeverity,
   NetworkTelemetryClassificationSource,
+  OperationalAlert,
   Prisma,
 } from "@prisma/client";
 
@@ -35,7 +36,8 @@ export class NetworkTelemetryService {
   }
 
   async getNodeSummary(nodeId: string) {
-    if (!await this.nodeExists(nodeId)) {
+    const context = await this.getNodeContext(nodeId);
+    if (!context) {
       return {
         snapshotId: null,
         capturedAt: null,
@@ -54,9 +56,7 @@ export class NetworkTelemetryService {
       orderBy: { capturedAt: "desc" },
     });
     await this.deriveSilentAlerts(nodeId, snapshot?.capturedAt ?? null);
-    const alertCount = await this.prisma.networkTelemetryAlert.count({
-      where: { nodeId, isActive: true },
-    });
+    const alertCount = await this.countNodeMonitorAlerts(nodeId, context.centerId);
     return {
       snapshotId: snapshot?.id ?? null,
       capturedAt: snapshot?.capturedAt ?? null,
@@ -109,17 +109,36 @@ export class NetworkTelemetryService {
   }
 
   async getNodeAlerts(nodeId: string) {
-    if (!await this.nodeExists(nodeId)) return [];
+    const context = await this.getNodeContext(nodeId);
+    if (!context) return [];
 
     const snapshot = await this.prisma.networkTelemetrySnapshot.findFirst({
       where: { nodeId },
       orderBy: { capturedAt: "desc" },
     });
     await this.deriveSilentAlerts(nodeId, snapshot?.capturedAt ?? null);
-    return this.prisma.networkTelemetryAlert.findMany({
-      where: { nodeId, isActive: true },
-      orderBy: [{ severity: "desc" }, { lastSeenAt: "desc" }],
-    });
+    const [telemetryAlerts, operationalAlerts] = await Promise.all([
+      this.prisma.networkTelemetryAlert.findMany({
+        where: { nodeId, isActive: true },
+        orderBy: [{ severity: "desc" }, { lastSeenAt: "desc" }],
+      }),
+      this.prisma.operationalAlert?.findMany
+        ? this.prisma.operationalAlert.findMany({
+          where: {
+            isActive: true,
+            OR: [
+              { nodeId },
+              { monitoringCenterId: context.centerId },
+            ],
+          },
+          orderBy: [{ severity: "desc" }, { lastSeenAt: "desc" }],
+        })
+        : Promise.resolve([]),
+    ]);
+
+    return [...telemetryAlerts, ...operationalAlerts]
+      .map((alert) => this.serializeAlert(alert))
+      .sort((left, right) => this.compareAlerts(left.severity, right.severity, left.lastSeenAt, right.lastSeenAt));
   }
 
   getCenterOfficialAssets(centerId: string) {
@@ -127,6 +146,14 @@ export class NetworkTelemetryService {
       where: { centerId },
       orderBy: [{ assetType: "asc" }, { name: "asc" }],
     });
+  }
+
+  async getCenterAlerts(centerId: string) {
+    const alerts = await this.prisma.operationalAlert.findMany({
+      where: { monitoringCenterId: centerId, isActive: true },
+      orderBy: [{ severity: "desc" }, { lastSeenAt: "desc" }],
+    });
+    return alerts.map((alert) => this.serializeAlert(alert));
   }
 
   async ingestSnapshot(dto: IngestNetworkTelemetryDto) {
@@ -257,6 +284,78 @@ export class NetworkTelemetryService {
       where: { id: nodeId },
       select: { id: true },
     })) !== null;
+  }
+
+  private getNodeContext(nodeId: string) {
+    return this.prisma.node.findUnique({
+      where: { id: nodeId },
+      select: {
+        id: true,
+        route: { select: { monitoringCenterId: true } },
+      },
+    }).then((node) => node ? {
+      nodeId: node.id,
+      centerId: "route" in node && node.route ? node.route.monitoringCenterId : "",
+    } : null);
+  }
+
+  private async countNodeMonitorAlerts(nodeId: string, centerId: string) {
+    const [telemetryAlertCount, operationalAlertCount] = await Promise.all([
+      this.prisma.networkTelemetryAlert.count({
+        where: { nodeId, isActive: true },
+      }),
+      this.prisma.operationalAlert?.count
+        ? this.prisma.operationalAlert.count({
+          where: {
+            isActive: true,
+            OR: [
+              { nodeId },
+              { monitoringCenterId: centerId },
+            ],
+          },
+        })
+        : Promise.resolve(0),
+    ]);
+    return telemetryAlertCount + operationalAlertCount;
+  }
+
+  private serializeAlert(
+    alert: {
+      id: string;
+      kind: string;
+      severity: NetworkTelemetryAlertSeverity;
+      title: string;
+      detail: string;
+      lastSeenAt: Date;
+      createdAt: Date;
+      resolvedAt: Date | null;
+      isActive: boolean;
+    },
+  ) {
+    return {
+      id: alert.id,
+      kind: alert.kind,
+      severity: alert.severity,
+      title: alert.title,
+      detail: alert.detail,
+      lastSeenAt: alert.lastSeenAt,
+      createdAt: alert.createdAt,
+      resolvedAt: alert.resolvedAt,
+      isActive: alert.isActive,
+    };
+  }
+
+  private compareAlerts(
+    leftSeverity: NetworkTelemetryAlertSeverity,
+    rightSeverity: NetworkTelemetryAlertSeverity,
+    leftLastSeenAt: Date,
+    rightLastSeenAt: Date,
+  ) {
+    const severityRank = { CRITICAL: 3, WARNING: 2, INFO: 1 };
+    const leftRank = severityRank[leftSeverity] ?? 0;
+    const rightRank = severityRank[rightSeverity] ?? 0;
+    if (leftRank !== rightRank) return rightRank - leftRank;
+    return rightLastSeenAt.getTime() - leftLastSeenAt.getTime();
   }
 
   private async deriveSilentAlerts(nodeId: string, latestCapturedAt: Date | null) {

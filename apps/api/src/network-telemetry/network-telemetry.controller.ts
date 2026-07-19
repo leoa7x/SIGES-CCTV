@@ -42,4 +42,10 @@ export class NetworkTelemetryController {
   centerOfficialAssets(@Param("id") id: string) {
     return this.service.getCenterOfficialAssets(id);
   }
+
+  @UseGuards(AuthGuard("jwt"))
+  @Get("centers/:id/alerts")
+  centerAlerts(@Param("id") id: string) {
+    return this.service.getCenterAlerts(id);
+  }
 }
