@@ -32,39 +32,45 @@ export class OpsReportHistoryService {
     ];
     const stored: Prisma.OpsReportArtifactCreateManyInput[] = [];
 
-    for (const artifact of artifacts) {
-      const storageKey = `reports/${reportId}/${artifact.file.fileName}`;
-      const retrievalReference = await this.storage.uploadPrivateLikeHistorical(
-        storageKey,
-        artifact.file.buffer,
-        artifact.file.mimeType,
-      );
-      stored.push({
-        reportDefinitionId: reportId,
-        format: artifact.format,
-        fileName: artifact.file.fileName,
-        storageKey,
-        publicUrl: retrievalReference,
-        mimeType: artifact.file.mimeType,
-      });
-    }
+    try {
+      for (const artifact of artifacts) {
+        const storageKey = `reports/${reportId}/${artifact.file.fileName}`;
+        const retrievalReference = await this.storage.uploadPrivateLikeHistorical(
+          storageKey,
+          artifact.file.buffer,
+          artifact.file.mimeType,
+        );
+        stored.push({
+          reportDefinitionId: reportId,
+          format: artifact.format,
+          fileName: artifact.file.fileName,
+          storageKey,
+          publicUrl: retrievalReference,
+          mimeType: artifact.file.mimeType,
+        });
+      }
 
-    return this.prisma.$transaction(async (tx) => {
-      const definition = await tx.opsReportDefinition.create({
-        data: {
-          id: reportId,
-          reportType: input.reportType,
-          title: input.title,
-          dateFrom: new Date(input.filters.dateFrom),
-          dateTo: new Date(input.filters.dateTo),
-          filtersJson: input.filters as Prisma.InputJsonValue,
-          brandingSnapshotJson: input.brandingSnapshot as Prisma.InputJsonValue,
-          generatedByUserId: input.generatedByUserId,
-          trigger: input.trigger,
-        },
+      return await this.prisma.$transaction(async (tx) => {
+        const definition = await tx.opsReportDefinition.create({
+          data: {
+            id: reportId,
+            reportType: input.reportType,
+            title: input.title,
+            dateFrom: new Date(input.filters.dateFrom),
+            dateTo: new Date(input.filters.dateTo),
+            filtersJson: input.filters as Prisma.InputJsonValue,
+            brandingSnapshotJson: input.brandingSnapshot as Prisma.InputJsonValue,
+            generatedByUserId: input.generatedByUserId,
+            trigger: input.trigger,
+          },
+        });
+        await tx.opsReportArtifact.createMany({ data: stored });
+        return definition;
       });
-      await tx.opsReportArtifact.createMany({ data: stored });
-      return definition;
-    });
+    } catch (error) {
+      // Preserve the original failure while removing artifacts that no longer have a report record.
+      await Promise.allSettled(stored.map(({ storageKey }) => this.storage.deletePrivateHistorical(storageKey)));
+      throw error;
+    }
   }
 }

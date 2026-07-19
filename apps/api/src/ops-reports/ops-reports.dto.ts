@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsDateString, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min, ValidateNested } from "class-validator";
+import { IsDateString, IsDefined, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min, ValidateNested } from "class-validator";
 
 const REPORT_TYPES = ["MONITORING", "INFRASTRUCTURE", "INCIDENTS"] as const;
 const SCHEDULE_FREQUENCIES = ["WEEKLY", "MONTHLY"] as const;
@@ -17,6 +17,7 @@ export class OpsReportFiltersDto {
 
 export class PreviewOpsReportDto {
   @IsIn(REPORT_TYPES) reportType!: (typeof REPORT_TYPES)[number];
+  @IsDefined()
   @ValidateNested() @Type(() => OpsReportFiltersDto) filters!: OpsReportFiltersDto;
 }
 
@@ -29,5 +30,6 @@ export class OpsReportRelativeRangeDto {
 export class CreateOpsReportScheduleDto extends PreviewOpsReportDto {
   @IsIn(SCHEDULE_FREQUENCIES) frequency!: (typeof SCHEDULE_FREQUENCIES)[number];
   @IsString() @IsNotEmpty() titleTemplate!: string;
+  @IsDefined()
   @ValidateNested() @Type(() => OpsReportRelativeRangeDto) relativeRange!: OpsReportRelativeRangeDto;
 }

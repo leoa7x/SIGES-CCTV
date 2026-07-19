@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import {
   S3Client,
   PutObjectCommand,
+  DeleteObjectCommand,
   CreateBucketCommand,
   HeadBucketCommand,
   PutBucketPolicyCommand,
@@ -88,5 +89,9 @@ export class StorageService implements OnModuleInit {
     );
     // This reference is resolved by a future authorized download endpoint, never by the bucket directly.
     return `private://${key}`;
+  }
+
+  async deletePrivateHistorical(key: string): Promise<void> {
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.privateBucket, Key: key }));
   }
 }

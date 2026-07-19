@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import "reflect-metadata";
 import { plainToInstance } from "class-transformer";
 import { validateSync } from "class-validator";
 
@@ -104,8 +105,14 @@ test("createHistoricalReport does not create an official cut when an artifact up
 
 test("createHistoricalReport rolls back the official cut when artifact persistence fails", async () => {
   const committedDefinitions: unknown[] = [];
+  const uploadedKeys: string[] = [];
+  const deletedKeys: string[] = [];
   const storage = {
-    uploadPrivateLikeHistorical: async (key: string) => `private://${key}`,
+    uploadPrivateLikeHistorical: async (key: string) => {
+      uploadedKeys.push(key);
+      return `private://${key}`;
+    },
+    deletePrivateHistorical: async (key: string) => { deletedKeys.push(key); },
   };
   const prisma = {
     $transaction: async (callback: (tx: unknown) => Promise<unknown>) => {
@@ -144,6 +151,7 @@ test("createHistoricalReport rolls back the official cut when artifact persisten
   );
 
   assert.deepEqual(committedDefinitions, []);
+  assert.deepEqual(deletedKeys.sort(), uploadedKeys.sort());
 });
 
 test("getActiveBrandingSnapshot captures the active branding fields", async () => {
@@ -211,4 +219,17 @@ test("report DTOs reject invalid report types and schedule ranges", () => {
 
   assert.ok(validateSync(generate).length > 0);
   assert.ok(validateSync(schedule).length > 0);
+});
+
+test("report DTOs require nested filters and schedule relative ranges", () => {
+  const preview = plainToInstance(PreviewOpsReportDto, { reportType: "MONITORING" });
+  const schedule = plainToInstance(CreateOpsReportScheduleDto, {
+    reportType: "MONITORING",
+    filters: { dateFrom: "2026-07-01", dateTo: "2026-07-07" },
+    frequency: "WEEKLY",
+    titleTemplate: "Monitoreo semanal",
+  });
+
+  assert.ok(validateSync(preview).some((error) => error.property === "filters"));
+  assert.ok(validateSync(schedule).some((error) => error.property === "relativeRange"));
 });
