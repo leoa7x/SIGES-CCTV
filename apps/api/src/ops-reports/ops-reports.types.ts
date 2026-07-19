@@ -11,6 +11,19 @@ export type OpsReportFilters = {
   state?: string | null;
 };
 
+export type ReportPreviewPayload = {
+  title: string;
+  summary: Array<{ label: string; value: string | number }>;
+  charts: Array<{
+    type: "bar" | "pie" | "line";
+    title: string;
+    labels: string[];
+    values: number[];
+  }>;
+  tables: Array<{ title: string; columns: string[]; rows: string[][] }>;
+  findings: string[];
+};
+
 export type HistoricalArtifactInput = {
   fileName: string;
   buffer: Buffer;
