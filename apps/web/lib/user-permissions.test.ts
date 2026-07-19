@@ -16,3 +16,10 @@ test("non-admin roles keep deduplicated granular permissions", () => {
     ["VIEW_TELEMETRY", "MANAGE_USERS"],
   );
 });
+
+test("normalizePermissionsForRole keeps report permissions for non-admin roles", () => {
+  assert.deepEqual(
+    normalizePermissionsForRole("SUPERVISOR", ["REPORTS_VIEW", "REPORTS_EXPORT", "IGNORED_PERMISSION"]),
+    ["REPORTS_VIEW", "REPORTS_EXPORT"],
+  );
+});

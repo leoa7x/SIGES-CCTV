@@ -60,3 +60,17 @@ test("PermissionsGuard requires matching permissions for non-admin roles", () =>
     true,
   );
 });
+
+test("PermissionsGuard accepts report permissions for non-admin roles", () => {
+  const reflector = {
+    getAllAndOverride: () => [Permission.REPORTS_VIEW],
+  } as unknown as Reflector;
+  const guard = new PermissionsGuard(reflector);
+
+  assert.equal(
+    guard.canActivate(
+      buildContext({ role: UserRole.SUPERVISOR, permissions: [Permission.REPORTS_VIEW] }),
+    ),
+    true,
+  );
+});

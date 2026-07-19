@@ -11,6 +11,10 @@ export const ALL_PERMISSIONS = [
   "RUN_DISCOVERY",
   "RESOLVE_DISCOVERY",
   "VIEW_TELEMETRY",
+  "REPORTS_VIEW",
+  "REPORTS_EXPORT",
+  "REPORTS_CLOSE_PERIOD",
+  "REPORTS_SCHEDULE",
 ] as const;
 
 export type UserPermission = (typeof ALL_PERMISSIONS)[number];
@@ -26,6 +30,10 @@ export const PERMISSION_LABELS: Record<UserPermission, string> = {
   RUN_DISCOVERY: "Ejecutar discovery",
   RESOLVE_DISCOVERY: "Resolver discovery",
   VIEW_TELEMETRY: "Ver telemetría",
+  REPORTS_VIEW: "Ver reportes",
+  REPORTS_EXPORT: "Exportar reportes",
+  REPORTS_CLOSE_PERIOD: "Cerrar período de reportes",
+  REPORTS_SCHEDULE: "Programar reportes",
 };
 
 export function shouldRoleUseGranularPermissions(role: UserRole | string) {

@@ -21,6 +21,8 @@ model User {
   logbookEntries LogbookEntry[]
   discoveryJobs  NodeDiscoveryJob[]
   centerDiscoveryJobs CenterDiscoveryJob[]
+  generatedReports OpsReportDefinition[]
+  reportSchedules OpsReportSchedule[]
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 }
@@ -47,6 +49,10 @@ enum Permission {
   RUN_DISCOVERY
   RESOLVE_DISCOVERY
   VIEW_TELEMETRY
+  REPORTS_VIEW
+  REPORTS_EXPORT
+  REPORTS_CLOSE_PERIOD
+  REPORTS_SCHEDULE
 }
 
 // ─── Geographic hierarchy ─────────────────────────────────────────────────────
@@ -930,6 +936,69 @@ model OpsUpdateRecord {
   createdAt         DateTime           @default(now())
   finishedAt        DateTime?
   errorMessage      String?
+}
+
+enum OpsReportType {
+  MONITORING
+  INFRASTRUCTURE
+  INCIDENTS
+}
+
+enum OpsReportFormat {
+  PDF
+  CSV
+}
+
+enum OpsReportTrigger {
+  MANUAL
+  SCHEDULED
+}
+
+enum OpsReportScheduleFrequency {
+  WEEKLY
+  MONTHLY
+}
+
+model OpsReportDefinition {
+  id                   String              @id @default(uuid())
+  reportType           OpsReportType
+  title                String
+  dateFrom             DateTime
+  dateTo               DateTime
+  filtersJson          Json
+  brandingSnapshotJson Json
+  generatedByUserId    String?
+  generatedByUser      User?               @relation(fields: [generatedByUserId], references: [id])
+  trigger              OpsReportTrigger
+  artifacts            OpsReportArtifact[]
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+}
+
+model OpsReportArtifact {
+  id                 String              @id @default(uuid())
+  reportDefinitionId String
+  reportDefinition   OpsReportDefinition @relation(fields: [reportDefinitionId], references: [id], onDelete: Cascade)
+  format             OpsReportFormat
+  fileName           String
+  storageKey         String
+  publicUrl          String
+  mimeType           String
+  createdAt          DateTime            @default(now())
+}
+
+model OpsReportSchedule {
+  id                String                    @id @default(uuid())
+  reportType        OpsReportType
+  frequency         OpsReportScheduleFrequency
+  titleTemplate     String
+  filtersJson       Json
+  relativeRangeJson Json
+  active            Boolean                   @default(true)
+  createdByUserId   String?
+  createdByUser     User?                     @relation(fields: [createdByUserId], references: [id])
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
 }
 
 // ─── Shared enums ─────────────────────────────────────────────────────────────
