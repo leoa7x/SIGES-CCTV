@@ -4,14 +4,32 @@ import { OpsReportFilters, ReportPreviewPayload } from "../ops-reports.types";
 export class IncidentsReportBuilder {
   constructor(private readonly prisma: PrismaService) {}
 
-  async build(_filters: OpsReportFilters): Promise<ReportPreviewPayload> {
+  async build(filters: OpsReportFilters): Promise<ReportPreviewPayload> {
+    const centerScope = {
+      ...(filters.projectId ? { projectId: filters.projectId } : {}),
+      project: filters.cityId ? { cityId: filters.cityId } : {},
+    };
     const incidents = await this.prisma.incident.findMany({
-      select: { title: true, severity: true, createdAt: true, resolvedAt: true },
+      where: {
+        detectedAt: dateRange(filters),
+        ...(filters.nodeId ? { nodeId: filters.nodeId } : {}),
+        ...(filters.centerId ? { centerId: filters.centerId } : {}),
+        ...(filters.severity ? { severity: filters.severity as never } : {}),
+        ...(filters.state ? { status: filters.state as never } : {}),
+        ...(filters.cityId || filters.projectId ? {
+          OR: [
+            { node: { route: { center: centerScope } } },
+            { center: centerScope },
+          ],
+        } : {}),
+      },
+      select: { title: true, severity: true, detectedAt: true, resolvedAt: true },
+      orderBy: { detectedAt: "asc" },
     });
     const bySeverity = countBy(incidents, (incident) => incident.severity);
     const closeTimes = incidents
       .filter((incident) => incident.resolvedAt)
-      .map((incident) => incident.resolvedAt!.getTime() - incident.createdAt.getTime());
+      .map((incident) => incident.resolvedAt!.getTime() - incident.detectedAt.getTime());
     const averageCloseHours = closeTimes.length === 0
       ? "Sin cierres"
       : `${Math.round(closeTimes.reduce((total, duration) => total + duration, 0) / closeTimes.length / 3_600_000)} h`;
@@ -42,6 +60,13 @@ export class IncidentsReportBuilder {
         : ["No se registraron incidentes durante el periodo."],
     };
   }
+}
+
+function dateRange(filters: OpsReportFilters) {
+  return {
+    gte: new Date(`${filters.dateFrom}T00:00:00.000Z`),
+    lte: new Date(`${filters.dateTo}T23:59:59.999Z`),
+  };
 }
 
 function countBy<T>(items: T[], key: (item: T) => string): Map<string, number> {

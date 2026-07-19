@@ -4,25 +4,31 @@ import { OpsReportFilters, ReportPreviewPayload } from "../ops-reports.types";
 export class InfrastructureReportBuilder {
   constructor(private readonly prisma: PrismaService) {}
 
-  async build(_filters: OpsReportFilters): Promise<ReportPreviewPayload> {
-    const centers = await this.prisma.monitoringCenter.findMany({
-      select: {
-        id: true,
-        name: true,
-        centerAssets: { select: { assetType: true, vendor: true } },
+  async build(filters: OpsReportFilters): Promise<ReportPreviewPayload> {
+    const assets = await this.prisma.centerAsset.findMany({
+      where: {
+        createdAt: dateRange(filters),
+        ...(filters.state ? { operativeState: filters.state as never } : {}),
+        ...(filters.centerId ? { centerId: filters.centerId } : {}),
+        center: {
+          ...(filters.projectId ? { projectId: filters.projectId } : {}),
+          project: filters.cityId ? { cityId: filters.cityId } : {},
+        },
       },
+      select: {
+        assetType: true,
+        vendor: true,
+        center: { select: { name: true } },
+      },
+      orderBy: [{ assetType: "asc" }, { vendor: "asc" }],
     });
-    const assets = centers.flatMap((center) => center.centerAssets.map((asset) => ({
-      center: center.name,
-      ...asset,
-    })));
     const byType = countBy(assets, (asset) => asset.assetType);
     const byVendor = countBy(assets, (asset) => asset.vendor ?? "Sin fabricante");
 
     return {
       title: "Informe de infraestructura",
       summary: [
-        { label: "Centros de monitoreo", value: centers.length },
+        { label: "Centros de monitoreo", value: new Set(assets.map((asset) => asset.center.name)).size },
         { label: "Activos inventariados", value: assets.length },
       ],
       charts: [{
@@ -34,11 +40,18 @@ export class InfrastructureReportBuilder {
       tables: [{
         title: "Inventario consolidado",
         columns: ["Centro", "Tipo", "Fabricante"],
-        rows: assets.map((asset) => [asset.center, asset.assetType, asset.vendor ?? "Sin fabricante"]),
+        rows: assets.map((asset) => [asset.center.name, asset.assetType, asset.vendor ?? "Sin fabricante"]),
       }],
       findings: Array.from(byVendor.entries()).map(([vendor, count]) => `${vendor}: ${count} activo(s) inventariado(s).`),
     };
   }
+}
+
+function dateRange(filters: OpsReportFilters) {
+  return {
+    gte: new Date(`${filters.dateFrom}T00:00:00.000Z`),
+    lte: new Date(`${filters.dateTo}T23:59:59.999Z`),
+  };
 }
 
 function countBy<T>(items: T[], key: (item: T) => string): Map<string, number> {
