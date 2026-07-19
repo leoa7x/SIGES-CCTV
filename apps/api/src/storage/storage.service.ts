@@ -66,4 +66,8 @@ export class StorageService implements OnModuleInit {
     );
     return `${this.publicUrl}/${this.bucket}/${key}`;
   }
+
+  async uploadPrivateLikeHistorical(key: string, buffer: Buffer, mimeType: string): Promise<string> {
+    return this.upload(key, buffer, mimeType);
+  }
 }
