@@ -130,12 +130,14 @@ test("reconcileCenterAssets marks a matched asset ONLINE and refreshes lastSeenA
   assert.ok(update.data.lastSeenAt instanceof Date);
 });
 
-test("reconcileCenterAssets marks a stale unmatched asset OFFLINE", async () => {
+test("reconcileCenterAssets marks a stale unmatched MAC-only asset OFFLINE", async () => {
+  // No IP on file — the heartbeat scheduler can't reach this asset, so
+  // discovery staleness is the only signal available for it.
   let updateArgs: Record<string, unknown> | null = null;
   const staleLastSeen = new Date(Date.now() - 60 * 60 * 1000); // 1 hour ago
   const prisma = {
     centerAsset: {
-      findMany: async () => [{ id: "asset-2", ip: "10.10.0.20", mac: null, operativeState: "ONLINE", lastSeenAt: staleLastSeen }],
+      findMany: async () => [{ id: "asset-2", ip: null, mac: "AA:BB:CC:99:88:77", operativeState: "ONLINE", lastSeenAt: staleLastSeen }],
       update: async (args: Record<string, unknown>) => {
         updateArgs = args;
         return {};
@@ -149,12 +151,34 @@ test("reconcileCenterAssets marks a stale unmatched asset OFFLINE", async () => 
   assert.deepEqual(updateArgs, { where: { id: "asset-2" }, data: { operativeState: "OFFLINE" } });
 });
 
-test("reconcileCenterAssets leaves a recently-seen unmatched asset alone (avoids single-miss flapping)", async () => {
+test("reconcileCenterAssets never demotes an IP-reachable asset to OFFLINE (that's the heartbeat scheduler's job)", async () => {
+  // Even wildly stale, an asset with an IP must be left alone here — otherwise
+  // this discovery-scan-cadence check and the 15s heartbeat scheduler would
+  // fight over the same OFFLINE bit.
+  let updateCalled = false;
+  const veryStaleLastSeen = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
+  const prisma = {
+    centerAsset: {
+      findMany: async () => [{ id: "asset-4", ip: "10.10.0.20", mac: null, operativeState: "ONLINE", lastSeenAt: veryStaleLastSeen }],
+      update: async () => {
+        updateCalled = true;
+        return {};
+      },
+    },
+  };
+
+  const service = new CenterDiscoveryService(prisma as any, {} as any);
+  await (service as any).reconcileCenterAssets("center-1", []);
+
+  assert.equal(updateCalled, false);
+});
+
+test("reconcileCenterAssets leaves a recently-seen unmatched MAC-only asset alone (avoids single-miss flapping)", async () => {
   let updateCalled = false;
   const recentLastSeen = new Date(Date.now() - 60 * 1000); // 1 minute ago
   const prisma = {
     centerAsset: {
-      findMany: async () => [{ id: "asset-3", ip: "10.10.0.21", mac: null, operativeState: "ONLINE", lastSeenAt: recentLastSeen }],
+      findMany: async () => [{ id: "asset-3", ip: null, mac: "AA:BB:CC:11:00:00", operativeState: "ONLINE", lastSeenAt: recentLastSeen }],
       update: async () => {
         updateCalled = true;
         return {};

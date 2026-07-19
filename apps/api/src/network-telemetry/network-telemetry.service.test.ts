@@ -57,6 +57,10 @@ function createService(overrides: Record<string, unknown> = {}) {
         return { id: "alert-1" };
       },
     },
+    operationalAlert: {
+      findMany: async () => [],
+      count: async () => 0,
+    },
     $transaction: async <T>(callback: (transaction: unknown) => Promise<T>) => {
       calls.transactions += 1;
       return callback(prisma);

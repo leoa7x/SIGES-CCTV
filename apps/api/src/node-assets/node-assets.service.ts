@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { IsEnum, IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { IsEnum, IsNotEmpty, IsOptional, IsString, Matches } from "class-validator";
 import { NodeAssetSource, NodeAssetType, NodeState } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -8,11 +8,16 @@ const CAMERA_ASSET_TYPES = new Set<NodeAssetType>([
   NodeAssetType.CAMARA_FIJA,
 ]);
 
+// Reused by the heartbeat scheduler as the reachability target — must reject
+// anything that isn't a plain IPv4 before it ever reaches `execFile("ping", ...)`.
+const IPV4_OCTET = "(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)";
+const IPV4_PATTERN = new RegExp(`^${IPV4_OCTET}(\\.${IPV4_OCTET}){3}$`);
+
 export class CreateNodeAssetDto {
   @IsString() @IsNotEmpty() nodeId!: string;
   @IsEnum(NodeAssetType) assetType!: NodeAssetType;
   @IsString() @IsNotEmpty() name!: string;
-  @IsOptional() @IsString() ip?: string;
+  @IsOptional() @IsString() @Matches(IPV4_PATTERN, { message: "ip debe ser una IPv4 válida" }) ip?: string;
   @IsOptional() @IsString() mac?: string;
   @IsOptional() @IsString() vendor?: string;
   @IsOptional() @IsString() model?: string;
@@ -25,7 +30,7 @@ export class CreateNodeAssetDto {
 export class UpdateNodeAssetDto {
   @IsOptional() @IsEnum(NodeAssetType) assetType?: NodeAssetType;
   @IsOptional() @IsString() name?: string;
-  @IsOptional() @IsString() ip?: string;
+  @IsOptional() @IsString() @Matches(IPV4_PATTERN, { message: "ip debe ser una IPv4 válida" }) ip?: string;
   @IsOptional() @IsString() mac?: string;
   @IsOptional() @IsString() vendor?: string;
   @IsOptional() @IsString() model?: string;

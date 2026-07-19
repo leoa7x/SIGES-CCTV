@@ -7,6 +7,7 @@ import { NodeAssetSource, NodeAssetType, NodeDiscoveredDeviceStatus, NodeDiscove
 import { CenterAssetsService } from "../center-assets/center-assets.service";
 import { normalizeDiscoveryCommandTemplate } from "../common/discovery-command";
 import { ExternalDiscoveryService } from "../external-discovery/external-discovery.service";
+import { AUTO_MANAGED_STATES } from "../heartbeat/heartbeat.constants";
 import type { NormalizedDiscoveredDevice } from "../node-discovery/node-discovery.utils";
 import { PrismaService } from "../prisma/prisma.service";
 import { deriveSubnetFromIp, isIpWithinCidr, isValidCidr, isValidIp, normalizeCenterDiscoveredDevices, normalizeMacAddress } from "./center-discovery.utils";
@@ -18,11 +19,6 @@ const execFileAsync = promisify(execFile);
 // scan (network blip, transient probe failure) doesn't flip an asset's state —
 // it takes roughly two missed cycles at the default 5-minute interval.
 const CENTER_ASSET_STALE_MS = Number(process.env.CENTER_ASSET_STALE_MS) || 10 * 60 * 1000;
-
-// Only these two states are automation-owned. MAINTENANCE/DEGRADED reflect a
-// human judgment call (a technician flagged the device, or is working on it)
-// and must not be silently overwritten by a reachability probe.
-const AUTO_MANAGED_STATES: NodeState[] = [NodeState.ONLINE, NodeState.OFFLINE];
 
 export class ConfirmCenterDiscoveredDeviceDto {
   @IsOptional() @IsEnum(NodeAssetType) assetType?: NodeAssetType;
@@ -178,10 +174,16 @@ export class CenterDiscoveryService {
 
   /**
    * Turns a scan into a live health signal for already-confirmed equipment:
-   * assets seen in this scan get ONLINE + a fresh lastSeenAt; assets that
-   * keep missing scans past CENTER_ASSET_STALE_MS get flipped to OFFLINE.
-   * Without this, `operativeState` is whatever an operator last typed by
-   * hand and never reflects reality again.
+   * assets seen in this scan get ONLINE + a fresh lastSeenAt. Without this,
+   * `operativeState` is whatever an operator last typed by hand and never
+   * reflects reality again.
+   *
+   * Demoting to OFFLINE on staleness is only done here for MAC-only assets
+   * (no IP on file) — those can't be reached by the heartbeat scheduler
+   * (`CenterHeartbeatScheduler`), which pings by IP every ~15s and is the
+   * faster, more authoritative signal for anything that has one. Two
+   * subsystems independently flipping the same OFFLINE bit on different
+   * cadences would just make the state flap between them.
    */
   protected async reconcileCenterAssets(centerId: string, discovered: NormalizedDiscoveredDevice[]) {
     const assets = await this.prisma.centerAsset.findMany({
@@ -207,6 +209,8 @@ export class CenterDiscoveryService {
           data: { lastSeenAt: now, ...(asset.operativeState !== NodeState.ONLINE ? { operativeState: NodeState.ONLINE } : {}) },
         });
       }
+
+      if (asset.ip) return null; // heartbeat owns OFFLINE detection for IP-reachable assets
 
       const isStale = !asset.lastSeenAt || now.getTime() - asset.lastSeenAt.getTime() > CENTER_ASSET_STALE_MS;
       if (isStale && asset.operativeState !== NodeState.OFFLINE) {

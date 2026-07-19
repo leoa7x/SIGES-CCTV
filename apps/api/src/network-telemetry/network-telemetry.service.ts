@@ -122,18 +122,16 @@ export class NetworkTelemetryService {
         where: { nodeId, isActive: true },
         orderBy: [{ severity: "desc" }, { lastSeenAt: "desc" }],
       }),
-      this.prisma.operationalAlert?.findMany
-        ? this.prisma.operationalAlert.findMany({
-          where: {
-            isActive: true,
-            OR: [
-              { nodeId },
-              { monitoringCenterId: context.centerId },
-            ],
-          },
-          orderBy: [{ severity: "desc" }, { lastSeenAt: "desc" }],
-        })
-        : Promise.resolve([]),
+      this.prisma.operationalAlert.findMany({
+        where: {
+          isActive: true,
+          OR: [
+            { nodeId },
+            { monitoringCenterId: context.centerId },
+          ],
+        },
+        orderBy: [{ severity: "desc" }, { lastSeenAt: "desc" }],
+      }),
     ]);
 
     return [...telemetryAlerts, ...operationalAlerts]
@@ -304,17 +302,15 @@ export class NetworkTelemetryService {
       this.prisma.networkTelemetryAlert.count({
         where: { nodeId, isActive: true },
       }),
-      this.prisma.operationalAlert?.count
-        ? this.prisma.operationalAlert.count({
-          where: {
-            isActive: true,
-            OR: [
-              { nodeId },
-              { monitoringCenterId: centerId },
-            ],
-          },
-        })
-        : Promise.resolve(0),
+      this.prisma.operationalAlert.count({
+        where: {
+          isActive: true,
+          OR: [
+            { nodeId },
+            { monitoringCenterId: centerId },
+          ],
+        },
+      }),
     ]);
     return telemetryAlertCount + operationalAlertCount;
   }
