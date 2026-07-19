@@ -5,6 +5,7 @@ import { IsEnum, IsOptional, IsString } from "class-validator";
 import { NodeAssetSource, NodeAssetType, NodeDiscoveredDeviceStatus, NodeDiscoveryStatus, NodeState, Prisma } from "@prisma/client";
 
 import { CenterAssetsService } from "../center-assets/center-assets.service";
+import { normalizeDiscoveryCommandTemplate } from "../common/discovery-command";
 import { ExternalDiscoveryService } from "../external-discovery/external-discovery.service";
 import type { NormalizedDiscoveredDevice } from "../node-discovery/node-discovery.utils";
 import { PrismaService } from "../prisma/prisma.service";
@@ -33,7 +34,7 @@ export class CenterDiscoveryService {
   constructor(
     private prisma: PrismaService,
     private centerAssetsService: CenterAssetsService,
-    private externalDiscoveryService: Pick<ExternalDiscoveryService, "upsertScanFindings"> = { upsertScanFindings: async () => undefined },
+    private externalDiscoveryService: ExternalDiscoveryService = { upsertScanFindings: async () => undefined } as unknown as ExternalDiscoveryService,
   ) {}
 
   async runForCenter(centerId: string, requestedByUserId?: string) {
@@ -218,7 +219,9 @@ export class CenterDiscoveryService {
   }
 
   protected async executeDiscovery(targetSubnetCidr: string, targetIp?: string) {
-    const commandTemplate = process.env.LAN_ORANGUTAN_CMD?.trim();
+    const commandTemplate = process.env.LAN_ORANGUTAN_CMD?.trim()
+      ? normalizeDiscoveryCommandTemplate(process.env.LAN_ORANGUTAN_CMD.trim())
+      : undefined;
     if (!commandTemplate) {
       if (process.env.DISCOVERY_ALLOW_MOCK === "true") {
         return this.buildMockResults(targetSubnetCidr, targetIp);

@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from "class-validator";
 import { Prisma, NodeDiscoveredDeviceStatus, NodeDiscoveryStatus, NodeAssetType } from "@prisma/client";
+import { normalizeDiscoveryCommandTemplate } from "../common/discovery-command";
 import { PrismaService } from "../prisma/prisma.service";
 import { NodeAssetsService } from "../node-assets/node-assets.service";
 import { deriveSubnetFromIp, isValidCidr, isValidIp, normalizeDiscoveredDevices } from "./node-discovery.utils";
@@ -167,7 +168,9 @@ export class NodeDiscoveryService {
   }
 
   protected async executeDiscovery(targetSubnetCidr: string, targetIp?: string) {
-    const commandTemplate = process.env.LAN_ORANGUTAN_CMD?.trim();
+    const commandTemplate = process.env.LAN_ORANGUTAN_CMD?.trim()
+      ? normalizeDiscoveryCommandTemplate(process.env.LAN_ORANGUTAN_CMD.trim())
+      : undefined;
     if (!commandTemplate) {
       if (process.env.DISCOVERY_ALLOW_MOCK === "true") {
         return this.buildMockResults(targetSubnetCidr, targetIp);

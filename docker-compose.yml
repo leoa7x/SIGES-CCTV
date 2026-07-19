@@ -114,6 +114,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-siges}:${POSTGRES_PASSWORD:-siges_pass_change_me}@postgres:5432/${POSTGRES_DB:-siges_cctv}
       REDIS_HOST: redis
       REDPANDA_BROKERS: redpanda:9092
+      LAN_ORANGUTAN_HOME: /app/tools/LAN-Orangutan
+      LAN_ORANGUTAN_CMD: python3 /app/apps/api/scripts/run_lan_orangutan_scan.py {target}
       MINIO_ENDPOINT: http://minio:9000
       MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:-http://localhost:9000}
       MINIO_BUCKET: ${MINIO_BUCKET:-siges-cctv}
