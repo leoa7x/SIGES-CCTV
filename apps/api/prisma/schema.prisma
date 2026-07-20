@@ -10,21 +10,21 @@ datasource db {
 // ─── Auth / Users ─────────────────────────────────────────────────────────────
 
 model User {
-  id             String         @id @default(uuid())
-  email          String         @unique
-  passwordHash   String
-  name           String?
-  role           UserRole       @default(OPERATOR)
-  permissions    Permission[]   @default([])
-  state          EntityState    @default(ACTIVE)
-  incidents      Incident[]     @relation("AssignedIncidents")
-  logbookEntries LogbookEntry[]
-  discoveryJobs  NodeDiscoveryJob[]
+  id                  String                @id @default(uuid())
+  email               String                @unique
+  passwordHash        String
+  name                String?
+  role                UserRole              @default(OPERATOR)
+  permissions         Permission[]          @default([])
+  state               EntityState           @default(ACTIVE)
+  incidents           Incident[]            @relation("AssignedIncidents")
+  logbookEntries      LogbookEntry[]
+  discoveryJobs       NodeDiscoveryJob[]
   centerDiscoveryJobs CenterDiscoveryJob[]
-  generatedReports OpsReportDefinition[]
-  reportSchedules OpsReportSchedule[]
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  generatedReports    OpsReportDefinition[]
+  reportSchedules     OpsReportSchedule[]
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
 }
 
 enum UserRole {
@@ -58,22 +58,22 @@ enum Permission {
 // ─── Geographic hierarchy ─────────────────────────────────────────────────────
 
 model City {
-  id             String        @id @default(uuid())
-  name           String
-  type           GeoEntityType @default(MUNICIPALITY)
-  department     String?
-  daneCode       String?
-  population     Int?
-  areaSqKm       Float?
-  contractObject String?
-  logoUrl        String?
-  lat            Float?
-  lng            Float?
-  state          EntityState   @default(ACTIVE)
-  projects       Project[]
+  id               String            @id @default(uuid())
+  name             String
+  type             GeoEntityType     @default(MUNICIPALITY)
+  department       String?
+  daneCode         String?
+  population       Int?
+  areaSqKm         Float?
+  contractObject   String?
+  logoUrl          String?
+  lat              Float?
+  lng              Float?
+  state            EntityState       @default(ACTIVE)
+  projects         Project[]
   brandingProfiles BrandingProfile[]
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 }
 
 model BrandingProfile {
@@ -89,45 +89,45 @@ model BrandingProfile {
 }
 
 model Project {
-  id          String             @id @default(uuid())
-  name        String
-  client      String
-  contract    String?
-  startDate   DateTime
-  endDate     DateTime?
-  state       EntityState        @default(ACTIVE)
-  cityId      String
-  city        City               @relation(fields: [cityId], references: [id])
-  centers     MonitoringCenter[]
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id        String             @id @default(uuid())
+  name      String
+  client    String
+  contract  String?
+  startDate DateTime
+  endDate   DateTime?
+  state     EntityState        @default(ACTIVE)
+  cityId    String
+  city      City               @relation(fields: [cityId], references: [id])
+  centers   MonitoringCenter[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
 }
 
 model MonitoringCenter {
-  id             String               @id @default(uuid())
-  name           String
-  address        String?
-  phone          String?
-  contactName    String?
-  lat            Float?
-  lng            Float?
-  primaryIp      String?
-  scanSubnetCidr String?
-  state          EntityState          @default(ACTIVE)
-  operativeState NodeState            @default(ONLINE)
-  heartbeatFailureCount Int           @default(0)
-  lastHeartbeatAt DateTime?
+  id                     String                     @id @default(uuid())
+  name                   String
+  address                String?
+  phone                  String?
+  contactName            String?
+  lat                    Float?
+  lng                    Float?
+  primaryIp              String?
+  scanSubnetCidr         String?
+  state                  EntityState                @default(ACTIVE)
+  operativeState         NodeState                  @default(ONLINE)
+  heartbeatFailureCount  Int                        @default(0)
+  lastHeartbeatAt        DateTime?
   lastHeartbeatAttemptAt DateTime?
-  projectId      String
-  project        Project              @relation(fields: [projectId], references: [id])
-  routes         Route[]
-  incidents      Incident[]           @relation("CenterIncidents")
-  centerAssets   CenterAsset[]
-  discoveryJobs  CenterDiscoveryJob[]
-  externalFindings ExternalDiscoveryFinding[]
-  operationalAlerts OperationalAlert[]
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  projectId              String
+  project                Project                    @relation(fields: [projectId], references: [id])
+  routes                 Route[]
+  incidents              Incident[]                 @relation("CenterIncidents")
+  centerAssets           CenterAsset[]
+  discoveryJobs          CenterDiscoveryJob[]
+  externalFindings       ExternalDiscoveryFinding[]
+  operationalAlerts      OperationalAlert[]
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
 }
 
 // ─── Network topology ─────────────────────────────────────────────────────────
@@ -154,40 +154,40 @@ enum RouteType {
 }
 
 model Node {
-  id                  String                    @id @default(uuid())
-  code                String                    @unique
-  name                String
-  lat                 Float
-  lng                 Float
-  address             String?
-  ip                  String?
-  primaryIp           String?
-  scanSubnetCidr      String?
-  mac                 String?
-  nodeType            NodeType                  @default(OTHER)
-  snmpCommunity       String?
-  operativeState      NodeState                 @default(ONLINE)
-  hasPole             Boolean                   @default(false)
-  routeId             String
-  route               Route                     @relation(fields: [routeId], references: [id])
-  cameras             Camera[]
-  fiberSegmentsA      FiberSegment[]            @relation("NodeA")
-  fiberSegmentsB      FiberSegment[]            @relation("NodeB")
-  fiberPoints         FiberPoint[]
-  logbookEntries      LogbookEntry[]
-  incidents           Incident[]                @relation("NodeIncidents")
-  assets              NodeAsset[]
-  discoveryJobs       NodeDiscoveryJob[]
-  analyticsAssignments NodeAnalyticsAssignment[]
-  telemetrySnapshots  NetworkTelemetrySnapshot[]
-  telemetrySamples    NetworkTelemetryAssetSample[]
-  telemetryAlerts     NetworkTelemetryAlert[]
-  heartbeatFailureCount Int                  @default(0)
-  lastHeartbeatAt       DateTime?
+  id                     String                        @id @default(uuid())
+  code                   String                        @unique
+  name                   String
+  lat                    Float
+  lng                    Float
+  address                String?
+  ip                     String?
+  primaryIp              String?
+  scanSubnetCidr         String?
+  mac                    String?
+  nodeType               NodeType                      @default(OTHER)
+  snmpCommunity          String?
+  operativeState         NodeState                     @default(ONLINE)
+  hasPole                Boolean                       @default(false)
+  routeId                String
+  route                  Route                         @relation(fields: [routeId], references: [id])
+  cameras                Camera[]
+  fiberSegmentsA         FiberSegment[]                @relation("NodeA")
+  fiberSegmentsB         FiberSegment[]                @relation("NodeB")
+  fiberPoints            FiberPoint[]
+  logbookEntries         LogbookEntry[]
+  incidents              Incident[]                    @relation("NodeIncidents")
+  assets                 NodeAsset[]
+  discoveryJobs          NodeDiscoveryJob[]
+  analyticsAssignments   NodeAnalyticsAssignment[]
+  telemetrySnapshots     NetworkTelemetrySnapshot[]
+  telemetrySamples       NetworkTelemetryAssetSample[]
+  telemetryAlerts        NetworkTelemetryAlert[]
+  heartbeatFailureCount  Int                           @default(0)
+  lastHeartbeatAt        DateTime?
   lastHeartbeatAttemptAt DateTime?
-  operationalAlerts     OperationalAlert[]
-  createdAt           DateTime                  @default(now())
-  updatedAt           DateTime                  @updatedAt
+  operationalAlerts      OperationalAlert[]
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @updatedAt
 }
 
 enum NodeType {
@@ -278,64 +278,64 @@ enum NetworkTelemetryAlertSeverity {
 }
 
 model NodeAsset {
-  id                   String                        @id @default(uuid())
-  nodeId               String
-  node                 Node                          @relation(fields: [nodeId], references: [id])
-  assetType            NodeAssetType
-  name                 String
-  ip                   String?
-  mac                  String?                       @unique
-  vendor               String?
-  model                String?
-  hostname             String?
-  operativeState       NodeState                     @default(ONLINE)
-  source               NodeAssetSource               @default(MANUAL)
-  lastSeenAt           DateTime?
-  notes                String?
-  discoveredDevices    NodeDiscoveredDevice[]
-  analyticsAssignments NodeAssetAnalyticsAssignment[]
-  telemetrySamples    NetworkTelemetryAssetSample[]
-  telemetryAlerts     NetworkTelemetryAlert[]
-  heartbeatFailureCount Int                      @default(0)
-  lastHeartbeatAt       DateTime?
+  id                     String                         @id @default(uuid())
+  nodeId                 String
+  node                   Node                           @relation(fields: [nodeId], references: [id])
+  assetType              NodeAssetType
+  name                   String
+  ip                     String?
+  mac                    String?                        @unique
+  vendor                 String?
+  model                  String?
+  hostname               String?
+  operativeState         NodeState                      @default(ONLINE)
+  source                 NodeAssetSource                @default(MANUAL)
+  lastSeenAt             DateTime?
+  notes                  String?
+  discoveredDevices      NodeDiscoveredDevice[]
+  analyticsAssignments   NodeAssetAnalyticsAssignment[]
+  telemetrySamples       NetworkTelemetryAssetSample[]
+  telemetryAlerts        NetworkTelemetryAlert[]
+  heartbeatFailureCount  Int                            @default(0)
+  lastHeartbeatAt        DateTime?
   lastHeartbeatAttemptAt DateTime?
-  operationalAlerts     OperationalAlert[]
-  createdAt            DateTime                      @default(now())
-  updatedAt            DateTime                      @updatedAt
+  operationalAlerts      OperationalAlert[]
+  createdAt              DateTime                       @default(now())
+  updatedAt              DateTime                       @updatedAt
 
   @@unique([nodeId, ip])
 }
 
 model CenterAsset {
-  id             String            @id @default(uuid())
-  centerId       String
-  center         MonitoringCenter @relation(fields: [centerId], references: [id])
-  assetType      NodeAssetType
-  name           String
-  ip             String?
-  mac            String?
-  vendor         String?
-  model          String?
-  hostname       String?
-  operativeState NodeState         @default(ONLINE)
-  source         NodeAssetSource   @default(MANUAL)
-  lastSeenAt     DateTime?
-  notes          String?
-  heartbeatFailureCount Int        @default(0)
-  lastHeartbeatAt       DateTime?
+  id                     String                   @id @default(uuid())
+  centerId               String
+  center                 MonitoringCenter         @relation(fields: [centerId], references: [id])
+  assetType              NodeAssetType
+  name                   String
+  ip                     String?
+  mac                    String?
+  vendor                 String?
+  model                  String?
+  hostname               String?
+  operativeState         NodeState                @default(ONLINE)
+  source                 NodeAssetSource          @default(MANUAL)
+  lastSeenAt             DateTime?
+  notes                  String?
+  heartbeatFailureCount  Int                      @default(0)
+  lastHeartbeatAt        DateTime?
   lastHeartbeatAttemptAt DateTime?
-  discoveredDevices CenterDiscoveredDevice[]
-  operationalAlerts OperationalAlert[]
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  discoveredDevices      CenterDiscoveredDevice[]
+  operationalAlerts      OperationalAlert[]
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
 }
 
 model CenterDiscoveryJob {
-  id                String                    @id @default(uuid())
+  id                String                   @id @default(uuid())
   centerId          String
-  center            MonitoringCenter          @relation(fields: [centerId], references: [id])
+  center            MonitoringCenter         @relation(fields: [centerId], references: [id])
   requestedByUserId String?
-  requestedByUser   User?                     @relation(fields: [requestedByUserId], references: [id])
+  requestedByUser   User?                    @relation(fields: [requestedByUserId], references: [id])
   status            NodeDiscoveryStatus
   targetIp          String?
   targetSubnetCidr  String?
@@ -344,8 +344,10 @@ model CenterDiscoveryJob {
   startedAt         DateTime?
   finishedAt        DateTime?
   discoveredDevices CenterDiscoveredDevice[]
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  @@index([centerId, status])
 }
 
 model CenterDiscoveredDevice {
@@ -411,6 +413,8 @@ model NodeDiscoveryJob {
   finishedAt        DateTime?
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
+
+  @@index([nodeId, status])
 }
 
 model NodeDiscoveredDevice {
@@ -434,43 +438,43 @@ model NodeDiscoveredDevice {
 }
 
 model AnalyticsCatalog {
-  id                   String                        @id @default(uuid())
-  code                 String                        @unique
-  name                 String
-  scope                AnalyticsScope                @default(BOTH)
-  isCustom             Boolean                       @default(false)
-  nodeAssignments      NodeAnalyticsAssignment[]
-  assetAssignments     NodeAssetAnalyticsAssignment[]
-  createdAt            DateTime                      @default(now())
-  updatedAt            DateTime                      @updatedAt
+  id               String                         @id @default(uuid())
+  code             String                         @unique
+  name             String
+  scope            AnalyticsScope                 @default(BOTH)
+  isCustom         Boolean                        @default(false)
+  nodeAssignments  NodeAnalyticsAssignment[]
+  assetAssignments NodeAssetAnalyticsAssignment[]
+  createdAt        DateTime                       @default(now())
+  updatedAt        DateTime                       @updatedAt
 }
 
 model NodeAnalyticsAssignment {
-  id                 String            @id @default(uuid())
+  id                 String           @id @default(uuid())
   nodeId             String
-  node               Node              @relation(fields: [nodeId], references: [id])
+  node               Node             @relation(fields: [nodeId], references: [id])
   analyticsCatalogId String
-  analyticsCatalog   AnalyticsCatalog  @relation(fields: [analyticsCatalogId], references: [id])
+  analyticsCatalog   AnalyticsCatalog @relation(fields: [analyticsCatalogId], references: [id])
   customLabel        String?
-  isEnabled          Boolean           @default(true)
+  isEnabled          Boolean          @default(true)
   notes              String?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
   @@unique([nodeId, analyticsCatalogId, customLabel])
 }
 
 model NodeAssetAnalyticsAssignment {
-  id                 String            @id @default(uuid())
+  id                 String           @id @default(uuid())
   nodeAssetId        String
-  nodeAsset          NodeAsset         @relation(fields: [nodeAssetId], references: [id])
+  nodeAsset          NodeAsset        @relation(fields: [nodeAssetId], references: [id])
   analyticsCatalogId String
-  analyticsCatalog   AnalyticsCatalog  @relation(fields: [analyticsCatalogId], references: [id])
+  analyticsCatalog   AnalyticsCatalog @relation(fields: [analyticsCatalogId], references: [id])
   customLabel        String?
-  isEnabled          Boolean           @default(true)
+  isEnabled          Boolean          @default(true)
   notes              String?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
   @@unique([nodeAssetId, analyticsCatalogId, customLabel])
 }
@@ -538,9 +542,9 @@ model NetworkTelemetryAlert {
   createdAt    DateTime                      @default(now())
   updatedAt    DateTime                      @updatedAt
 
+  @@unique([nodeId, kind, title])
   @@index([nodeId, isActive])
   @@index([kind, isActive])
-  @@unique([nodeId, kind, title])
 }
 
 model OperationalAlert {
@@ -572,7 +576,6 @@ model OperationalAlert {
   @@index([centerAssetId, isActive])
   @@index([kind, isActive])
 }
-
 
 model FiberSegment {
   id        String     @id @default(uuid())
@@ -668,9 +671,9 @@ model FiberPoint {
 }
 
 model SpliceClosure {
-  id             String              @id @default(uuid())
+  id             String                  @id @default(uuid())
   routeId        String
-  route          Route               @relation(fields: [routeId], references: [id])
+  route          Route                   @relation(fields: [routeId], references: [id])
   code           String
   name           String
   closureType    String
@@ -679,35 +682,35 @@ model SpliceClosure {
   trayCount      Int
   fiberCapacity  Int
   notes          String?
-  documentStatus FiberDocumentStatus @default(DRAFT)
+  documentStatus FiberDocumentStatus     @default(DRAFT)
   point          FiberPoint?
   cableLegs      SpliceCableLeg[]
   blockInputs    SpliceBlockInput[]
   connections    SpliceFiberConnection[]
-  sourceCables   FiberCable[]        @relation("SpliceSourceCable")
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  sourceCables   FiberCable[]            @relation("SpliceSourceCable")
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
 
   @@unique([routeId, code])
 }
 
 model SpliceCableLeg {
-  id                String                  @id @default(uuid())
-  spliceId          String
-  splice            SpliceClosure           @relation(fields: [spliceId], references: [id])
-  fiberCableId      String
-  fiberCable        FiberCable              @relation(fields: [fiberCableId], references: [id])
-  direction         SpliceLegDirection
-  bufferLabel       String?
-  fiberCount        Int
-  reservedFiberCount Int                    @default(0)
-  notes             String?
-  fromBlocks        SpliceBlockInput[]      @relation("BlockFromLeg")
-  toBlocks          SpliceBlockInput[]      @relation("BlockToLeg")
-  fromConnections   SpliceFiberConnection[] @relation("ConnectionFromLeg")
-  toConnections     SpliceFiberConnection[] @relation("ConnectionToLeg")
-  createdAt         DateTime                @default(now())
-  updatedAt         DateTime                @updatedAt
+  id                 String                  @id @default(uuid())
+  spliceId           String
+  splice             SpliceClosure           @relation(fields: [spliceId], references: [id])
+  fiberCableId       String
+  fiberCable         FiberCable              @relation(fields: [fiberCableId], references: [id])
+  direction          SpliceLegDirection
+  bufferLabel        String?
+  fiberCount         Int
+  reservedFiberCount Int                     @default(0)
+  notes              String?
+  fromBlocks         SpliceBlockInput[]      @relation("BlockFromLeg")
+  toBlocks           SpliceBlockInput[]      @relation("BlockToLeg")
+  fromConnections    SpliceFiberConnection[] @relation("ConnectionFromLeg")
+  toConnections      SpliceFiberConnection[] @relation("ConnectionToLeg")
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
 }
 
 model SpliceBlockInput {
@@ -790,24 +793,27 @@ enum CameraTransport {
 // ─── Incidents ────────────────────────────────────────────────────────────────
 
 model Incident {
-  id             String           @id @default(uuid())
+  id             String            @id @default(uuid())
   title          String
   description    String?
-  status         IncidentStatus   @default(NEW)
-  severity       IncidentSeverity @default(MEDIUM)
-  detectedAt     DateTime         @default(now())
+  status         IncidentStatus    @default(NEW)
+  severity       IncidentSeverity  @default(MEDIUM)
+  detectedAt     DateTime          @default(now())
   resolvedAt     DateTime?
   solution       String?
   nodeId         String?
-  node           Node?            @relation("NodeIncidents", fields: [nodeId], references: [id])
+  node           Node?             @relation("NodeIncidents", fields: [nodeId], references: [id])
   cameraId       String?
-  camera         Camera?          @relation("CameraIncidents", fields: [cameraId], references: [id])
+  camera         Camera?           @relation("CameraIncidents", fields: [cameraId], references: [id])
   centerId       String?
   center         MonitoringCenter? @relation("CenterIncidents", fields: [centerId], references: [id])
   assignedUserId String?
-  assignedUser   User?            @relation("AssignedIncidents", fields: [assignedUserId], references: [id])
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  assignedUser   User?             @relation("AssignedIncidents", fields: [assignedUserId], references: [id])
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([status, detectedAt])
+  @@index([centerId, status])
 }
 
 enum IncidentStatus {
@@ -828,16 +834,18 @@ enum IncidentSeverity {
 // ─── Logbook ──────────────────────────────────────────────────────────────────
 
 model LogbookEntry {
-  id           String          @id @default(uuid())
-  date         DateTime        @default(now())
+  id           String       @id @default(uuid())
+  date         DateTime     @default(now())
   activityType ActivityType
   observations String?
-  result       EntryResult     @default(SATISFACTORY)
+  result       EntryResult  @default(SATISFACTORY)
   technicianId String
-  technician   User            @relation(fields: [technicianId], references: [id])
+  technician   User         @relation(fields: [technicianId], references: [id])
   nodeId       String
-  node         Node            @relation(fields: [nodeId], references: [id])
-  createdAt    DateTime        @default(now())
+  node         Node         @relation(fields: [nodeId], references: [id])
+  createdAt    DateTime     @default(now())
+
+  @@index([nodeId, date])
 }
 
 enum ActivityType {
@@ -866,6 +874,8 @@ model DeviceStateLog {
   newState   String
   source     LogSource @default(MONITOR)
   createdAt  DateTime  @default(now())
+
+  @@index([entityType, entityId, createdAt])
 }
 
 enum LogSource {
@@ -894,13 +904,13 @@ enum OpsRestoreScope {
 }
 
 model OpsLifecycleSettings {
-  id                     String   @id @default(uuid())
-  backupRootPath         String
-  automaticBackupEnabled Boolean  @default(true)
-  automaticBackupHour    Int      @default(23)
-  automaticRetentionCount Int     @default(15)
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  id                      String   @id @default(uuid())
+  backupRootPath          String
+  automaticBackupEnabled  Boolean  @default(true)
+  automaticBackupHour     Int      @default(23)
+  automaticRetentionCount Int      @default(15)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 }
 
 model OpsBackupRecord {
@@ -917,14 +927,14 @@ model OpsBackupRecord {
 }
 
 model OpsRestoreRecord {
-  id            String             @id @default(uuid())
-  scope         OpsRestoreScope
-  status        OpsOperationStatus @default(PENDING)
+  id             String             @id @default(uuid())
+  scope          OpsRestoreScope
+  status         OpsOperationStatus @default(PENDING)
   backupRecordId String?
-  backupPath    String
-  createdAt     DateTime           @default(now())
-  finishedAt    DateTime?
-  errorMessage  String?
+  backupPath     String
+  createdAt      DateTime           @default(now())
+  finishedAt     DateTime?
+  errorMessage   String?
 }
 
 model OpsUpdateRecord {
@@ -988,17 +998,17 @@ model OpsReportArtifact {
 }
 
 model OpsReportSchedule {
-  id                String                    @id @default(uuid())
+  id                String                     @id @default(uuid())
   reportType        OpsReportType
   frequency         OpsReportScheduleFrequency
   titleTemplate     String
   filtersJson       Json
   relativeRangeJson Json
-  active            Boolean                   @default(true)
+  active            Boolean                    @default(true)
   createdByUserId   String?
-  createdByUser     User?                     @relation(fields: [createdByUserId], references: [id])
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
+  createdByUser     User?                      @relation(fields: [createdByUserId], references: [id])
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
 }
 
 // ─── Shared enums ─────────────────────────────────────────────────────────────
