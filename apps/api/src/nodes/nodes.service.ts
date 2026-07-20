@@ -134,10 +134,13 @@ export class NodesService {
     return this.prisma.node.update({ where: { id }, data });
   }
 
+  // Lightweight payload for the GIS map — no relation includes/_count, and
+  // includes nodes with no coordinates yet (lat=0/lng=0) so the map's
+  // "sin coordenadas" panel can still list them for placement.
   findGeoJson() {
     return this.prisma.node.findMany({
-      where: { NOT: { lat: 0, lng: 0 } },
-      select: { id: true, code: true, name: true, lat: true, lng: true, operativeState: true },
+      select: { id: true, code: true, name: true, lat: true, lng: true, operativeState: true, hasPole: true },
+      orderBy: { code: "asc" },
     });
   }
 

@@ -5,6 +5,23 @@ import { ConflictException } from "@nestjs/common";
 
 import { NodesService } from "./nodes.service";
 
+test("findGeoJson selects hasPole and does not filter out unlocated (0,0) nodes — the map needs both", async () => {
+  const calls: unknown[] = [];
+  const prisma = {
+    node: {
+      findMany: async (args: unknown) => { calls.push(args); return []; },
+    },
+  };
+  const service = new NodesService(prisma as never);
+
+  await service.findGeoJson();
+
+  const args = calls[0] as { where?: unknown; select: Record<string, boolean> };
+  assert.equal(args.where, undefined);
+  assert.equal(args.select.hasPole, true);
+  assert.equal(args.select.operativeState, true);
+});
+
 test("findAll returns the bare unbounded array when no page/pageSize is requested (map/topology/monitoring/dropdown callers)", async () => {
   const calls: unknown[] = [];
   const prisma = {

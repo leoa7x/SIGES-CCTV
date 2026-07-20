@@ -1,12 +1,13 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { OpsShell } from "../../components/ops-shell";
 import { OpsNotice } from "../../components/ops-notice";
 import { useAuth } from "../../components/auth-provider";
 import { apiGet, apiPatch, apiPost } from "../../lib/api";
 import { toUserFacingError } from "../../lib/presentation";
+import { shouldRoleUseGranularPermissions } from "../../lib/user-permissions";
 import type { NodeGeo, CenterGeo, FiberSegmentGeo } from "../../components/ops-map-libre";
 import { useMonitorAll } from "../../hooks/use-monitor-all";
 
@@ -20,7 +21,8 @@ const OpsMapLibre = dynamic(() => import("../../components/ops-map-libre"), {
   ),
 });
 
-// Minimal shape we need from GET /nodes (service returns full Node + relations)
+// Matches GET /nodes/geojson — the lightweight map projection (no relation
+// includes/_count), unlike GET /nodes used by the admin CRUD list.
 type NodeItem = {
   id: string;
   code: string;
@@ -66,13 +68,14 @@ export default function MapPage() {
   const [drawWaypoints, setDrawWaypoints] = useState<[number, number][]>([]);
   const [savingSegment, setSavingSegment] = useState(false);
   const [toasts, setToasts] = useState<FiberToast[]>([]);
+  const [actionError, setActionError] = useState("");
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     if (!accessToken) { setLoading(false); return; }
     setLoadError("");
     Promise.all([
-      apiGet<NodeItem[]>("/nodes", accessToken),
+      apiGet<NodeItem[]>("/nodes/geojson", accessToken),
       apiGet<CenterApiItem[]>("/monitoring-centers", accessToken),
       apiGet<{ segments: FiberSegmentGeo[] }>("/fiber-segments/geojson", accessToken),
     ])
@@ -97,31 +100,39 @@ export default function MapPage() {
       .finally(() => setLoading(false));
   }, [accessToken]);
 
-  const locatedNodes: NodeGeo[] = allNodes
-    .filter((n) => !(n.lat === 0 && n.lng === 0))
-    .map((n) => ({
-      id: n.id,
-      code: n.code,
-      name: n.name,
-      lat: n.lat,
-      lng: n.lng,
-      operativeState: n.operativeState,
-      hasPole: n.hasPole,
-    }));
+  const locatedNodes: NodeGeo[] = useMemo(
+    () =>
+      allNodes
+        .filter((n) => !(n.lat === 0 && n.lng === 0))
+        .map((n) => ({
+          id: n.id,
+          code: n.code,
+          name: n.name,
+          lat: n.lat,
+          lng: n.lng,
+          operativeState: n.operativeState,
+          hasPole: n.hasPole,
+        })),
+    [allNodes],
+  );
 
-  const unlocatedNodes = allNodes.filter((n) => n.lat === 0 && n.lng === 0);
+  const unlocatedNodes = useMemo(
+    () => allNodes.filter((n) => n.lat === 0 && n.lng === 0),
+    [allNodes],
+  );
 
   const handlePlaceNode = useCallback(
     async (lat: number, lng: number) => {
       if (!placingNode || !accessToken) return;
       setSaving(true);
+      setActionError("");
       try {
         await apiPatch(`/nodes/${placingNode.id}`, accessToken, { lat, lng });
         setAllNodes((prev) =>
           prev.map((n) => (n.id === placingNode.id ? { ...n, lat, lng } : n))
         );
       } catch (err) {
-        console.error("Error al guardar coordenadas:", err);
+        setActionError(toUserFacingError(err, "No se pudieron guardar las coordenadas del nodo."));
       } finally {
         setSaving(false);
         setPlacingNode(null);
@@ -163,6 +174,7 @@ export default function MapPage() {
     const poleA = drawPoles[drawPoles.length - 2];
     const poleB = drawPoles[drawPoles.length - 1];
     setSavingSegment(true);
+    setActionError("");
     try {
       const created = await apiPost<{ id: string }>("/fiber-segments", accessToken, {
         nodeAId: poleA.id,
@@ -196,7 +208,7 @@ export default function MapPage() {
       setDrawWaypoints([]);
       setDrawPhase("select-pole");
     } catch (err) {
-      console.error("Error al guardar segmento de fibra:", err);
+      setActionError(toUserFacingError(err, "No se pudo guardar el segmento de fibra."));
     } finally {
       setSavingSegment(false);
     }
@@ -210,23 +222,52 @@ export default function MapPage() {
 
   const lastEvent = useMonitorAll(centers.map((c) => c.id), accessToken);
 
+  // Read via ref inside the event effect below instead of listing fiberSegments
+  // as a dependency — depending on state that the same effect also writes
+  // (via setFiberSegments) re-triggers the effect on every commit, and since
+  // `.map()` always allocates a new array even when nothing actually changed,
+  // that becomes an infinite render loop the moment any node event arrives.
+  const fiberSegmentsRef = useRef(fiberSegments);
+  useEffect(() => { fiberSegmentsRef.current = fiberSegments; }, [fiberSegments]);
+
   useEffect(() => {
     if (!lastEvent || lastEvent.entityType !== "node") return;
 
-    // Update operative state on affected segments
-    setFiberSegments((prev) =>
-      prev.map((s) => {
-        if (s.nodeA.id === lastEvent.entityId)
+    // Live-update the node's own marker color on the map.
+    setAllNodes((prev) => {
+      let changed = false;
+      const next = prev.map((n) => {
+        if (n.id === lastEvent.entityId && n.operativeState !== lastEvent.newState) {
+          changed = true;
+          return { ...n, operativeState: lastEvent.newState };
+        }
+        return n;
+      });
+      return changed ? next : prev;
+    });
+
+    // Update operative state on affected fiber segments (bail out to the
+    // same array reference when nothing matched, so this doesn't itself
+    // cause a render when the event is for a node with no fiber segment).
+    setFiberSegments((prev) => {
+      let changed = false;
+      const next = prev.map((s) => {
+        if (s.nodeA.id === lastEvent.entityId && s.nodeA.operativeState !== lastEvent.newState) {
+          changed = true;
           return { ...s, nodeA: { ...s.nodeA, operativeState: lastEvent.newState } };
-        if (s.nodeB.id === lastEvent.entityId)
+        }
+        if (s.nodeB.id === lastEvent.entityId && s.nodeB.operativeState !== lastEvent.newState) {
+          changed = true;
           return { ...s, nodeB: { ...s.nodeB, operativeState: lastEvent.newState } };
+        }
         return s;
-      })
-    );
+      });
+      return changed ? next : prev;
+    });
 
     // Toast only on OFFLINE
     if (lastEvent.newState !== "OFFLINE") return;
-    const affected = fiberSegments.filter(
+    const affected = fiberSegmentsRef.current.filter(
       (s) => s.nodeA.id === lastEvent.entityId || s.nodeB.id === lastEvent.entityId
     );
     affected.forEach((seg) => {
@@ -242,7 +283,10 @@ export default function MapPage() {
         setToasts((prev) => prev.filter((t) => t.id !== toast.id));
       }, 8000);
     });
-  }, [lastEvent, fiberSegments]);
+  }, [lastEvent]);
+
+  const canManageFiber = !!user &&
+    (!shouldRoleUseGranularPermissions(user.role) || user.permissions.includes("MANAGE_FIBER"));
 
   const drawingPreview: [number, number][] =
     drawPhase === "draw-waypoints" && drawPoles.length >= 2
@@ -258,6 +302,11 @@ export default function MapPage() {
       {loadError ? (
         <div className="mb-3">
           <OpsNotice tone="error" title="No se pudo cargar la información" message={loadError} onDismiss={() => setLoadError("")} />
+        </div>
+      ) : null}
+      {actionError ? (
+        <div className="mb-3">
+          <OpsNotice tone="error" title="No se pudo guardar" message={actionError} onDismiss={() => setActionError("")} />
         </div>
       ) : null}
       <div className="flex h-[calc(100vh-10rem)] gap-3">
@@ -281,7 +330,7 @@ export default function MapPage() {
 
           {/* Fiber toolbar button — top-right corner, above map controls */}
           <div className="absolute right-10 top-2 z-10">
-            {drawPhase === "idle" && (user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && (
+            {drawPhase === "idle" && canManageFiber && (
               <button
                 onClick={() => setDrawPhase("select-pole")}
                 className="rounded border border-ops-border bg-ops-panel px-3 py-1.5 text-xs font-semibold text-ops-text hover:border-ops-blue hover:text-ops-blue"
