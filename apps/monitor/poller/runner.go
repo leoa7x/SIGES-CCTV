@@ -64,20 +64,20 @@ func (r *Runner) Run(ctx context.Context) {
 }
 
 func (r *Runner) runICMP() {
-	for _, d := range r.devices {
+	forEachConcurrent(r.devices, r.cfg.ProbeConcurrency, func(d client.Device) {
 		if d.IP == "" {
-			continue
+			return
 		}
 		online := ProbeICMP(d.IP, 2*time.Second)
 		newState := stateFromBool(online)
 		r.maybePost(d, newState)
-	}
+	})
 }
 
 func (r *Runner) runSNMP() {
-	for _, d := range r.devices {
+	forEachConcurrent(r.devices, r.cfg.ProbeConcurrency, func(d client.Device) {
 		if d.Type != "node" || d.NodeType != "SWITCH" || d.IP == "" {
-			continue
+			return
 		}
 		community := r.cfg.SNMPCommunity
 		if d.SNMPCommunity != "" {
@@ -87,7 +87,7 @@ func (r *Runner) runSNMP() {
 		current, exists := r.cache.Get(d.ID)
 		if !exists {
 			log.Printf("[runner] SNMP: %s not in cache, skipping", d.ID)
-			continue
+			return
 		}
 		var newState string
 		if !ok && current == "ONLINE" {
@@ -98,18 +98,18 @@ func (r *Runner) runSNMP() {
 		if newState != "" {
 			r.postStateChange(d, current, newState)
 		}
-	}
+	})
 }
 
 func (r *Runner) runONVIF() {
-	for _, d := range r.devices {
+	forEachConcurrent(r.devices, r.cfg.ProbeConcurrency, func(d client.Device) {
 		if d.Type != "camera" || d.IP == "" {
-			continue
+			return
 		}
 		ok := ProbeONVIF(d.IP, 5*time.Second)
 		newState := stateFromBool(ok)
 		r.maybePost(d, newState)
-	}
+	})
 }
 
 func (r *Runner) refreshDevices() {

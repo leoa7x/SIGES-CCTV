@@ -35,6 +35,39 @@ func TestLoad_defaults(t *testing.T) {
 	if cfg.DeviceRefreshInterval != 60*time.Second {
 		t.Errorf("DeviceRefreshInterval = %v, want 60s", cfg.DeviceRefreshInterval)
 	}
+	if cfg.ProbeConcurrency != 20 {
+		t.Errorf("ProbeConcurrency = %d, want 20", cfg.ProbeConcurrency)
+	}
+}
+
+func TestLoad_customProbeConcurrency(t *testing.T) {
+	os.Setenv("MONITOR_API_TOKEN", "secret")
+	os.Setenv("MONITOR_PROBE_CONCURRENCY", "5")
+	defer func() {
+		os.Unsetenv("MONITOR_API_TOKEN")
+		os.Unsetenv("MONITOR_PROBE_CONCURRENCY")
+	}()
+
+	cfg := config.Load()
+
+	if cfg.ProbeConcurrency != 5 {
+		t.Errorf("ProbeConcurrency = %d, want 5", cfg.ProbeConcurrency)
+	}
+}
+
+func TestLoad_invalidProbeConcurrency_fallsBackToDefault(t *testing.T) {
+	os.Setenv("MONITOR_API_TOKEN", "secret")
+	os.Setenv("MONITOR_PROBE_CONCURRENCY", "not-a-number")
+	defer func() {
+		os.Unsetenv("MONITOR_API_TOKEN")
+		os.Unsetenv("MONITOR_PROBE_CONCURRENCY")
+	}()
+
+	cfg := config.Load()
+
+	if cfg.ProbeConcurrency != 20 {
+		t.Errorf("ProbeConcurrency = %d, want default 20", cfg.ProbeConcurrency)
+	}
 }
 
 func TestLoad_customValues(t *testing.T) {

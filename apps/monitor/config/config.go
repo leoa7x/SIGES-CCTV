@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -14,6 +15,7 @@ type Config struct {
 	SNMPInterval          time.Duration
 	ONVIFInterval         time.Duration
 	DeviceRefreshInterval time.Duration
+	ProbeConcurrency      int
 }
 
 func Load() Config {
@@ -29,6 +31,7 @@ func Load() Config {
 		SNMPInterval:          parseDuration("SNMP_INTERVAL", 5*time.Minute),
 		ONVIFInterval:         parseDuration("ONVIF_INTERVAL", 2*time.Minute),
 		DeviceRefreshInterval: parseDuration("DEVICE_REFRESH_INTERVAL", 60*time.Second),
+		ProbeConcurrency:      parseInt("MONITOR_PROBE_CONCURRENCY", 20),
 	}
 }
 
@@ -50,4 +53,17 @@ func parseDuration(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return d
+}
+
+func parseInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		log.Printf("invalid %s=%q, using default %d", key, v, fallback)
+		return fallback
+	}
+	return n
 }
