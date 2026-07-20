@@ -1,13 +1,24 @@
-import { Body, Controller, Get, Param, Post, Query, Req, Res, StreamableFile, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseEnumPipe,
+  Post,
+  Query,
+  Req,
+  Res,
+  StreamableFile,
+  UseGuards,
+} from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
-import { Permission } from "@prisma/client";
+import { OpsReportFormat, OpsReportType, Permission } from "@prisma/client";
 import { Request, Response } from "express";
 
 import { RequirePermissions } from "../common/decorators/permissions.decorator";
 import { PermissionsGuard } from "../common/guards/permissions.guard";
 import { CreateOpsReportScheduleDto, GenerateOpsReportDto, PreviewOpsReportDto } from "./ops-reports.dto";
 import { OpsReportsService } from "./ops-reports.service";
-import { OpsReportType } from "./ops-reports.types";
 
 type AuthenticatedRequest = Request & { user: { id: string } };
 
@@ -18,7 +29,9 @@ export class OpsReportsController {
 
   @Get("history")
   @RequirePermissions(Permission.REPORTS_VIEW)
-  listHistory(@Query("reportType") reportType?: OpsReportType) {
+  listHistory(
+    @Query("reportType", new ParseEnumPipe(OpsReportType, { optional: true })) reportType?: OpsReportType,
+  ) {
     return this.service.listHistory(reportType);
   }
 
@@ -44,7 +57,7 @@ export class OpsReportsController {
   @RequirePermissions(Permission.REPORTS_EXPORT)
   async downloadArtifact(
     @Param("reportId") reportId: string,
-    @Param("format") format: "PDF" | "CSV",
+    @Param("format", new ParseEnumPipe(OpsReportFormat)) format: OpsReportFormat,
     @Res({ passthrough: true }) res: Response,
   ) {
     const artifact = await this.service.downloadArtifact(reportId, format);
