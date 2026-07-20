@@ -1,5 +1,6 @@
 import { PrismaService } from "../../prisma/prisma.service";
 import { OpsReportFilters, ReportPreviewPayload } from "../ops-reports.types";
+import { countBy, dateRange } from "./report-builder.utils";
 
 export class InfrastructureReportBuilder {
   constructor(private readonly prisma: PrismaService) {}
@@ -45,19 +46,4 @@ export class InfrastructureReportBuilder {
       findings: Array.from(byVendor.entries()).map(([vendor, count]) => `${vendor}: ${count} activo(s) inventariado(s).`),
     };
   }
-}
-
-function dateRange(filters: OpsReportFilters) {
-  return {
-    gte: new Date(`${filters.dateFrom}T00:00:00.000Z`),
-    lte: new Date(`${filters.dateTo}T23:59:59.999Z`),
-  };
-}
-
-function countBy<T>(items: T[], key: (item: T) => string): Map<string, number> {
-  return items.reduce((counts, item) => {
-    const label = key(item);
-    counts.set(label, (counts.get(label) ?? 0) + 1);
-    return counts;
-  }, new Map<string, number>());
 }

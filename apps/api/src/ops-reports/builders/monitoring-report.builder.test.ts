@@ -6,6 +6,7 @@ import { MonitoringReportBuilder } from "./monitoring-report.builder";
 test("MonitoringReportBuilder uses range-scoped telemetry and alert queries", async () => {
   const snapshotCalls: unknown[] = [];
   const alertCalls: unknown[] = [];
+  const offlineNodeAlertCalls: unknown[] = [];
   const builder = new MonitoringReportBuilder({
     networkTelemetrySnapshot: {
       findMany: async (args: any) => {
@@ -26,6 +27,19 @@ test("MonitoringReportBuilder uses range-scoped telemetry and alert queries", as
     },
     networkTelemetryAlert: {
       findMany: async (args: any) => {
+        if (args.where?.kind === "NODE_SILENT") {
+          offlineNodeAlertCalls.push(args);
+          return args.where?.firstSeenAt?.lte?.getTime() === new Date("2026-07-07T23:59:59.999Z").getTime()
+            && args.where?.OR?.[0]?.resolvedAt === null
+            && args.where?.OR?.[1]?.resolvedAt?.gte?.getTime() === new Date("2026-07-01T00:00:00.000Z").getTime()
+            && args.where?.nodeId === "node-1"
+            && args.where?.node?.operativeState === "OFFLINE"
+            && args.where?.node?.route?.monitoringCenterId === "center-1"
+            && args.where?.node?.route?.center?.projectId === "project-1"
+            && args.where?.node?.route?.center?.project?.cityId === "city-1"
+            ? [{ node: { code: "N1" } }]
+            : [{ node: { code: "N1" } }, { node: { code: "N2" } }];
+        }
         alertCalls.push(args);
         return args.where?.lastSeenAt?.gte?.getTime() === new Date("2026-07-01T00:00:00.000Z").getTime()
           && args.where?.severity === "CRITICAL"
@@ -75,7 +89,20 @@ test("MonitoringReportBuilder uses range-scoped telemetry and alert queries", as
     select: { severity: true, title: true, detail: true, node: { select: { code: true } } },
     orderBy: { lastSeenAt: "asc" },
   }]);
-  assert.equal(report.summary[0]?.value, 1);
+  assert.deepEqual(offlineNodeAlertCalls, [{
+    where: {
+      firstSeenAt: { lte: new Date("2026-07-07T23:59:59.999Z") },
+      OR: [{ resolvedAt: null }, { resolvedAt: { gte: new Date("2026-07-01T00:00:00.000Z") } }],
+      nodeId: "node-1",
+      node: {
+        operativeState: "OFFLINE",
+        route: { monitoringCenterId: "center-1", center: { projectId: "project-1", project: { cityId: "city-1" } } },
+      },
+      kind: "NODE_SILENT",
+    },
+    select: { node: { select: { code: true } } },
+  }]);
+  assert.deepEqual(report.summary[0], { label: "Nodos fuera de línea", value: 1 });
   assert.equal(report.summary[1]?.value, 1);
   assert.equal(report.charts[0]?.type, "pie");
 });

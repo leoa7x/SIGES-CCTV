@@ -1,5 +1,6 @@
 import { PrismaService } from "../../prisma/prisma.service";
 import { OpsReportFilters, ReportPreviewPayload } from "../ops-reports.types";
+import { dateRange } from "./report-builder.utils";
 
 export class MonitoringReportBuilder {
   constructor(private readonly prisma: PrismaService) {}
@@ -19,7 +20,7 @@ export class MonitoringReportBuilder {
       },
     };
     const range = dateRange(filters);
-    const [snapshots, alerts] = await Promise.all([
+    const [snapshots, alerts, offlineNodeAlerts] = await Promise.all([
       this.prisma.networkTelemetrySnapshot.findMany({
         where: { capturedAt: range, ...nodeScope },
         select: { node: { select: { code: true } }, alertCount: true, capturedAt: true },
@@ -30,14 +31,24 @@ export class MonitoringReportBuilder {
         select: { severity: true, title: true, detail: true, node: { select: { code: true } } },
         orderBy: { lastSeenAt: "asc" },
       }),
+      this.prisma.networkTelemetryAlert.findMany({
+        where: {
+          firstSeenAt: { lte: range.lte },
+          OR: [{ resolvedAt: null }, { resolvedAt: { gte: range.gte } }],
+          ...nodeScope,
+          kind: "NODE_SILENT",
+        },
+        select: { node: { select: { code: true } } },
+      }),
     ]);
     const unstable = snapshots.filter((snapshot) => snapshot.alertCount > 0);
     const critical = alerts.filter((alert) => alert.severity === "CRITICAL").length;
+    const offlineNodeCodes = new Set(offlineNodeAlerts.map((alert) => alert.node.code));
 
     return {
       title: "Informe de monitoreo",
       summary: [
-        { label: "Nodos con alertas de telemetría", value: new Set(unstable.map((snapshot) => snapshot.node.code)).size },
+        { label: "Nodos fuera de línea", value: offlineNodeCodes.size },
         { label: "Alertas críticas detectadas", value: critical },
       ],
       charts: [
@@ -52,16 +63,9 @@ export class MonitoringReportBuilder {
           String(alerts.filter((alert) => alert.node.code === code).length),
         ]),
       }],
-      findings: unstable.length > 0
-        ? [`${unstable[0]?.node.code} registró alertas de telemetría durante el periodo.`]
-        : ["No se detectaron alertas de telemetría durante el periodo."],
+      findings: offlineNodeCodes.size > 0
+        ? [`${offlineNodeAlerts[0]?.node.code} reportó indisponibilidad durante el periodo.`]
+        : ["No se detectaron nodos fuera de línea durante el periodo."],
     };
   }
-}
-
-function dateRange(filters: OpsReportFilters) {
-  return {
-    gte: new Date(`${filters.dateFrom}T00:00:00.000Z`),
-    lte: new Date(`${filters.dateTo}T23:59:59.999Z`),
-  };
 }
