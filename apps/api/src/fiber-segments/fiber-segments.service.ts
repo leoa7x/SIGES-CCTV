@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString } from "class-validator";
 import { FiberState } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -69,8 +69,23 @@ export class FiberSegmentsService {
     });
   }
 
-  create(dto: CreateFiberSegmentDto) {
+  async create(dto: CreateFiberSegmentDto) {
     const { nodeAId, nodeBId, waypoints, lengthM } = dto;
+
+    // A fiber segment models a physical aerial run between two poles — if
+    // either endpoint isn't marked as a pole, the segment on the map would
+    // misrepresent what's actually in the field (the whole point of the
+    // platform is that the map matches reality).
+    const [nodeA, nodeB] = await Promise.all([
+      this.prisma.node.findUniqueOrThrow({ where: { id: nodeAId }, select: { hasPole: true } }),
+      this.prisma.node.findUniqueOrThrow({ where: { id: nodeBId }, select: { hasPole: true } }),
+    ]);
+    if (!nodeA.hasPole || !nodeB.hasPole) {
+      throw new BadRequestException(
+        "Los tramos de fibra solo pueden trazarse entre nodos marcados como poste (hasPole).",
+      );
+    }
+
     return this.prisma.fiberSegment.create({
       data: {
         nodeA: { connect: { id: nodeAId } },

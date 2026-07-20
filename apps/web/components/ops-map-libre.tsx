@@ -103,6 +103,7 @@ export default function OpsMapLibre({
   fiberSegments = [],
   fiberDrawMode = false,
   onFiberPoleClick,
+  onFiberInvalidPoleClick,
   onFiberMapClick,
   onFiberDblClick,
   drawingPreview,
@@ -113,6 +114,7 @@ export default function OpsMapLibre({
   fiberSegments?: FiberSegmentGeo[];
   fiberDrawMode?: boolean;
   onFiberPoleClick?: (nodeId: string, lat: number, lng: number) => void;
+  onFiberInvalidPoleClick?: () => void;
   drawingPreview?: [number, number][];
   onFiberMapClick?: (lat: number, lng: number) => void;
   onFiberDblClick?: () => void;
@@ -131,6 +133,8 @@ export default function OpsMapLibre({
   useEffect(() => { fiberDrawModeRef.current = fiberDrawMode; }, [fiberDrawMode]);
   const onFiberPoleClickRef = useRef(onFiberPoleClick);
   useEffect(() => { onFiberPoleClickRef.current = onFiberPoleClick; }, [onFiberPoleClick]);
+  const onFiberInvalidPoleClickRef = useRef(onFiberInvalidPoleClick);
+  useEffect(() => { onFiberInvalidPoleClickRef.current = onFiberInvalidPoleClick; }, [onFiberInvalidPoleClick]);
   const onFiberMapClickRef = useRef(onFiberMapClick);
   useEffect(() => { onFiberMapClickRef.current = onFiberMapClick; }, [onFiberMapClick]);
   const onFiberDblClickRef = useRef(onFiberDblClick);
@@ -405,7 +409,11 @@ export default function OpsMapLibre({
       e.preventDefault();
       const feat = e.features?.[0];
       if (!feat) return;
-      const p = feat.properties as { id: string };
+      const p = feat.properties as { id: string; hasPole?: boolean };
+      if (!p.hasPole) {
+        onFiberInvalidPoleClickRef.current?.();
+        return;
+      }
       const coords = (feat.geometry as GeoJSON.Point).coordinates;
       onFiberPoleClickRef.current?.(p.id, coords[1], coords[0]);
     };

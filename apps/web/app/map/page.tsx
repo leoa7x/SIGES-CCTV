@@ -355,6 +355,9 @@ export default function MapPage() {
             fiberSegments={fiberSegments}
             fiberDrawMode={drawPhase !== "idle"}
             onFiberPoleClick={handleFiberPoleClick}
+            onFiberInvalidPoleClick={() =>
+              setActionError("Ese nodo no está marcado como poste — selecciona uno con el halo blanco para trazar fibra.")
+            }
             onFiberMapClick={handleFiberMapClick}
             onFiberDblClick={handleFiberDblClick}
             drawingPreview={drawingPreview}
