@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from "class-validator";
-import { IncidentSeverity, IncidentStatus, UserRole } from "@prisma/client";
+import { IncidentSeverity, IncidentStatus, Prisma, UserRole } from "@prisma/client";
+import { parsePagination } from "../common/pagination";
 import { PrismaService } from "../prisma/prisma.service";
 
 // VIEWER is the read-only role — writing to the incident log must stay
@@ -32,16 +33,37 @@ export class UpdateIncidentDto {
 export class IncidentsService {
   constructor(private prisma: PrismaService) {}
 
-  findAll(status?: string) {
-    return this.prisma.incident.findMany({
-      where: status ? { status: status as IncidentStatus } : undefined,
-      include: {
-        node: true,
-        camera: true,
-        assignedUser: { select: { id: true, name: true, email: true } },
-      },
-      orderBy: { detectedAt: "desc" },
-    });
+  async findAll(query: { status?: string; search?: string; page?: string; pageSize?: string }) {
+    const { page, pageSize, skip, take } = parsePagination(query.page, query.pageSize);
+    const where: Prisma.IncidentWhereInput = {
+      ...(query.status ? { status: query.status as IncidentStatus } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { title: { contains: query.search, mode: "insensitive" } },
+              { node: { is: { name: { contains: query.search, mode: "insensitive" } } } },
+              { node: { is: { code: { contains: query.search, mode: "insensitive" } } } },
+            ],
+          }
+        : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.incident.findMany({
+        where,
+        include: {
+          node: true,
+          camera: true,
+          assignedUser: { select: { id: true, name: true, email: true } },
+        },
+        orderBy: { detectedAt: "desc" },
+        skip,
+        take,
+      }),
+      this.prisma.incident.count({ where }),
+    ]);
+
+    return { items, total, page, pageSize };
   }
 
   findOne(id: string) {

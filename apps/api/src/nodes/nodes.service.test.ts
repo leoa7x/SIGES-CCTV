@@ -5,6 +5,47 @@ import { ConflictException } from "@nestjs/common";
 
 import { NodesService } from "./nodes.service";
 
+test("findAll returns the bare unbounded array when no page/pageSize is requested (map/topology/monitoring/dropdown callers)", async () => {
+  const calls: unknown[] = [];
+  const prisma = {
+    node: {
+      findMany: async (args: unknown) => { calls.push(args); return [{ id: "n1" }, { id: "n2" }]; },
+      count: async () => { throw new Error("count() should not run when pagination isn't requested"); },
+    },
+  };
+  const service = new NodesService(prisma as never);
+
+  const result = await service.findAll({});
+
+  assert.deepEqual(result, [{ id: "n1" }, { id: "n2" }]);
+  assert.equal((calls[0] as { skip?: number }).skip, undefined);
+});
+
+test("findAll paginates and scopes search across code/name/route/center", async () => {
+  const calls: unknown[] = [];
+  const prisma = {
+    node: {
+      findMany: async (args: unknown) => { calls.push(args); return [{ id: "n1" }]; },
+      count: async () => 60,
+    },
+  };
+  const service = new NodesService(prisma as never);
+
+  const result = await service.findAll({ routeId: "route-1", search: "sw", page: "2", pageSize: "20" });
+
+  const args = calls[0] as { where: { routeId: string; OR: unknown[] }; skip: number; take: number };
+  assert.equal(args.where.routeId, "route-1");
+  assert.deepEqual(args.where.OR, [
+    { code: { contains: "sw", mode: "insensitive" } },
+    { name: { contains: "sw", mode: "insensitive" } },
+    { route: { is: { identifier: { contains: "sw", mode: "insensitive" } } } },
+    { route: { is: { center: { is: { name: { contains: "sw", mode: "insensitive" } } } } } },
+  ]);
+  assert.equal(args.skip, 20);
+  assert.equal(args.take, 20);
+  assert.deepEqual(result, { items: [{ id: "n1" }], total: 60, page: 2, pageSize: 20 });
+});
+
 function buildService(
   telemetrySnapshotCount: number,
   telemetryAssetSampleCount = 0,

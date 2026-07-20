@@ -10,7 +10,14 @@ import { NodesService, CreateNodeDto, UpdateNodeDto } from "./nodes.service";
 export class NodesController {
   constructor(private service: NodesService) {}
 
-  @Get() findAll(@Query("routeId") routeId?: string) { return this.service.findAll(routeId); }
+  @Get() findAll(
+    @Query("routeId") routeId?: string,
+    @Query("search") search?: string,
+    @Query("page") page?: string,
+    @Query("pageSize") pageSize?: string,
+  ) {
+    return this.service.findAll({ routeId, search, page, pageSize });
+  }
   @Get("geojson") findGeoJson() { return this.service.findGeoJson(); }
   @Get(":id") findOne(@Param("id") id: string) { return this.service.findOne(id); }
   @RequirePermissions(Permission.MANAGE_NODES) @Post() create(@Body() dto: CreateNodeDto) { return this.service.create(dto); }

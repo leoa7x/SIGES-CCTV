@@ -11,7 +11,14 @@ type AuthenticatedRequest = Request & { user: { role: UserRole } };
 export class IncidentsController {
   constructor(private service: IncidentsService) {}
 
-  @Get() findAll(@Query("status") status?: string) { return this.service.findAll(status); }
+  @Get() findAll(
+    @Query("status") status?: string,
+    @Query("search") search?: string,
+    @Query("page") page?: string,
+    @Query("pageSize") pageSize?: string,
+  ) {
+    return this.service.findAll({ status, search, page, pageSize });
+  }
   @Get(":id") findOne(@Param("id") id: string) { return this.service.findOne(id); }
   @Post() create(@Body() dto: CreateIncidentDto, @Req() req: AuthenticatedRequest) {
     return this.service.create(dto, req.user.role);

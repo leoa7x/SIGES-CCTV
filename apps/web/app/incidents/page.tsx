@@ -45,31 +45,44 @@ function fmt(v: string) {
   return new Intl.DateTimeFormat("es-CO", { dateStyle: "short", timeStyle: "short" }).format(new Date(v));
 }
 
+const PAGE_SIZE = 25;
+
+type IncidentPage = { items: Incident[]; total: number; page: number; pageSize: number };
+
 export default function IncidentsPage() {
   const { accessToken } = useAuth();
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
+  const [debouncedFilter, setDebouncedFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [selected, setSelected] = useState<Incident | null>(null);
   const [newStatus, setNewStatus] = useState("");
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedFilter(filter.trim()), 300);
+    return () => clearTimeout(timeout);
+  }, [filter]);
+
+  useEffect(() => { setPage(1); }, [debouncedFilter, statusFilter]);
+
   function load() {
     if (!accessToken) return;
-    apiGet<Incident[]>("/incidents", accessToken)
-      .then((data) => { setIncidents(data); setLoading(false); })
+    setLoading(true);
+    const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+    if (statusFilter) params.set("status", statusFilter);
+    if (debouncedFilter) params.set("search", debouncedFilter);
+    apiGet<IncidentPage>(`/incidents?${params.toString()}`, accessToken)
+      .then((data) => { setIncidents(data.items); setTotal(data.total); setLoading(false); })
       .catch(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, [accessToken]);
+  useEffect(() => { load(); }, [accessToken, page, debouncedFilter, statusFilter]);
 
-  const filtered = incidents.filter((i) => {
-    const q = filter.toLowerCase();
-    const matchSearch = !q || i.title.toLowerCase().includes(q) || (i.node?.name ?? "").toLowerCase().includes(q) || (i.node?.code ?? "").toLowerCase().includes(q);
-    const matchStatus = !statusFilter || i.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   async function handleStatusChange() {
     if (!selected || !newStatus || !accessToken) return;
@@ -110,7 +123,7 @@ export default function IncidentsPage() {
             <div className="flex items-center justify-center gap-2 py-16 text-ops-muted">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" />
             </div>
-          ) : filtered.length === 0 ? (
+          ) : incidents.length === 0 ? (
             <p className="py-12 text-center text-sm text-ops-muted">No hay incidentes.</p>
           ) : (
             <div className="overflow-x-auto">
@@ -123,7 +136,7 @@ export default function IncidentsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((inc) => (
+                  {incidents.map((inc) => (
                     <tr
                       key={inc.id}
                       className="cursor-pointer border-b border-ops-border/50 transition hover:bg-ops-surface"
@@ -150,6 +163,30 @@ export default function IncidentsPage() {
             </div>
           )}
         </div>
+
+        {!loading && total > 0 && (
+          <div className="flex items-center justify-between text-xs text-ops-muted">
+            <span>{total} incidente{total === 1 ? "" : "s"} — página {page} de {totalPages}</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="rounded-ops border border-ops-border px-3 py-1.5 font-semibold text-ops-text transition hover:border-ops-blue/40 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Anterior
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="rounded-ops border border-ops-border px-3 py-1.5 font-semibold text-ops-text transition hover:border-ops-blue/40 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Detail panel */}

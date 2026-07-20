@@ -11,7 +11,13 @@ type AuthenticatedRequest = Request & { user: { role: UserRole } };
 export class LogbookController {
   constructor(private service: LogbookService) {}
 
-  @Get() findAll(@Query("nodeId") nodeId?: string) { return this.service.findAll(nodeId); }
+  @Get() findAll(
+    @Query("nodeId") nodeId?: string,
+    @Query("page") page?: string,
+    @Query("pageSize") pageSize?: string,
+  ) {
+    return this.service.findAll({ nodeId, page, pageSize });
+  }
   @Post() create(@Body() dto: CreateLogbookEntryDto, @Req() req: AuthenticatedRequest) {
     return this.service.create(dto, req.user.role);
   }

@@ -1,6 +1,7 @@
 import { ConflictException, Injectable } from "@nestjs/common";
 import { IsBoolean, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Matches } from "class-validator";
-import { NodeAssetType, NodeState, NodeType } from "@prisma/client";
+import { NodeAssetType, NodeState, NodeType, Prisma } from "@prisma/client";
+import { parsePagination } from "../common/pagination";
 import { PrismaService } from "../prisma/prisma.service";
 
 const IPV4_OCTET = "(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)";
@@ -40,15 +41,43 @@ export class UpdateNodeDto {
 export class NodesService {
   constructor(private prisma: PrismaService) {}
 
-  findAll(routeId?: string) {
-    return this.prisma.node.findMany({
-      where: routeId ? { routeId } : undefined,
-      include: {
-        route: { include: { center: { include: { project: { include: { city: true } } } } } },
-        _count: { select: { cameras: true, assets: true, discoveryJobs: true, analyticsAssignments: true } },
-      },
-      orderBy: { code: "asc" },
-    });
+  // Node is a shared reference resource: the map, topology view, live
+  // monitoring dashboard, and several dropdowns (logbook, cameras, report
+  // filters) all fetch this same endpoint expecting the complete unbounded
+  // array — none of them can work off a single page. Pagination is
+  // therefore opt-in: only requests that explicitly pass page/pageSize
+  // (the admin nodes list) get the paginated envelope back; every other
+  // caller keeps receiving the bare array exactly as before.
+  async findAll(query: { routeId?: string; search?: string; page?: string; pageSize?: string }) {
+    const where: Prisma.NodeWhereInput = {
+      ...(query.routeId ? { routeId: query.routeId } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { code: { contains: query.search, mode: "insensitive" } },
+              { name: { contains: query.search, mode: "insensitive" } },
+              { route: { is: { identifier: { contains: query.search, mode: "insensitive" } } } },
+              { route: { is: { center: { is: { name: { contains: query.search, mode: "insensitive" } } } } } },
+            ],
+          }
+        : {}),
+    };
+    const include = {
+      route: { include: { center: { include: { project: { include: { city: true } } } } } },
+      _count: { select: { cameras: true, assets: true, discoveryJobs: true, analyticsAssignments: true } },
+    } as const;
+
+    if (!query.page && !query.pageSize) {
+      return this.prisma.node.findMany({ where, include, orderBy: { code: "asc" } });
+    }
+
+    const { page, pageSize, skip, take } = parsePagination(query.page, query.pageSize);
+    const [items, total] = await Promise.all([
+      this.prisma.node.findMany({ where, include, orderBy: { code: "asc" }, skip, take }),
+      this.prisma.node.count({ where }),
+    ]);
+
+    return { items, total, page, pageSize };
   }
 
   findOne(id: string) {

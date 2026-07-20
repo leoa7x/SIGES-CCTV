@@ -35,9 +35,13 @@ const ACTIVITY_LABELS: Record<string, string> = {
   OTHER: "Otro",
 };
 
+const PAGE_SIZE = 25;
+
 export default function LogbookPage() {
   const { accessToken } = useAuth();
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [nodes, setNodes] = useState<NodeRef[]>([]);
   const [users, setUsers] = useState<UserRef[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,18 +55,20 @@ export default function LogbookPage() {
     setLoading(true);
     setLoadError("");
     try {
-      const [e, n, u] = await Promise.all([
-        apiGet<Entry[]>("/logbook", accessToken),
+      const [entryPage, n, u] = await Promise.all([
+        apiGet<{ items: Entry[]; total: number }>(`/logbook?page=${page}&pageSize=${PAGE_SIZE}`, accessToken),
         apiGet<NodeRef[]>("/nodes", accessToken),
         apiGet<UserRef[]>("/users/technicians", accessToken),
       ]);
-      setEntries(e); setNodes(n); setUsers(u);
+      setEntries(entryPage.items); setTotal(entryPage.total); setNodes(n); setUsers(u);
     } catch (err) {
       setLoadError(toUserFacingError(err, "No se pudo cargar la bitácora."));
     } finally { setLoading(false); }
-  }, [accessToken]);
+  }, [accessToken, page]);
 
   useEffect(() => { load(); }, [load]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   function openCreate() {
     setForm({ activityType: "INSPECTION", observations: "", result: "SATISFACTORY", technicianId: users[0]?.id ?? "", nodeId: nodes[0]?.id ?? "" });
@@ -76,7 +82,7 @@ export default function LogbookPage() {
     try {
       await apiPost("/logbook", accessToken, { ...form, observations: form.observations || undefined });
       setModalOpen(false);
-      await load();
+      if (page !== 1) setPage(1); else await load();
     } catch (err) { console.error(err); } finally { setSaving(false); }
   }
 
@@ -88,7 +94,7 @@ export default function LogbookPage() {
         </div>
       ) : null}
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-ops-muted">{entries.length} entradas</p>
+        <p className="text-sm text-ops-muted">{total} entrada{total === 1 ? "" : "s"}</p>
         <button onClick={openCreate} className="rounded-ops bg-ops-blue px-4 py-2 text-sm font-semibold text-white hover:bg-ops-blue/80">
           + Nueva entrada
         </button>
@@ -126,6 +132,30 @@ export default function LogbookPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {!loading && total > 0 && (
+        <div className="mt-3 flex items-center justify-between text-xs text-ops-muted">
+          <span>Página {page} de {totalPages}</span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="rounded-ops border border-ops-border px-3 py-1.5 font-semibold text-ops-text transition hover:border-ops-blue/40 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="rounded-ops border border-ops-border px-3 py-1.5 font-semibold text-ops-text transition hover:border-ops-blue/40 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Siguiente
+            </button>
+          </div>
         </div>
       )}
 

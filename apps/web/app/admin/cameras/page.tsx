@@ -40,9 +40,13 @@ const STATE_COLOR: Record<string, string> = {
   MAINTENANCE: "border-ops-border bg-ops-surface text-ops-muted",
 };
 
+const PAGE_SIZE = 25;
+
 export default function CamerasPage() {
   const { accessToken } = useAuth();
   const [items, setItems] = useState<CameraItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [nodes, setNodes] = useState<NodeRef[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -63,16 +67,18 @@ export default function CamerasPage() {
     setLoadError("");
     try {
       const [c, n] = await Promise.all([
-        apiGet<CameraItem[]>("/cameras", accessToken),
+        apiGet<{ items: CameraItem[]; total: number }>(`/cameras?page=${page}&pageSize=${PAGE_SIZE}`, accessToken),
         apiGet<NodeRef[]>("/nodes", accessToken),
       ]);
-      setItems(c); setNodes(n);
+      setItems(c.items); setTotal(c.total); setNodes(n);
     } catch (err) {
       setLoadError(toUserFacingError(err, "No se pudieron cargar las cámaras."));
     } finally { setLoading(false); }
-  }, [accessToken]);
+  }, [accessToken, page]);
 
   useEffect(() => { load(); }, [load]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   function openCreate() {
     setEditing(null);
@@ -195,7 +201,7 @@ export default function CamerasPage() {
         </div>
       ) : null}
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-ops-muted">{items.length} cámaras</p>
+        <p className="text-sm text-ops-muted">{total} cámara{total === 1 ? "" : "s"}</p>
         <button onClick={openCreate} className="rounded-ops bg-ops-blue px-4 py-2 text-sm font-semibold text-white hover:bg-ops-blue/80">+ Nueva cámara</button>
       </div>
       {loading ? (
@@ -232,6 +238,29 @@ export default function CamerasPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+      {!loading && total > 0 && (
+        <div className="mt-3 flex items-center justify-between text-xs text-ops-muted">
+          <span>Página {page} de {totalPages}</span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="rounded-ops border border-ops-border px-3 py-1.5 font-semibold text-ops-text transition hover:border-ops-blue/40 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="rounded-ops border border-ops-border px-3 py-1.5 font-semibold text-ops-text transition hover:border-ops-blue/40 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Siguiente
+            </button>
+          </div>
         </div>
       )}
       <OpsModal open={modalOpen} title={editing ? `Editar ${editing.code}` : "Nueva cámara"} onClose={closeModal}>

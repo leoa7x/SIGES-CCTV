@@ -10,7 +10,14 @@ import { CamerasService, CreateCameraDto, UpdateCameraDto } from "./cameras.serv
 export class CamerasController {
   constructor(private service: CamerasService) {}
 
-  @Get() findAll(@Query("nodeId") nodeId?: string) { return this.service.findAll(nodeId); }
+  @Get() findAll(
+    @Query("nodeId") nodeId?: string,
+    @Query("search") search?: string,
+    @Query("page") page?: string,
+    @Query("pageSize") pageSize?: string,
+  ) {
+    return this.service.findAll({ nodeId, search, page, pageSize });
+  }
   @Get(":id") findOne(@Param("id") id: string) { return this.service.findOne(id); }
   @RequirePermissions(Permission.MANAGE_CAMERAS) @Post() create(@Body() dto: CreateCameraDto) { return this.service.create(dto); }
   @RequirePermissions(Permission.MANAGE_CAMERAS) @Patch(":id") update(@Param("id") id: string, @Body() dto: UpdateCameraDto) { return this.service.update(id, dto); }

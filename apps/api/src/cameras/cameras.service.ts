@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString } from "class-validator";
-import { CameraState, CameraTransport } from "@prisma/client";
+import { CameraState, CameraTransport, Prisma } from "@prisma/client";
+import { parsePagination } from "../common/pagination";
 import { CameraSecretService } from "./camera-secret.service";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -41,13 +42,32 @@ export class CamerasService {
     private readonly secretService: CameraSecretService,
   ) {}
 
-  async findAll(nodeId?: string) {
-    const cameras = await this.prisma.camera.findMany({
-      where: nodeId ? { nodeId } : undefined,
-      include: { node: true },
-      orderBy: { code: "asc" },
-    });
-    return cameras.map((camera) => this.toSafeCamera(camera));
+  async findAll(query: { nodeId?: string; search?: string; page?: string; pageSize?: string }) {
+    const { page, pageSize, skip, take } = parsePagination(query.page, query.pageSize);
+    const where: Prisma.CameraWhereInput = {
+      ...(query.nodeId ? { nodeId: query.nodeId } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { code: { contains: query.search, mode: "insensitive" } },
+              { name: { contains: query.search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    };
+
+    const [cameras, total] = await Promise.all([
+      this.prisma.camera.findMany({
+        where,
+        include: { node: true },
+        orderBy: { code: "asc" },
+        skip,
+        take,
+      }),
+      this.prisma.camera.count({ where }),
+    ]);
+
+    return { items: cameras.map((camera) => this.toSafeCamera(camera)), total, page, pageSize };
   }
 
   async findOne(id: string) {

@@ -4,6 +4,41 @@ import test from "node:test";
 import { CameraSecretService } from "./camera-secret.service";
 import { CamerasService } from "./cameras.service";
 
+test("findAll paginates and redacts stream credentials on every item", async () => {
+  const calls: unknown[] = [];
+  const prisma = {
+    camera: {
+      findMany: async (args: unknown) => {
+        calls.push(args);
+        return [{
+          id: "cam-1",
+          code: "CAM-001",
+          streamUrl: "rtsp://admin:secret@192.168.1.20:554/stream1",
+          streamPasswordEncrypted: "cipher-text",
+          node: { id: "node-1" },
+        }];
+      },
+      count: async () => 30,
+    },
+  };
+  const secretService = { encrypt: (value: string) => value, decrypt: () => "super-secret" };
+  const service = new (CamerasService as any)(prisma, secretService) as CamerasService;
+
+  const result = await service.findAll({ search: "cam", page: "2", pageSize: "10" });
+
+  const args = calls[0] as { where: { OR: unknown[] }; skip: number; take: number };
+  assert.deepEqual(args.where.OR, [
+    { code: { contains: "cam", mode: "insensitive" } },
+    { name: { contains: "cam", mode: "insensitive" } },
+  ]);
+  assert.equal(args.skip, 10);
+  assert.equal(args.take, 10);
+  assert.equal(result.total, 30);
+  assert.equal(result.page, 2);
+  assert.equal((result.items[0] as { streamUrl?: string }).streamUrl, "rtsp://192.168.1.20:554/stream1");
+  assert.equal((result.items[0] as { streamPasswordEncrypted?: string }).streamPasswordEncrypted, undefined);
+});
+
 test("findOne omits encrypted stream password but returns preview metadata", async () => {
   const prisma = {
     camera: {

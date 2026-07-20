@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from "class-validator";
-import { ActivityType, EntryResult, UserRole } from "@prisma/client";
+import { ActivityType, EntryResult, Prisma, UserRole } from "@prisma/client";
+import { parsePagination } from "../common/pagination";
 import { PrismaService } from "../prisma/prisma.service";
 
 export class CreateLogbookEntryDto {
@@ -15,15 +16,25 @@ export class CreateLogbookEntryDto {
 export class LogbookService {
   constructor(private prisma: PrismaService) {}
 
-  findAll(nodeId?: string) {
-    return this.prisma.logbookEntry.findMany({
-      where: nodeId ? { nodeId } : undefined,
-      include: {
-        technician: { select: { id: true, name: true, email: true } },
-        node: true,
-      },
-      orderBy: { date: "desc" },
-    });
+  async findAll(query: { nodeId?: string; page?: string; pageSize?: string }) {
+    const { page, pageSize, skip, take } = parsePagination(query.page, query.pageSize);
+    const where: Prisma.LogbookEntryWhereInput = query.nodeId ? { nodeId: query.nodeId } : {};
+
+    const [items, total] = await Promise.all([
+      this.prisma.logbookEntry.findMany({
+        where,
+        include: {
+          technician: { select: { id: true, name: true, email: true } },
+          node: true,
+        },
+        orderBy: { date: "desc" },
+        skip,
+        take,
+      }),
+      this.prisma.logbookEntry.count({ where }),
+    ]);
+
+    return { items, total, page, pageSize };
   }
 
   create(dto: CreateLogbookEntryDto, requesterRole: UserRole) {

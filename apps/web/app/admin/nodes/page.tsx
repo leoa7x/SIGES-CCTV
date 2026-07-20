@@ -146,6 +146,7 @@ const PANEL = "rounded-ops border border-ops-border bg-ops-panel p-4";
 const NODE_STATES = ["ONLINE", "OFFLINE", "DEGRADED", "MAINTENANCE"];
 const ASSET_TYPES = ["CAMARA_PTZ", "CAMARA_FIJA", "SWITCH", "UPS"];
 const OTHER_ANALYTICS_CODE = "OTHER";
+const NODE_PAGE_SIZE = 25;
 
 const STATE_COLOR: Record<string, string> = {
   ONLINE: "border-ops-emerald/30 bg-ops-emerald/10 text-ops-emerald",
@@ -236,6 +237,9 @@ export default function NodesPage() {
 
   const [selectedAssetId, setSelectedAssetId] = useState("");
   const [nodeFilter, setNodeFilter] = useState("");
+  const [debouncedNodeFilter, setDebouncedNodeFilter] = useState("");
+  const [nodePage, setNodePage] = useState(1);
+  const [nodeTotal, setNodeTotal] = useState(0);
   const [detailTab, setDetailTab] = useState<"equipos" | "descubrimientos" | "analiticas" | "observabilidad">("equipos");
   const [nodeEmbedDescriptor, setNodeEmbedDescriptor] = useState<GrafanaEmbedDescriptor | null>(null);
   const [loadingNodeEmbed, setLoadingNodeEmbed] = useState(false);
@@ -261,15 +265,14 @@ export default function NodesPage() {
   );
   const readyDetail = detailViewState === "ready" ? detail : null;
 
-  const filteredItems = useMemo(() => {
-    const q = nodeFilter.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((item) =>
-      item.code.toLowerCase().includes(q) ||
-      item.name.toLowerCase().includes(q) ||
-      item.route.identifier.toLowerCase().includes(q) ||
-      item.route.center.name.toLowerCase().includes(q));
-  }, [items, nodeFilter]);
+  const nodeTotalPages = Math.max(1, Math.ceil(nodeTotal / NODE_PAGE_SIZE));
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedNodeFilter(nodeFilter.trim()), 300);
+    return () => clearTimeout(timeout);
+  }, [nodeFilter]);
+
+  useEffect(() => { setNodePage(1); }, [debouncedNodeFilter]);
 
   function selectNode(nodeId: string) {
     setSelectedNodeId(nodeId);
@@ -280,21 +283,25 @@ export default function NodesPage() {
     if (!accessToken) return;
     setLoading(true);
     try {
-      const [nodes, routeData, catalogData] = await Promise.all([
-        apiGet<NodeItem[]>("/nodes", accessToken),
+      const nodeParams = new URLSearchParams({ page: String(nodePage), pageSize: String(NODE_PAGE_SIZE) });
+      if (debouncedNodeFilter) nodeParams.set("search", debouncedNodeFilter);
+
+      const [nodesPage, routeData, catalogData] = await Promise.all([
+        apiGet<{ items: NodeItem[]; total: number }>(`/nodes?${nodeParams.toString()}`, accessToken),
         apiGet<RouteRef[]>("/routes", accessToken),
         apiGet<AnalyticsCatalogItem[]>("/analytics-catalog", accessToken),
       ]);
-      setItems(nodes);
+      setItems(nodesPage.items);
+      setNodeTotal(nodesPage.total);
       setRoutes(routeData);
       setCatalog(catalogData);
-      if (!selectedNodeId && nodes[0]?.id) {
-        setSelectedNodeId(nodes[0].id);
+      if (!selectedNodeId && nodesPage.items[0]?.id) {
+        setSelectedNodeId(nodesPage.items[0].id);
       }
     } finally {
       setLoading(false);
     }
-  }, [accessToken, selectedNodeId]);
+  }, [accessToken, selectedNodeId, nodePage, debouncedNodeFilter]);
 
   const loadDetail = useCallback(async (nodeId: string) => {
     if (!accessToken || !nodeId) return;
@@ -693,7 +700,7 @@ export default function NodesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-ops-border">
-                  {filteredItems.map((item) => (
+                  {items.map((item) => (
                     <tr
                       key={item.id}
                       className={`cursor-pointer hover:bg-ops-surface ${selectedNodeId === item.id ? "bg-ops-surface" : ""}`}
@@ -722,13 +729,36 @@ export default function NodesPage() {
                       </td>
                     </tr>
                   ))}
-                  {filteredItems.length === 0 && (
+                  {items.length === 0 && (
                     <tr>
                       <td colSpan={4} className="px-4 py-6 text-center text-sm text-ops-muted">Sin resultados para “{nodeFilter}”.</td>
                     </tr>
                   )}
                 </tbody>
               </table>
+            </div>
+          )}
+          {!loading && nodeTotal > 0 && (
+            <div className="flex items-center justify-between border-t border-ops-border px-4 py-2.5 text-[11px] text-ops-muted">
+              <span>{nodeTotal} nodo{nodeTotal === 1 ? "" : "s"} — pág. {nodePage}/{nodeTotalPages}</span>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setNodePage((p) => Math.max(1, p - 1))}
+                  disabled={nodePage <= 1}
+                  className="rounded-ops border border-ops-border px-2 py-1 font-semibold text-ops-text transition hover:border-ops-blue/40 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNodePage((p) => Math.min(nodeTotalPages, p + 1))}
+                  disabled={nodePage >= nodeTotalPages}
+                  className="rounded-ops border border-ops-border px-2 py-1 font-semibold text-ops-text transition hover:border-ops-blue/40 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  ›
+                </button>
+              </div>
             </div>
           )}
         </section>
