@@ -146,9 +146,65 @@ test("ingestSnapshot falls back to an official IP match when the MAC does not ma
   assert.equal(persistedSamples[0]?.nodeAssetId, "asset-ip");
   assert.equal(persistedSamples[0]?.classificationSource, "OFFICIAL");
   assert.deepEqual(officialCalls, [
-    { where: { nodeId: "node-1", mac: "AA:BB" } },
-    { where: { nodeId: "node-1", ip: "10.0.0.8" } },
+    { where: { mac: "AA:BB" } },
+    { where: { ip: "10.0.0.8" } },
   ]);
+  assert.equal(calls.discovery.length, 0);
+});
+
+test("ingestSnapshot detects foreign official node ownership by MAC without discovery fallback", async () => {
+  const { service, persistedSamples, calls } = createService({
+    nodeAsset: {
+      findFirst: async ({ where }: { where: { nodeId?: string; mac?: string } }) =>
+        where.mac === "AA:CC" && !where.nodeId ? ({ id: "foreign-mac-asset", nodeId: "node-foreign" }) : null,
+    },
+  });
+
+  await service.ingestSnapshot({
+    ...baseDto,
+    assets: [{ mac: "AA:CC", bytesIn: 10, bytesOut: 20, flowCount: 1, lastSeenAt: "2026-07-13T20:00:58.000Z" }],
+  });
+
+  assert.equal(persistedSamples[0]?.nodeAssetId, null);
+  assert.equal(persistedSamples[0]?.classificationSource, "UNMATCHED");
+  assert.equal(calls.discovery.length, 0);
+});
+
+test("ingestSnapshot detects foreign official node ownership by IP without discovery fallback", async () => {
+  const { service, persistedSamples, calls } = createService({
+    nodeAsset: {
+      findFirst: async ({ where }: { where: { nodeId?: string; ip?: string } }) =>
+        where.ip === "10.0.0.18" && !where.nodeId ? ({ id: "foreign-ip-asset", nodeId: "node-foreign" }) : null,
+    },
+  });
+
+  await service.ingestSnapshot({
+    ...baseDto,
+    assets: [{ ip: "10.0.0.18", bytesIn: 10, bytesOut: 20, flowCount: 1, lastSeenAt: "2026-07-13T20:00:58.000Z" }],
+  });
+
+  assert.equal(persistedSamples[0]?.nodeAssetId, null);
+  assert.equal(persistedSamples[0]?.classificationSource, "UNMATCHED");
+  assert.equal(calls.discovery.length, 0);
+});
+
+test("ingestSnapshot detects foreign official node ownership by primary IP without discovery fallback", async () => {
+  const { service, persistedSamples, calls } = createService({
+    node: {
+      findUnique: async () => ({ id: "node-1" }),
+      findUniqueOrThrow: async () => ({ id: "node-1" }),
+      findFirst: async ({ where }: { where: { id?: string; primaryIp?: string } }) =>
+        where.primaryIp === "10.0.0.28" && !where.id ? ({ id: "node-foreign" }) : null,
+    },
+  });
+
+  await service.ingestSnapshot({
+    ...baseDto,
+    assets: [{ ip: "10.0.0.28", bytesIn: 10, bytesOut: 20, flowCount: 1, lastSeenAt: "2026-07-13T20:00:58.000Z" }],
+  });
+
+  assert.equal(persistedSamples[0]?.nodeAssetId, null);
+  assert.equal(persistedSamples[0]?.classificationSource, "UNMATCHED");
   assert.equal(calls.discovery.length, 0);
 });
 

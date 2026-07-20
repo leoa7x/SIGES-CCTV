@@ -204,7 +204,7 @@ export class NetworkTelemetryService {
     const owner = await correlateObservedHost(asset, {
       findNodeAssetByMac: async () => {
         const match = asset.mac
-          ? await prisma.nodeAsset.findFirst({ where: { nodeId, mac: asset.mac } })
+          ? await prisma.nodeAsset.findFirst({ where: { mac: asset.mac } })
           : null;
         officialNodeAsset = match ? { ...match, nodeId: match.nodeId ?? nodeId } : null;
         return officialNodeAsset;
@@ -214,7 +214,7 @@ export class NetworkTelemetryService {
         : null,
       findNodeAssetByIp: async () => {
         const match = asset.ip
-          ? await prisma.nodeAsset.findFirst({ where: { nodeId, ip: asset.ip } })
+          ? await prisma.nodeAsset.findFirst({ where: { ip: asset.ip } })
           : null;
         officialNodeAsset = match ? { ...match, nodeId: match.nodeId ?? nodeId } : null;
         return officialNodeAsset;
@@ -223,7 +223,7 @@ export class NetworkTelemetryService {
         ? prisma.centerAsset.findFirst({ where: { ip: asset.ip } })
         : null,
       findNodeByPrimaryIp: async () => asset.ip
-        ? prisma.node.findFirst({ where: { id: nodeId, primaryIp: asset.ip }, select: { id: true } })
+        ? prisma.node.findFirst({ where: { primaryIp: asset.ip }, select: { id: true } })
         : null,
       findCenterByPrimaryIp: async () => asset.ip
         ? prisma.monitoringCenter.findFirst({ where: { primaryIp: asset.ip }, select: { id: true } })
