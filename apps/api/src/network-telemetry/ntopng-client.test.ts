@@ -40,3 +40,44 @@ test("fetchObservedHosts normalizes ntopng host rows into SIGES host observation
     },
   ]);
 });
+
+test("fetchObservedHosts applies configured credentials as Basic authentication", async () => {
+  let requestInit: RequestInit | undefined;
+  const client = new NtopngClient({
+    baseUrl: "http://ntopng.local",
+    username: "admin",
+    password: "secret",
+    fetchImpl: async (_input, init) => {
+      requestInit = init;
+      return {
+        ok: true,
+        json: async () => ({ hosts: [] }),
+      } as Response;
+    },
+  });
+
+  await client.fetchObservedHosts();
+
+  assert.deepEqual(requestInit?.headers, {
+    Authorization: `Basic ${Buffer.from("admin:secret").toString("base64")}`,
+  });
+});
+
+test("fetchObservedHosts rejects rows with missing source metrics instead of inventing values", async () => {
+  const client = new NtopngClient({
+    baseUrl: "http://ntopng.local",
+    username: "admin",
+    password: "secret",
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => ({
+        hosts: [{ bytes_rcvd: 1200, bytes_sent: 800, flows: 4 }],
+      }),
+    } as Response),
+  });
+
+  await assert.rejects(
+    () => client.fetchObservedHosts(),
+    /ntopng host row 0 is missing a valid last_seen value/,
+  );
+});
