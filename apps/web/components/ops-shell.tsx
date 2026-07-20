@@ -46,6 +46,8 @@ function SidebarIcon({ item }: { item: SidebarNavItem }) {
   return <span className="font-mono text-base leading-none">{item.icon}</span>;
 }
 
+const OPERATIONS_GROUP_PREFIX = "/admin/operations";
+
 export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -53,6 +55,7 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
   const [pinned, setPinned] = useState(false);
   const [hovering, setHovering] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [opsGroupOpen, setOpsGroupOpen] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) router.replace("/login");
@@ -61,6 +64,10 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
   useEffect(() => {
     setPinned(window.localStorage.getItem(SIDEBAR_PINNED_KEY) === "1");
   }, []);
+
+  useEffect(() => {
+    if (pathname.startsWith(OPERATIONS_GROUP_PREFIX)) setOpsGroupOpen(true);
+  }, [pathname]);
 
   function togglePinned() {
     setPinned((current) => {
@@ -80,6 +87,24 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
 
   const expanded = pinned || hovering || focused;
   const visibleAdminNav = getVisibleAdminNav(user.role, user.permissions);
+
+  const opsGroupItems = visibleAdminNav.filter(
+    (item) => item.href === OPERATIONS_GROUP_PREFIX || item.href.startsWith(`${OPERATIONS_GROUP_PREFIX}/`),
+  );
+  let opsGroupInserted = false;
+  const adminNavRender: Array<{ kind: "item"; item: SidebarNavItem } | { kind: "group" }> = [];
+  for (const item of visibleAdminNav) {
+    const isOpsItem = item.href === OPERATIONS_GROUP_PREFIX || item.href.startsWith(`${OPERATIONS_GROUP_PREFIX}/`);
+    if (isOpsItem) {
+      if (!opsGroupInserted) {
+        adminNavRender.push({ kind: "group" });
+        opsGroupInserted = true;
+      }
+      continue;
+    }
+    adminNavRender.push({ kind: "item", item });
+  }
+  const opsGroupActive = pathname.startsWith(OPERATIONS_GROUP_PREFIX);
 
   return (
     <div className="flex min-h-screen bg-ops-bg text-ops-text">
@@ -165,22 +190,87 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
               ) : (
                 <div className="mx-2 my-3 border-t border-ops-border" />
               )}
-              {visibleAdminNav.map((item) => {
-                const isActive = pathname.startsWith(item.href);
+              {adminNavRender.map((entry) => {
+                if (entry.kind === "item") {
+                  const { item } = entry;
+                  const isActive = pathname.startsWith(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      title={expanded ? undefined : item.label}
+                      className={`flex items-center gap-3 rounded-ops px-3 py-2.5 text-sm font-medium transition-colors ${!expanded ? "justify-center px-0" : ""} ${
+                        isActive
+                          ? "bg-ops-blue/10 text-ops-blue shadow-ops-glow-blue"
+                          : "text-ops-muted hover:bg-ops-surface hover:text-ops-text"
+                      }`}
+                    >
+                      <SidebarIcon item={item} />
+                      {expanded && <span className="whitespace-nowrap">{item.label}</span>}
+                    </Link>
+                  );
+                }
+
+                const headItem =
+                  opsGroupItems.find((item) => item.href === OPERATIONS_GROUP_PREFIX) ?? opsGroupItems[0];
+                if (!expanded) {
+                  return (
+                    <Link
+                      key="ops-group"
+                      href={headItem.href}
+                      title="Operación"
+                      className={`flex items-center justify-center rounded-ops px-0 py-2.5 text-sm font-medium transition-colors ${
+                        opsGroupActive
+                          ? "bg-ops-blue/10 text-ops-blue shadow-ops-glow-blue"
+                          : "text-ops-muted hover:bg-ops-surface hover:text-ops-text"
+                      }`}
+                    >
+                      <SidebarIcon item={headItem} />
+                    </Link>
+                  );
+                }
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    title={expanded ? undefined : item.label}
-                    className={`flex items-center gap-3 rounded-ops px-3 py-2.5 text-sm font-medium transition-colors ${!expanded ? "justify-center px-0" : ""} ${
-                      isActive
-                        ? "bg-ops-blue/10 text-ops-blue shadow-ops-glow-blue"
-                        : "text-ops-muted hover:bg-ops-surface hover:text-ops-text"
-                    }`}
-                  >
-                    <SidebarIcon item={item} />
-                    {expanded && <span className="whitespace-nowrap">{item.label}</span>}
-                  </Link>
+                  <div key="ops-group">
+                    <button
+                      type="button"
+                      onClick={() => setOpsGroupOpen((current) => !current)}
+                      aria-expanded={opsGroupOpen}
+                      className={`flex w-full items-center gap-3 rounded-ops px-3 py-2.5 text-sm font-medium transition-colors ${
+                        opsGroupActive
+                          ? "bg-ops-blue/10 text-ops-blue shadow-ops-glow-blue"
+                          : "text-ops-muted hover:bg-ops-surface hover:text-ops-text"
+                      }`}
+                    >
+                      <SidebarIcon item={headItem} />
+                      <span className="flex-1 whitespace-nowrap text-left">Operación</span>
+                      <span
+                        className={`font-mono text-xs transition-transform ${opsGroupOpen ? "rotate-90" : ""}`}
+                        aria-hidden="true"
+                      >
+                        ›
+                      </span>
+                    </button>
+                    {opsGroupOpen && (
+                      <div className="ml-4 mt-1 space-y-1 border-l border-ops-border pl-3">
+                        {opsGroupItems.map((item) => {
+                          const isActive = pathname.startsWith(item.href);
+                          return (
+                            <Link
+                              key={item.href}
+                              href={item.href}
+                              className={`block rounded-ops px-3 py-2 text-sm font-medium transition-colors ${
+                                isActive
+                                  ? "bg-ops-blue/10 text-ops-blue shadow-ops-glow-blue"
+                                  : "text-ops-muted hover:bg-ops-surface hover:text-ops-text"
+                              }`}
+                            >
+                              <span className="whitespace-nowrap">{item.label}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </>
