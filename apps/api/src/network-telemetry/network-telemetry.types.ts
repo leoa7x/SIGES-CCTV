@@ -1,3 +1,11 @@
+import type { TelemetryOwner } from "./network-telemetry-correlation";
+
+export type { NtopngObservedHost } from "./ntopng-collector.types";
+
+export type NtopngCollectorDependencies = {
+  correlateHost: (host: import("./ntopng-collector.types").NtopngObservedHost) => Promise<TelemetryOwner>;
+};
+
 export type NetworkTelemetryProtocolEntry = {
   name: string;
   bytes: number;
