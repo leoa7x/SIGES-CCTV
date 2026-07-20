@@ -41,10 +41,12 @@ test("MonitoringReportBuilder uses range-scoped telemetry and alert queries", as
             : [{ node: { code: "N1" } }, { node: { code: "N2" } }];
         }
         alertCalls.push(args);
-        return args.where?.lastSeenAt?.gte?.getTime() === new Date("2026-07-01T00:00:00.000Z").getTime()
+        return args.where?.firstSeenAt?.lte?.getTime() === new Date("2026-07-07T23:59:59.999Z").getTime()
+          && args.where?.OR?.[0]?.resolvedAt === null
+          && args.where?.OR?.[1]?.resolvedAt?.gte?.getTime() === new Date("2026-07-01T00:00:00.000Z").getTime()
           && args.where?.severity === "CRITICAL"
           && args.where?.nodeId === "node-1"
-          ? [{ severity: "CRITICAL", title: "Nodo sin snapshots recientes", detail: "...", node: { code: "N1" } }]
+          ? [{ severity: "CRITICAL", title: "Alerta que permanece activa", detail: "...", node: { code: "N1" } }]
           : [
             { severity: "CRITICAL", title: "Nodo sin snapshots recientes", detail: "...", node: { code: "N1" } },
             { severity: "WARNING", title: "Alerta fuera de alcance", detail: "...", node: { code: "N2" } },
@@ -78,7 +80,8 @@ test("MonitoringReportBuilder uses range-scoped telemetry and alert queries", as
   }]);
   assert.deepEqual(alertCalls, [{
     where: {
-      lastSeenAt: { gte: new Date("2026-07-01T00:00:00.000Z"), lte: new Date("2026-07-07T23:59:59.999Z") },
+      firstSeenAt: { lte: new Date("2026-07-07T23:59:59.999Z") },
+      OR: [{ resolvedAt: null }, { resolvedAt: { gte: new Date("2026-07-01T00:00:00.000Z") } }],
       nodeId: "node-1",
       node: {
         operativeState: "OFFLINE",
@@ -87,7 +90,7 @@ test("MonitoringReportBuilder uses range-scoped telemetry and alert queries", as
       severity: "CRITICAL",
     },
     select: { severity: true, title: true, detail: true, node: { select: { code: true } } },
-    orderBy: { lastSeenAt: "asc" },
+    orderBy: { firstSeenAt: "asc" },
   }]);
   assert.deepEqual(offlineNodeAlertCalls, [{
     where: {

@@ -27,9 +27,14 @@ export class MonitoringReportBuilder {
         orderBy: { capturedAt: "asc" },
       }),
       this.prisma.networkTelemetryAlert.findMany({
-        where: { lastSeenAt: range, ...nodeScope, ...(filters.severity ? { severity: filters.severity as never } : {}) },
+        where: {
+          firstSeenAt: { lte: range.lte },
+          OR: [{ resolvedAt: null }, { resolvedAt: { gte: range.gte } }],
+          ...nodeScope,
+          ...(filters.severity ? { severity: filters.severity as never } : {}),
+        },
         select: { severity: true, title: true, detail: true, node: { select: { code: true } } },
-        orderBy: { lastSeenAt: "asc" },
+        orderBy: { firstSeenAt: "asc" },
       }),
       this.prisma.networkTelemetryAlert.findMany({
         where: {
