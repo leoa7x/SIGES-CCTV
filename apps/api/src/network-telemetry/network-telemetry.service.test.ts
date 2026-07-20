@@ -28,9 +28,14 @@ function createService(overrides: Record<string, unknown> = {}) {
     node: {
       findUnique: async () => ({ id: "node-1" }),
       findUniqueOrThrow: async () => ({ id: "node-1" }),
+      findFirst: async () => null,
     },
     centerAsset: {
       findMany: async () => [],
+      findFirst: async () => null,
+    },
+    monitoringCenter: {
+      findFirst: async () => null,
     },
     nodeAsset: {
       findFirst: async (args: unknown) => {

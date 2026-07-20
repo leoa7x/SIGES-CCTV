@@ -14,6 +14,7 @@ import {
   deriveSilentAssetAlerts,
   TELEMETRY_SILENCE_WINDOW_MS,
 } from "./network-telemetry.alerts";
+import { correlateObservedHost } from "./network-telemetry-correlation";
 import { IngestNetworkTelemetryDto } from "./network-telemetry.ingest.dto";
 
 function isMatchingToken(expected: string, received: string): boolean {
@@ -199,23 +200,49 @@ export class NetworkTelemetryService {
     capturedAt: Date,
     asset: IngestNetworkTelemetryDto["assets"][number],
   ) {
-    const officialByMac = asset.mac
-      ? await prisma.nodeAsset.findFirst({ where: { nodeId, mac: asset.mac } })
-      : null;
+    let officialNodeAsset: { id: string; nodeId: string } | null = null;
+    const owner = await correlateObservedHost(asset, {
+      findNodeAssetByMac: async () => {
+        const match = asset.mac
+          ? await prisma.nodeAsset.findFirst({ where: { nodeId, mac: asset.mac } })
+          : null;
+        officialNodeAsset = match ? { ...match, nodeId: match.nodeId ?? nodeId } : null;
+        return officialNodeAsset;
+      },
+      findCenterAssetByMac: async () => asset.mac
+        ? prisma.centerAsset.findFirst({ where: { mac: asset.mac } })
+        : null,
+      findNodeAssetByIp: async () => {
+        const match = asset.ip
+          ? await prisma.nodeAsset.findFirst({ where: { nodeId, ip: asset.ip } })
+          : null;
+        officialNodeAsset = match ? { ...match, nodeId: match.nodeId ?? nodeId } : null;
+        return officialNodeAsset;
+      },
+      findCenterAssetByIp: async () => asset.ip
+        ? prisma.centerAsset.findFirst({ where: { ip: asset.ip } })
+        : null,
+      findNodeByPrimaryIp: async () => asset.ip
+        ? prisma.node.findFirst({ where: { id: nodeId, primaryIp: asset.ip }, select: { id: true } })
+        : null,
+      findCenterByPrimaryIp: async () => asset.ip
+        ? prisma.monitoringCenter.findFirst({ where: { primaryIp: asset.ip }, select: { id: true } })
+        : null,
+    });
 
-    const officialByIp = !officialByMac && asset.ip
-      ? await prisma.nodeAsset.findFirst({ where: { nodeId, ip: asset.ip } })
-      : null;
+    const isLocalNodeOwner = owner.kind === "node" && owner.nodeId === nodeId;
+    const nodeAsset: { id: string; nodeId: string } | null = isLocalNodeOwner ? officialNodeAsset : null;
 
     const discoveryCutoff = new Date(capturedAt.getTime() - 24 * 60 * 60 * 1000);
-    const discoveryByMac = !officialByMac && !officialByIp && asset.mac
+    const canUseDiscovery = owner.kind === "unmatched" && owner.reason === "NO_MATCH";
+    const discoveryByMac = canUseDiscovery && asset.mac
       ? await prisma.nodeDiscoveredDevice.findFirst({
         where: { mac: asset.mac, createdAt: { gte: discoveryCutoff }, nodeDiscoveryJob: { nodeId } },
         orderBy: { createdAt: "desc" },
       })
       : null;
 
-    const discoveryByIp = !officialByMac && !officialByIp && !discoveryByMac && asset.ip
+    const discoveryByIp = canUseDiscovery && !discoveryByMac && asset.ip
       ? await prisma.nodeDiscoveredDevice.findFirst({
         where: { ip: asset.ip, createdAt: { gte: discoveryCutoff }, nodeDiscoveryJob: { nodeId } },
         orderBy: { createdAt: "desc" },
@@ -225,7 +252,7 @@ export class NetworkTelemetryService {
     return {
       snapshotId,
       nodeId,
-      nodeAssetId: officialByMac?.id ?? officialByIp?.id ?? null,
+      nodeAssetId: (nodeAsset as { id: string } | null)?.id ?? null,
       ip: asset.ip ?? null,
       mac: asset.mac ?? null,
       hostname: asset.hostname ?? null,
@@ -233,7 +260,7 @@ export class NetworkTelemetryService {
       bytesOut: BigInt(asset.bytesOut),
       flowCount: asset.flowCount,
       lastSeenAt: new Date(asset.lastSeenAt),
-      classificationSource: officialByMac || officialByIp
+      classificationSource: nodeAsset
         ? NetworkTelemetryClassificationSource.OFFICIAL
         : discoveryByMac || discoveryByIp
           ? NetworkTelemetryClassificationSource.DISCOVERY
