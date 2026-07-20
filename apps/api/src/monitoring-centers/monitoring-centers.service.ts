@@ -165,15 +165,17 @@ export class MonitoringCentersService {
             centerAssets: true,
             discoveryJobs: true,
             incidents: true,
+            externalFindings: true,
+            operationalAlerts: true,
           },
         },
       },
     });
 
-    const { routes, centerAssets, discoveryJobs, incidents } = center._count;
-    if (routes > 0 || centerAssets > 0 || discoveryJobs > 0 || incidents > 0) {
+    const { routes, centerAssets, discoveryJobs, incidents, externalFindings, operationalAlerts } = center._count;
+    if (routes > 0 || centerAssets > 0 || discoveryJobs > 0 || incidents > 0 || externalFindings > 0 || operationalAlerts > 0) {
       throw new ConflictException(
-        `No se puede eliminar el CMC ${center.name} porque todavía tiene dependencias asociadas. Registros pendientes: ${routes} rutas, ${centerAssets} equipos, ${discoveryJobs} escaneo${discoveryJobs === 1 ? "" : "s"} y ${incidents} incidentes.`,
+        `No se puede eliminar el CMC ${center.name} porque todavía tiene dependencias asociadas. Registros pendientes: ${routes} rutas, ${centerAssets} equipos, ${discoveryJobs} escaneo${discoveryJobs === 1 ? "" : "s"}, ${incidents} incidentes, ${externalFindings} hallazgo${externalFindings === 1 ? "" : "s"} externo${externalFindings === 1 ? "" : "s"} y ${operationalAlerts} alerta${operationalAlerts === 1 ? "" : "s"} operacional${operationalAlerts === 1 ? "" : "es"}.`,
       );
     }
 

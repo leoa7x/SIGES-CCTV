@@ -185,6 +185,8 @@ test("remove rejects deleting a CMC with dependent routes, assets, discoveries, 
           centerAssets: 3,
           discoveryJobs: 1,
           incidents: 4,
+          externalFindings: 0,
+          operationalAlerts: 0,
         },
       }),
       delete: async () => {
@@ -199,7 +201,41 @@ test("remove rejects deleting a CMC with dependent routes, assets, discoveries, 
   await assert.rejects(
     () => service.remove("center-1"),
     (error: unknown) => error instanceof ConflictException
-      && error.message === "No se puede eliminar el CMC CMC Central porque todavía tiene dependencias asociadas. Registros pendientes: 2 rutas, 3 equipos, 1 escaneo y 4 incidentes.",
+      && error.message === "No se puede eliminar el CMC CMC Central porque todavía tiene dependencias asociadas. Registros pendientes: 2 rutas, 3 equipos, 1 escaneo, 4 incidentes, 0 hallazgos externos y 0 alertas operacionales.",
+  );
+
+  assert.equal(deleted, false);
+});
+
+test("remove rejects deleting a CMC with only pending external findings or operational alerts", async () => {
+  let deleted = false;
+
+  const prisma = {
+    monitoringCenter: {
+      findUniqueOrThrow: async () => ({
+        id: "center-1",
+        name: "CMC Central",
+        _count: {
+          routes: 0,
+          centerAssets: 0,
+          discoveryJobs: 0,
+          incidents: 0,
+          externalFindings: 1,
+          operationalAlerts: 2,
+        },
+      }),
+      delete: async () => {
+        deleted = true;
+        return { id: "center-1" };
+      },
+    },
+  };
+
+  const service = new MonitoringCentersService(prisma as any);
+
+  await assert.rejects(
+    () => service.remove("center-1"),
+    (error: unknown) => error instanceof ConflictException,
   );
 
   assert.equal(deleted, false);
@@ -218,6 +254,8 @@ test("remove deletes a CMC when it has no dependent records", async () => {
           centerAssets: 0,
           discoveryJobs: 0,
           incidents: 0,
+          externalFindings: 0,
+          operationalAlerts: 0,
         },
       }),
       delete: async ({ where }: { where: { id: string } }) => {

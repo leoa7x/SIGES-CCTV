@@ -1,4 +1,5 @@
-import { Body, Controller, Post } from "@nestjs/common";
+import { Body, Controller, Post, UseGuards } from "@nestjs/common";
+import { ThrottlerGuard } from "@nestjs/throttler";
 import { IsEmail, IsString, MinLength } from "class-validator";
 import { AuthService } from "./auth.service";
 
@@ -15,6 +16,7 @@ class LoginDto {
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  @UseGuards(ThrottlerGuard)
   @Post("login")
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto.email, dto.password);
