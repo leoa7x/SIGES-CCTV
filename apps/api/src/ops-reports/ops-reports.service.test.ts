@@ -6,6 +6,7 @@ import { validateSync } from "class-validator";
 
 import { OpsReportBrandingService } from "./ops-report-branding.service";
 import { OpsReportHistoryService } from "./ops-report-history.service";
+import { OpsReportsService } from "./ops-reports.service";
 import {
   CreateOpsReportScheduleDto,
   GenerateOpsReportDto,
@@ -232,4 +233,51 @@ test("report DTOs require nested filters and schedule relative ranges", () => {
 
   assert.ok(validateSync(preview).some((error) => error.property === "filters"));
   assert.ok(validateSync(schedule).some((error) => error.property === "relativeRange"));
+});
+
+test("OpsReportsService dispatches previews and persists branded official artifacts", async () => {
+  let persisted: any;
+  const payload = { title: "Informe de monitoreo", summary: [], charts: [], tables: [], findings: [] };
+  const service = new OpsReportsService(
+    {} as any,
+    { build: async () => payload } as any,
+    { build: async () => { throw new Error("wrong builder"); } } as any,
+    { build: async () => { throw new Error("wrong builder"); } } as any,
+    {
+      renderPdf: async () => ({ fileName: "report.pdf", buffer: Buffer.from("pdf"), mimeType: "application/pdf" }),
+      renderCsv: async () => ({ fileName: "report.csv", buffer: Buffer.from("csv"), mimeType: "text/csv" }),
+    } as any,
+    { createHistoricalReport: async (input: unknown) => { persisted = input; return { id: "report-1" }; } } as any,
+    { getActiveBrandingSnapshot: async () => ({ profileId: "brand-1", name: "SIGES", logoUrl: null, loginMessage: null }) } as any,
+  );
+  const dto = { reportType: "MONITORING" as const, filters: { dateFrom: "2026-07-01", dateTo: "2026-07-07" } };
+
+  assert.deepEqual(await service.preview(dto), payload);
+  assert.deepEqual(await service.generate(dto, "user-1"), { reportId: "report-1" });
+  assert.equal(persisted.trigger, "MANUAL");
+  assert.equal(persisted.generatedByUserId, "user-1");
+  assert.equal(persisted.brandingSnapshot.name, "SIGES");
+});
+
+test("OpsReportsService creates schedules and lists report history", async () => {
+  const created: any[] = [];
+  const service = new OpsReportsService(
+    {
+      opsReportSchedule: { create: async ({ data }: any) => { created.push(data); return { id: "schedule-1", ...data }; } },
+      opsReportDefinition: { findMany: async () => [{ id: "report-1", reportType: "MONITORING", artifacts: [] }] },
+    } as any,
+    {} as any, {} as any, {} as any, {} as any, {} as any, {} as any,
+  );
+
+  const schedule = await service.createSchedule({
+    reportType: "MONITORING",
+    filters: { dateFrom: "2026-07-01", dateTo: "2026-07-07" },
+    frequency: "WEEKLY",
+    titleTemplate: "Monitoreo semanal",
+    relativeRange: { days: 7 },
+  }, "user-1");
+
+  assert.equal(schedule.id, "schedule-1");
+  assert.equal(created[0].createdByUserId, "user-1");
+  assert.deepEqual(await service.listHistory("MONITORING"), [{ id: "report-1", reportType: "MONITORING", artifacts: [] }]);
 });
