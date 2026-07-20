@@ -16,7 +16,24 @@ export class OpsReportSchedulerService {
 
       const windowKey = `${schedule.id}:${now.getUTCFullYear()}-${now.getUTCMonth()}-${now.getUTCDate()}`;
       if (this.completedWindows.has(windowKey)) continue;
-      await this.reports.generateFromSchedule(schedule, now);
+      const scheduledAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 4));
+      const relativeRange = schedule.relativeRangeJson as unknown as { days: number };
+      const dateFrom = new Date(scheduledAt);
+      dateFrom.setUTCDate(dateFrom.getUTCDate() - relativeRange.days);
+      const existing = await this.prisma.opsReportDefinition.findFirst({
+        where: {
+          reportType: schedule.reportType,
+          title: schedule.titleTemplate,
+          dateFrom,
+          dateTo: scheduledAt,
+          trigger: "SCHEDULED",
+        },
+      });
+      if (existing) {
+        this.completedWindows.add(windowKey);
+        continue;
+      }
+      await this.reports.generateFromSchedule(schedule, scheduledAt);
       this.completedWindows.add(windowKey);
     }
   }

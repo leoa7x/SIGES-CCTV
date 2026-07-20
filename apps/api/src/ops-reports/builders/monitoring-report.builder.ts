@@ -1,7 +1,10 @@
+import { Injectable } from "@nestjs/common";
+
 import { PrismaService } from "../../prisma/prisma.service";
 import { OpsReportFilters, ReportPreviewPayload } from "../ops-reports.types";
 import { dateRange } from "./report-builder.utils";
 
+@Injectable()
 export class MonitoringReportBuilder {
   constructor(private readonly prisma: PrismaService) {}
 
