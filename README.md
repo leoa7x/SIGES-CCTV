@@ -23,6 +23,8 @@ SIGES-CCTV es la plataforma que le da a un centro de monitoreo control total sob
 - **Visualiza** la red completa sobre un mapa GIS y observabilidad embebida (Grafana), pensado para decisiones operativas en segundos, no en minutos
 - **Da acceso a la medida** de cada rol operativo — desde un SUPER_ADMIN hasta un técnico con un único permiso concedido — sin exponer más de lo necesario
 - **Muestra video en vivo** de cualquier cámara IP desde el navegador sin exponer jamás sus credenciales al cliente
+- **Genera informes oficiales** de monitoreo, infraestructura e incidentes en PDF y CSV, programables o bajo demanda, con histórico auditable de cada corte
+- **Levanta alertas operacionales por sí sola** cuando un nodo, CMC o equipo deja de responder — sin esperar a que un operador lo note
 - **Se adapta a cada cliente**: identidad institucional propia por ciudad/entidad en la pantalla de acceso
 
 > **Principio de diseño:** Builder, no asset. Todo elemento de la red es registrado y verificado por el sistema — nunca hay que confiar a ciegas en una configuración que nadie revisó.
@@ -40,6 +42,8 @@ SIGES-CCTV es la plataforma que le da a un centro de monitoreo control total sob
 **Cero dependencia de servicios externos para operar.** El descubrimiento de equipos y la identificación de fabricantes por MAC funcionan 100% offline — la plataforma sigue operando aunque no haya salida a internet, un requisito real en redes de infraestructura crítica.
 
 **Multi-entidad desde el diseño.** Cada ciudad o cliente puede tener su propia identidad visual, su propia estructura de proyectos y centros, y su propio esquema de permisos — sin necesitar instalaciones separadas.
+
+**Construida para crecer sin degradarse.** Los listados de incidentes, bitácora, cámaras y nodos están paginados y con búsqueda resuelta en el servidor — no cargan toda la tabla al navegador. Las tablas de mayor crecimiento (telemetría, discovery, log de estados) tienen índices dedicados y una política de retención automática de 90 días, sin tocar jamás los registros de auditoría (incidentes, bitácora, alertas). El daemon de monitoreo y los verificadores de heartbeat sondean con concurrencia acotada, así que un puñado de equipos caídos no retrasa la detección del resto de la red.
 
 ---
 
@@ -64,9 +68,10 @@ SIGES-CCTV es la plataforma que le da a un centro de monitoreo control total sob
 | **PostgreSQL 16 + PostGIS** | Base de datos principal con soporte geoespacial |
 | **socket.io** | Gateway WebSocket por rooms de CMC, autenticado por JWT |
 | **Redpanda (Kafka API)** | Consumo de eventos del monitor |
-| **MinIO (S3)** | Almacenamiento de logos institucionales y branding |
-| **JWT + Passport.js** | Autenticación stateless |
+| **MinIO (S3)** | Bucket público (branding/logos) + bucket privado (histórico de informes) |
+| **JWT + Passport.js** | Autenticación stateless, revalidada contra la BD en cada solicitud |
 | **Roles + permisos granulares** | Control de acceso por rol y por permiso (ver [Roles y permisos](#roles-y-permisos)) |
+| **@nestjs/throttler** | Límite de intentos en login (protección contra fuerza bruta) |
 | **ffmpeg** | Transcodifica RTSP → MJPEG para preview de cámaras en el navegador |
 | **nmap / arp-scan (LAN-Orangutan)** | Discovery de equipos por nodo y por CMC |
 | **Swagger** | Documentación de API auto-generada (`/docs`) |
@@ -128,6 +133,10 @@ Cada usuario tiene un **rol** y, además, una lista de **permisos granulares** i
 | `RUN_DISCOVERY` | Lanzar un escaneo de discovery (nodo o CMC) |
 | `RESOLVE_DISCOVERY` | Confirmar/descartar equipos encontrados por discovery |
 | `VIEW_TELEMETRY` | Ver paneles de telemetría de red |
+| `REPORTS_VIEW` | Ver histórico y vista previa de informes oficiales |
+| `REPORTS_EXPORT` | Descargar artefactos (PDF/CSV) de informes ya generados |
+| `REPORTS_CLOSE_PERIOD` | Generar (cerrar) un informe oficial manualmente |
+| `REPORTS_SCHEDULE` | Programar la generación automática de informes (semanal/mensual) |
 
 El sidebar solo muestra a cada usuario los módulos de administración para los que realmente tiene permiso — no hace falta conocer la URL a mano.
 
@@ -157,6 +166,14 @@ Daemon Go que pollea todos los dispositivos registrados:
 - Solo reporta **cambios de estado** (online → offline y viceversa)
 - Auto-llena marca y modelo de cámaras al primer probe ONVIF exitoso
 
+### Heartbeat y alertas operacionales
+Una segunda capa de verificación, integrada directamente en la API (no depende de que el daemon Go esté desplegado): un scheduler independiente hace ping a cada nodo, CMC y equipo con IP conocida en un ciclo configurable, y:
+
+- Marca `ONLINE`/`OFFLINE` automáticamente tras superar un umbral de fallos consecutivos configurable (evita falsos positivos por un solo paquete perdido)
+- Levanta y resuelve `OperationalAlert` por su cuenta — nadie tiene que crear el ticket a mano cuando un equipo deja de responder
+- **Nunca toca** un equipo en `MAINTENANCE` o `DEGRADED` — esos estados son una decisión humana y la automatización los respeta siempre
+- Sondea con concurrencia acotada (no secuencial), así que la detección no se degrada linealmente al crecer la flota de equipos
+
 ### Cámaras en vivo
 Preview en vivo del stream RTSP de cualquier cámara desde el navegador, sin exponer la contraseña de la cámara al cliente: la API transcodifica con `ffmpeg` a MJPEG, la sesión expira a los 60 s, y la URL de origen debe coincidir con la IP configurada del nodo (evita apuntar el preview a cualquier host arbitrario).
 
@@ -168,6 +185,15 @@ Cada ciudad/entidad puede tener su propio logo y mensaje en la pantalla de login
 
 ### Continuidad operativa
 Desde `/admin/operations`, configuración de política de backups (automáticos, manuales protegidos) y del ciclo de actualizaciones del sistema, con trazabilidad completa de cada operación — qué se hizo, cuándo y con qué resultado. La ejecución de fondo de backup/restore se sigue reforzando activamente antes de habilitarla para operación sin supervisión.
+
+### Informes oficiales (PDF / CSV)
+Tres tipos de informe — **Monitoreo**, **Infraestructura** e **Incidentes** — con vista previa antes de cerrar el corte oficial:
+
+- Vista previa instantánea con los mismos filtros del informe final (rango de fechas, ciudad, proyecto, CMC, nodo, severidad, estado)
+- Al generar el corte oficial, el sistema emite PDF y CSV con el branding institucional activo, y lo deja en un histórico permanente (`REPORTS_CLOSE_PERIOD`)
+- Programación automática semanal o mensual (`REPORTS_SCHEDULE`), o generación manual bajo demanda
+- Cada informe generado queda trazado — tipo, rango, quién/qué lo disparó (manual o programado) y sus artefactos descargables (`REPORTS_VIEW` / `REPORTS_EXPORT`)
+- Los archivos históricos viven en un bucket privado de MinIO separado del de branding público — solo son accesibles a través de un endpoint autorizado, nunca directamente desde el bucket
 
 ### Dashboard, mapa y bitácora
 - **Dashboard**: resumen global online/offline/degradado por CMC, actualización instantánea vía WebSocket (rooms por CMC)
@@ -192,13 +218,14 @@ Catálogo de referencia de cada módulo — qué hace y dónde vive.
 | `projects` | Proyectos (cliente, contrato, fechas) dentro de una ciudad |
 | `monitoring-centers` | Centros de Monitoreo (CMC): datos del centro, geocodificación automática |
 | `center-assets` | Inventario oficial de equipos propios de un CMC (switches, UPS, cámaras del centro) |
-| `center-discovery` | Discovery automático por CMC + reconciliación de estado (`ONLINE`/`OFFLINE`) contra el inventario oficial |
+| `center-discovery` | Discovery automático por CMC + reconciliación de estado (`ONLINE`/`OFFLINE`) contra el inventario oficial; incluye el scheduler de heartbeat del CMC y sus equipos |
 | `external-discovery` | Hallazgos de discovery fuera del CIDR configurado, o traídos de otras fuentes (ej. ntopng), sin descartarlos |
 | `routes` | Rutas de fibra/wireless/hybrid que conectan un CMC con sus nodos |
 | `nodes` | Nodos de red (switch, gabinete, amplificador, splitter) |
 | `node-assets` | Equipos asociados a un nodo específico |
 | `node-analytics` | Catálogo de analíticas de video (LPR, reconocimiento facial, conteo, etc.) y su asignación a nodos/equipos |
-| `node-discovery` | Discovery automático por nodo (mismo motor que `center-discovery`) |
+| `node-discovery` | Discovery automático por nodo (mismo motor que `center-discovery`); incluye el scheduler de heartbeat del nodo y sus equipos |
+| `heartbeat` | Probing de reachability compartido (ping con runner inyectable), concurrencia acotada y el servicio de alertas operacionales (`OperationalAlert`) que consumen ambos schedulers de heartbeat |
 | `fiber-cables` / `fiber-points` / `fiber-segments` / `splices` | Documentación completa de la planta de fibra: cables troncales, puntos, tramos y empalmes |
 | `cameras` | Alta/edición de cámaras IP, credenciales de stream cifradas |
 | `camera-preview` | Sesión de preview en vivo (RTSP → MJPEG vía ffmpeg), expira sola a los 60 s |
@@ -211,8 +238,10 @@ Catálogo de referencia de cada módulo — qué hace y dónde vive.
 | `events` | Productor Kafka/Redpanda — publica los cambios de estado que consume el `gateway` |
 | `monitor` | Endpoint interno que recibe los reportes del daemon Go (`apps/monitor`) |
 | `branding` | Perfiles de identidad institucional (logo, mensaje) por ciudad/entidad para la pantalla de login |
-| `storage` | Integración con MinIO (S3) para logos y archivos servidos públicamente |
+| `storage` | Integración con MinIO (S3): bucket público para logos/branding y bucket privado (sin acceso directo) para artefactos históricos de informes |
 | `ops-lifecycle` | Política de backups, historial de respaldos/restauraciones/actualizaciones del sistema |
+| `ops-reports` | Generación de informes oficiales (builders por tipo, render PDF/CSV, programación, histórico y branding del informe) |
+| `data-retention` | Barrido diario que purga telemetría, snapshots de discovery y log de estados más viejos que la ventana de retención (90 días por defecto) — nunca toca incidentes, bitácora ni alertas |
 
 ### Frontend (`apps/web/app`)
 
@@ -233,7 +262,10 @@ Catálogo de referencia de cada módulo — qué hace y dónde vive.
 | `/admin/nodes` | Nodos, sus equipos, analíticas asignadas y discovery |
 | `/admin/cameras` | Cámaras: alta/edición y preview en vivo |
 | `/admin/users` | Usuarios, roles y permisos granulares |
-| `/admin/operations` | Política de backups y ciclo de actualizaciones del sistema |
+| `/admin/operations` | Política de backups y ciclo de actualizaciones del sistema, agrupado en el sidebar junto a los informes oficiales |
+| `/admin/operations/reports-monitoring` | Informe oficial de monitoreo: disponibilidad, alertas y comportamiento de red |
+| `/admin/operations/reports-infrastructure` | Informe oficial de infraestructura: capacidad, distribución y composición física de la red |
+| `/admin/operations/reports-incidents` | Informe oficial de incidentes: volumen, severidad, tiempos de resolución y tendencia |
 
 ---
 
