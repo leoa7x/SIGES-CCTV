@@ -30,6 +30,7 @@ import { CenterAssetsModule } from "./center-assets/center-assets.module";
 import { CenterDiscoveryModule } from "./center-discovery/center-discovery.module";
 import { ExternalDiscoveryModule } from "./external-discovery/external-discovery.module";
 import { OpsLifecycleModule } from "./ops-lifecycle/ops-lifecycle.module";
+import { DataRetentionModule } from "./data-retention/data-retention.module";
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { OpsLifecycleModule } from "./ops-lifecycle/ops-lifecycle.module";
     NodeDiscoveryModule,
     NetworkTelemetryModule,
     ObservabilityModule,
+    DataRetentionModule,
   ],
 })
 export class AppModule {}

@@ -23,6 +23,7 @@
     "test:heartbeat-probe": "ts-node --project tsconfig.json src/heartbeat/heartbeat-probe.service.test.ts",
     "test:node-heartbeat": "ts-node --project tsconfig.json src/node-discovery/node-heartbeat-scheduler.service.test.ts",
     "test:center-heartbeat": "ts-node --project tsconfig.json src/center-discovery/center-heartbeat-scheduler.service.test.ts",
+    "test:data-retention": "ts-node --project tsconfig.json src/data-retention/data-retention-scheduler.service.test.ts",
     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "db:push": "dotenv -e ../../.env -- prisma db push",
     "db:studio": "dotenv -e ../../.env -- prisma studio",
