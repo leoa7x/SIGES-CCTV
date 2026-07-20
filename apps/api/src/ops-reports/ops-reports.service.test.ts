@@ -281,3 +281,27 @@ test("OpsReportsService creates schedules and lists report history", async () =>
   assert.equal(created[0].createdByUserId, "user-1");
   assert.deepEqual(await service.listHistory("MONITORING"), [{ id: "report-1", reportType: "MONITORING", artifacts: [] }]);
 });
+
+test("OpsReportsService resolves a stored historical artifact for authorized download", async () => {
+  const service = new OpsReportsService(
+    {} as any,
+    {} as any,
+    {} as any,
+    {} as any,
+    {} as any,
+    {
+      downloadHistoricalArtifact: async (reportId: string, format: string) => {
+        assert.equal(reportId, "report-1");
+        assert.equal(format, "PDF");
+        return { fileName: "monitoreo.pdf", mimeType: "application/pdf", buffer: Buffer.from("pdf") };
+      },
+    } as any,
+    {} as any,
+  );
+
+  const artifact = await service.downloadArtifact("report-1", "PDF");
+
+  assert.equal(artifact.fileName, "monitoreo.pdf");
+  assert.equal(artifact.mimeType, "application/pdf");
+  assert.deepEqual(artifact.buffer, Buffer.from("pdf"));
+});

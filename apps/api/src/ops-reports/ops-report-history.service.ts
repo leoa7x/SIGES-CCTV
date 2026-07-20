@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 
@@ -72,5 +72,29 @@ export class OpsReportHistoryService {
       await Promise.allSettled(stored.map(({ storageKey }) => this.storage.deletePrivateHistorical(storageKey)));
       throw error;
     }
+  }
+
+  async downloadHistoricalArtifact(reportId: string, format: "PDF" | "CSV") {
+    const artifact = await this.prisma.opsReportArtifact.findFirst({
+      where: {
+        reportDefinitionId: reportId,
+        format,
+      },
+      select: {
+        fileName: true,
+        mimeType: true,
+        storageKey: true,
+      },
+    });
+    if (!artifact) {
+      throw new NotFoundException("No se encontró el artefacto histórico solicitado.");
+    }
+
+    const buffer = await this.storage.downloadHistoricalArtifact(artifact.storageKey);
+    return {
+      fileName: artifact.fileName,
+      mimeType: artifact.mimeType,
+      buffer,
+    };
   }
 }

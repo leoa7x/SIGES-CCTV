@@ -1,8 +1,8 @@
 "use client";
-
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../../../components/auth-provider";
+import { OperationsNav } from "../../../components/operations-nav";
 import { OpsNotice } from "../../../components/ops-notice";
 import { OpsShell } from "../../../components/ops-shell";
 import { apiGet, apiPatch, apiPost } from "../../../lib/api";
@@ -10,6 +10,13 @@ import { normalizeOpsLifecycleSummary, type OpsLifecycleSummary } from "../../..
 import { toUserFacingError } from "../../../lib/presentation";
 
 const INPUT = "w-full rounded-ops border border-ops-border bg-ops-surface px-3 py-2 text-sm text-ops-text focus:border-ops-blue focus:outline-none";
+
+const RESTORE_SCOPE_LABELS: Record<string, string> = {
+  FULL_SYSTEM: "el sistema completo",
+  DATABASE_ONLY: "solo la base de datos",
+  OBJECTS_ONLY: "solo archivos / objetos",
+  CONFIG_ONLY: "solo la configuración",
+};
 
 type Feedback = { tone: "info" | "warning" | "error"; title: string; message: string } | null;
 
@@ -111,6 +118,12 @@ export default function OperationsPage() {
   async function restoreBackup(e: React.FormEvent) {
     e.preventDefault();
     if (!accessToken) return;
+    const scopeLabel = RESTORE_SCOPE_LABELS[restoreScope] ?? restoreScope;
+    const confirmed = window.confirm(
+      `Vas a restaurar "${scopeLabel}" desde:\n${restorePath}\n\nEsto puede sobrescribir datos actuales de la instalación. ¿Confirmas que quieres continuar?`,
+    );
+    if (!confirmed) return;
+
     setRunningAction("RESTORE");
     setFeedback(null);
     try {
@@ -138,6 +151,11 @@ export default function OperationsPage() {
   async function applyUpdate(e: React.FormEvent) {
     e.preventDefault();
     if (!accessToken) return;
+    const confirmed = window.confirm(
+      `Vas a aplicar la actualización ${updateVersionLabel} desde:\n${updatePackagePath}\n\nSe creará un respaldo previo automático. ¿Confirmas que quieres continuar?`,
+    );
+    if (!confirmed) return;
+
     setRunningAction("UPDATE");
     setFeedback(null);
     try {
@@ -170,13 +188,17 @@ export default function OperationsPage() {
         </div>
       ) : null}
 
+      <div className="mb-6">
+        <OperationsNav />
+      </div>
+
       {loading ? (
         <div className="flex justify-center py-16">
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" />
         </div>
       ) : (
         <div className="space-y-6">
-          <section className="rounded-ops border border-ops-border bg-white p-5 shadow-ops">
+          <section className="rounded-ops border border-ops-border bg-ops-panel p-5 shadow-ops">
             <div className="mb-4 flex items-start gap-3">
               <img src="/icons/sidebar/operacion.png" alt="" aria-hidden="true" className="h-8 w-8 object-contain" />
               <div>
@@ -201,7 +223,7 @@ export default function OperationsPage() {
           </section>
 
           <section className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
-            <form onSubmit={saveSettings} className="rounded-ops border border-ops-border bg-white p-5 shadow-ops">
+            <form onSubmit={saveSettings} className="rounded-ops border border-ops-border bg-ops-panel p-5 shadow-ops">
               <div className="mb-4 flex items-start gap-3">
                 <img src="/icons/sidebar/respaldo.png" alt="" aria-hidden="true" className="h-8 w-8 object-contain" />
                 <div>
@@ -240,7 +262,7 @@ export default function OperationsPage() {
               </div>
             </form>
 
-            <form onSubmit={restoreBackup} className="rounded-ops border border-ops-border bg-white p-5 shadow-ops">
+            <form onSubmit={restoreBackup} className="rounded-ops border border-ops-border bg-ops-panel p-5 shadow-ops">
               <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-ops-muted">Restaurar respaldo</h2>
               <p className="mt-2 text-sm text-ops-muted">Aplica un respaldo existente sobre esta instalación SIGES sin reinstalar toda la plataforma.</p>
               <div className="mt-4 space-y-4">
@@ -264,7 +286,7 @@ export default function OperationsPage() {
             </form>
           </section>
 
-          <section className="rounded-ops border border-ops-border bg-white p-5 shadow-ops">
+          <section className="rounded-ops border border-ops-border bg-ops-panel p-5 shadow-ops">
             <div className="mb-4 flex items-start gap-3">
               <img src="/icons/sidebar/actualizacion.png" alt="" aria-hidden="true" className="h-8 w-8 object-contain" />
               <div>

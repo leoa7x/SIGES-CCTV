@@ -81,9 +81,29 @@ export async function apiGet<T>(path: string, token: string): Promise<T> {
   });
   if (!res.ok) {
     handleUnauthorized(res.status);
-    throw new Error(`API ${res.status} ${path}`);
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? `API ${res.status} ${path}`);
   }
   return res.json() as Promise<T>;
+}
+
+export async function apiDownload(path: string, token: string): Promise<{ blob: Blob; fileName: string | null; mimeType: string | null }> {
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    handleUnauthorized(res.status);
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? `API ${res.status} ${path}`);
+  }
+
+  const contentDisposition = res.headers.get("Content-Disposition");
+  const fileNameMatch = contentDisposition?.match(/filename="([^"]+)"/i);
+  return {
+    blob: await res.blob(),
+    fileName: fileNameMatch?.[1] ?? null,
+    mimeType: res.headers.get("Content-Type"),
+  };
 }
 
 export async function apiPost<T>(path: string, token: string, body: unknown): Promise<T> {

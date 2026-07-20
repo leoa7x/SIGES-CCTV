@@ -23,7 +23,7 @@ export type HistoricalReportListItem = {
   dateTo: Date;
   trigger: "MANUAL" | "SCHEDULED";
   createdAt: Date;
-  artifacts: Array<{ format: "PDF" | "CSV"; fileName: string; publicUrl: string; mimeType: string }>;
+  artifacts: Array<{ format: "PDF" | "CSV"; fileName: string; downloadPath: string; mimeType: string }>;
 };
 
 type ScheduledReport = Pick<OpsReportSchedule, "reportType" | "titleTemplate" | "filtersJson" | "relativeRangeJson">;
@@ -71,7 +71,7 @@ export class OpsReportsService {
   }
 
   async listHistory(reportType?: OpsReportType): Promise<HistoricalReportListItem[]> {
-    return this.prisma.opsReportDefinition.findMany({
+    const definitions = await this.prisma.opsReportDefinition.findMany({
       where: reportType ? { reportType } : undefined,
       select: {
         id: true,
@@ -82,12 +82,20 @@ export class OpsReportsService {
         trigger: true,
         createdAt: true,
         artifacts: {
-          select: { format: true, fileName: true, publicUrl: true, mimeType: true },
+          select: { format: true, fileName: true, mimeType: true },
           orderBy: { createdAt: "asc" },
         },
       },
       orderBy: { createdAt: "desc" },
     });
+
+    return definitions.map((definition) => ({
+      ...definition,
+      artifacts: definition.artifacts.map((artifact) => ({
+        ...artifact,
+        downloadPath: `/ops-lifecycle/reports/${definition.id}/artifacts/${artifact.format}/download`,
+      })),
+    }));
   }
 
   async createSchedule(dto: CreateOpsReportScheduleDto, userId: string | null): Promise<OpsReportSchedule> {
@@ -101,6 +109,10 @@ export class OpsReportsService {
         createdByUserId: userId,
       },
     });
+  }
+
+  async downloadArtifact(reportId: string, format: "PDF" | "CSV") {
+    return this.history.downloadHistoricalArtifact(reportId, format);
   }
 
   private async generateOfficialReport(

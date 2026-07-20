@@ -7,6 +7,7 @@ import {
   CreateBucketCommand,
   HeadBucketCommand,
   PutBucketPolicyCommand,
+  GetObjectCommand,
 } from "@aws-sdk/client-s3";
 
 @Injectable()
@@ -93,5 +94,12 @@ export class StorageService implements OnModuleInit {
 
   async deletePrivateHistorical(key: string): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.privateBucket, Key: key }));
+  }
+
+  async downloadHistoricalArtifact(key: string): Promise<Buffer> {
+    const response = await this.client.send(new GetObjectCommand({ Bucket: this.privateBucket, Key: key }));
+    const bytes = await response.Body?.transformToByteArray();
+    if (!bytes) throw new Error(`Historical artifact body missing for key ${key}`);
+    return Buffer.from(bytes);
   }
 }
