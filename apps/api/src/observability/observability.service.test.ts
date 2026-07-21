@@ -88,12 +88,12 @@ test("getDashboardEmbed rejects unknown dashboard keys", () => {
   assert.throws(() => service.getDashboardEmbed({ dashboard: "bad-key" as never }));
 });
 
-test("getDashboardEmbed defaults to the six-hour Grafana time range", () => {
+test("getDashboardEmbed defaults to the one-hour Grafana time range", () => {
   const service = new ObservabilityService(config);
 
   const result = service.getDashboardEmbed({ dashboard: "network-command-view" });
 
-  assert.equal(result.params.from, "now-6h");
+  assert.equal(result.params.from, "now-1h");
   assert.equal(result.params.to, "now");
 });
 

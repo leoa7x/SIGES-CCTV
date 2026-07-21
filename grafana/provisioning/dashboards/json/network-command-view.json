@@ -283,6 +283,43 @@
       ],
       "title": "Estado de nodos monitoreados",
       "type": "table"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "siges-postgres" },
+      "description": "Una línea por nodo — tráfico total (entrada + salida) de cada uno.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "pointSize": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 24 },
+      "id": 8,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "sortBy": "Last *", "sortDesc": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "pluginVersion": "11.1.0",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "siges-postgres" },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH samples AS ( SELECT captured_at, node_id, node_code, total_bytes_in, total_bytes_out, LAG(total_bytes_in) OVER (PARTITION BY node_id ORDER BY captured_at) AS prev_in, LAG(total_bytes_out) OVER (PARTITION BY node_id ORDER BY captured_at) AS prev_out FROM telemetry_node_timeseries_view WHERE $__timeFilter(captured_at) ) SELECT captured_at AS time, node_code AS metric, GREATEST(total_bytes_in - COALESCE(prev_in, total_bytes_in), 0) + GREATEST(total_bytes_out - COALESCE(prev_out, total_bytes_out), 0) AS value FROM samples ORDER BY captured_at;",
+          "refId": "A"
+        }
+      ],
+      "title": "Tráfico por nodo",
+      "type": "timeseries"
     }
   ],
   "refresh": "10s",
@@ -295,6 +332,6 @@
   "timezone": "",
   "title": "Network Command View",
   "uid": "network-command-view",
-  "version": 3,
+  "version": 4,
   "weekStart": ""
 }

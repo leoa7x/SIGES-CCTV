@@ -44,7 +44,11 @@ export class ObservabilityService {
     const uid = normalizeDashboardUid(this.config.dashboards[input.dashboard]);
     const params = new URLSearchParams({
       orgId: this.config.orgId,
-      from: input.from ?? "now-6h",
+      // A 6h default window made these 10s-refresh panels look static —
+      // each new data point was an invisible sliver against 6 hours of
+      // x-axis. An hour keeps recent movement visible while still giving
+      // useful context.
+      from: input.from ?? "now-1h",
       to: input.to ?? "now",
       theme: "dark",
       kiosk: "tv",
