@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
+import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 
 import { ObservabilityService } from "./observability.service";
@@ -9,7 +9,7 @@ export class ObservabilityController {
   constructor(private readonly service: ObservabilityService) {}
 
   @Get("embed/node/:id")
-  getNodeEmbed(@Param("id") id: string, @Query("from") from?: string, @Query("to") to?: string) {
+  getNodeEmbed(@Param("id", new ParseUUIDPipe()) id: string, @Query("from") from?: string, @Query("to") to?: string) {
     return this.service.getDashboardEmbed({
       dashboard: "node-observability",
       nodeId: id,

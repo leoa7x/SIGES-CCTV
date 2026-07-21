@@ -25,7 +25,7 @@
           "datasource": { "type": "postgres", "uid": "siges-postgres" },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT active_alert_count AS value FROM telemetry_node_summary_view WHERE node_id = '${nodeId}' LIMIT 1;",
+          "rawSql": "SELECT active_alert_count AS value FROM telemetry_node_summary_view WHERE node_id = ${nodeId:sqlstring} LIMIT 1;",
           "refId": "A"
         }
       ],
@@ -50,7 +50,7 @@
           "datasource": { "type": "postgres", "uid": "siges-postgres" },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT active_hosts AS value FROM telemetry_node_summary_view WHERE node_id = '${nodeId}' LIMIT 1;",
+          "rawSql": "SELECT active_hosts AS value FROM telemetry_node_summary_view WHERE node_id = ${nodeId:sqlstring} LIMIT 1;",
           "refId": "A"
         }
       ],
@@ -75,7 +75,7 @@
           "datasource": { "type": "postgres", "uid": "siges-postgres" },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT active_flows AS value FROM telemetry_node_summary_view WHERE node_id = '${nodeId}' LIMIT 1;",
+          "rawSql": "SELECT active_flows AS value FROM telemetry_node_summary_view WHERE node_id = ${nodeId:sqlstring} LIMIT 1;",
           "refId": "A"
         }
       ],
@@ -109,7 +109,7 @@
           "datasource": { "type": "postgres", "uid": "siges-postgres" },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "WITH base AS ( SELECT captured_at, GREATEST(total_bytes_in - COALESCE(LAG(total_bytes_in) OVER (PARTITION BY node_id ORDER BY captured_at), total_bytes_in), 0) AS bytes_in_delta, GREATEST(total_bytes_out - COALESCE(LAG(total_bytes_out) OVER (PARTITION BY node_id ORDER BY captured_at), total_bytes_out), 0) AS bytes_out_delta FROM telemetry_node_timeseries_view WHERE node_id = '${nodeId}' AND $__timeFilter(captured_at) ) SELECT captured_at AS time, bytes_in_delta AS total_bytes_in, bytes_out_delta AS total_bytes_out FROM base ORDER BY captured_at;",
+          "rawSql": "WITH base AS ( SELECT captured_at, GREATEST(total_bytes_in - COALESCE(LAG(total_bytes_in) OVER (PARTITION BY node_id ORDER BY captured_at), total_bytes_in), 0) AS bytes_in_delta, GREATEST(total_bytes_out - COALESCE(LAG(total_bytes_out) OVER (PARTITION BY node_id ORDER BY captured_at), total_bytes_out), 0) AS bytes_out_delta FROM telemetry_node_timeseries_view WHERE node_id = ${nodeId:sqlstring} AND $__timeFilter(captured_at) ) SELECT captured_at AS time, bytes_in_delta AS total_bytes_in, bytes_out_delta AS total_bytes_out FROM base ORDER BY captured_at;",
           "refId": "A"
         }
       ],
@@ -143,7 +143,7 @@
           "datasource": { "type": "postgres", "uid": "siges-postgres" },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT captured_at AS time, active_hosts, active_flows FROM telemetry_node_timeseries_view WHERE node_id = '${nodeId}' AND $__timeFilter(captured_at) ORDER BY captured_at;",
+          "rawSql": "SELECT captured_at AS time, active_hosts, active_flows FROM telemetry_node_timeseries_view WHERE node_id = ${nodeId:sqlstring} AND $__timeFilter(captured_at) ORDER BY captured_at;",
           "refId": "A"
         }
       ],
@@ -172,7 +172,7 @@
           "datasource": { "type": "postgres", "uid": "siges-postgres" },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH summary AS ( SELECT top_protocols_json::jsonb AS top_protocols_json FROM telemetry_node_summary_view WHERE node_id = '${nodeId}' LIMIT 1 ) SELECT protocol.value->>'name' AS protocolo, COALESCE((protocol.value->>'bytes')::numeric, 0) AS \"Bytes\", COALESCE((protocol.value->>'flowCount')::numeric, 0) AS \"Flows\" FROM summary, LATERAL jsonb_array_elements(COALESCE(summary.top_protocols_json, '[]'::jsonb)) AS protocol(value) ORDER BY \"Bytes\" DESC LIMIT 10;",
+          "rawSql": "WITH summary AS ( SELECT top_protocols_json::jsonb AS top_protocols_json FROM telemetry_node_summary_view WHERE node_id = ${nodeId:sqlstring} LIMIT 1 ) SELECT protocol.value->>'name' AS protocolo, COALESCE((protocol.value->>'bytes')::numeric, 0) AS \"Bytes\", COALESCE((protocol.value->>'flowCount')::numeric, 0) AS \"Flows\" FROM summary, LATERAL jsonb_array_elements(COALESCE(summary.top_protocols_json, '[]'::jsonb)) AS protocol(value) ORDER BY \"Bytes\" DESC LIMIT 10;",
           "refId": "A"
         }
       ],
@@ -201,7 +201,7 @@
           "datasource": { "type": "postgres", "uid": "siges-postgres" },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH summary AS ( SELECT top_destinations_json::jsonb AS top_destinations_json FROM telemetry_node_summary_view WHERE node_id = '${nodeId}' LIMIT 1 ) SELECT CONCAT(destination.value->>'target', ' (', destination.value->>'kind', ')') AS destino, COALESCE((destination.value->>'bytes')::numeric, 0) AS \"Bytes\", COALESCE((destination.value->>'flowCount')::numeric, 0) AS \"Flows\" FROM summary, LATERAL jsonb_array_elements(COALESCE(summary.top_destinations_json, '[]'::jsonb)) AS destination(value) ORDER BY \"Bytes\" DESC LIMIT 10;",
+          "rawSql": "WITH summary AS ( SELECT top_destinations_json::jsonb AS top_destinations_json FROM telemetry_node_summary_view WHERE node_id = ${nodeId:sqlstring} LIMIT 1 ) SELECT CONCAT(destination.value->>'target', ' (', destination.value->>'kind', ')') AS destino, COALESCE((destination.value->>'bytes')::numeric, 0) AS \"Bytes\", COALESCE((destination.value->>'flowCount')::numeric, 0) AS \"Flows\" FROM summary, LATERAL jsonb_array_elements(COALESCE(summary.top_destinations_json, '[]'::jsonb)) AS destination(value) ORDER BY \"Bytes\" DESC LIMIT 10;",
           "refId": "A"
         }
       ],
@@ -224,7 +224,7 @@
           "datasource": { "type": "postgres", "uid": "siges-postgres" },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT alert_severity, alert_kind, title, detail, last_seen_at FROM telemetry_alerts_view WHERE node_id = '${nodeId}' AND is_active ORDER BY last_seen_at DESC LIMIT 20;",
+          "rawSql": "SELECT alert_severity, alert_kind, title, detail, last_seen_at FROM telemetry_alerts_view WHERE node_id = ${nodeId:sqlstring} AND is_active ORDER BY last_seen_at DESC LIMIT 20;",
           "refId": "A"
         }
       ],
@@ -241,14 +241,14 @@
       {
         "current": { "selected": true, "text": "demo-city-001", "value": "demo-city-001" },
         "datasource": { "type": "postgres", "uid": "siges-postgres" },
-        "definition": "SELECT node_id AS __value, node_code AS __text FROM telemetry_node_summary_view ORDER BY 2",
+        "definition": "SELECT node_id AS __value, node_code AS __text FROM telemetry_node_summary_view ORDER BY 2 LIMIT 500",
         "hide": 0,
         "includeAll": false,
         "label": "Nodo",
         "multi": false,
         "name": "nodeId",
         "options": [],
-        "query": "SELECT node_id AS __value, node_code AS __text FROM telemetry_node_summary_view ORDER BY 2",
+        "query": "SELECT node_id AS __value, node_code AS __text FROM telemetry_node_summary_view ORDER BY 2 LIMIT 500",
         "refresh": 1,
         "skipUrlSync": false,
         "sort": 1,
