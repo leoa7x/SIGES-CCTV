@@ -220,6 +220,10 @@ export default function MapPage() {
     setDrawWaypoints([]);
   }, []);
 
+  const handleFiberInvalidPoleClick = useCallback(() => {
+    setActionError("Ese nodo no está marcado como poste — selecciona uno con el halo blanco para trazar fibra.");
+  }, []);
+
   const lastEvent = useMonitorAll(centers.map((c) => c.id), accessToken);
 
   // Read via ref inside the event effect below instead of listing fiberSegments
@@ -355,9 +359,7 @@ export default function MapPage() {
             fiberSegments={fiberSegments}
             fiberDrawMode={drawPhase !== "idle"}
             onFiberPoleClick={handleFiberPoleClick}
-            onFiberInvalidPoleClick={() =>
-              setActionError("Ese nodo no está marcado como poste — selecciona uno con el halo blanco para trazar fibra.")
-            }
+            onFiberInvalidPoleClick={handleFiberInvalidPoleClick}
             onFiberMapClick={handleFiberMapClick}
             onFiberDblClick={handleFiberDblClick}
             drawingPreview={drawingPreview}
