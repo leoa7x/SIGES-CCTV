@@ -415,6 +415,12 @@ model NodeDiscoveryJob {
   updatedAt         DateTime               @updatedAt
 
   @@index([nodeId, status])
+  // "Latest job for this node" (telemetry_discovery_backlog_view's `latest_job`
+  // lateral, ORDER BY createdAt DESC LIMIT 1) has no index to serve it and
+  // falls back to a per-node seq scan + sort — confirmed via EXPLAIN. Job
+  // rows aren't pruned by the retention sweep (they're audit records), so
+  // this grows with the system's entire discovery history.
+  @@index([nodeId, createdAt])
 }
 
 model NodeDiscoveredDevice {
@@ -498,6 +504,12 @@ model NetworkTelemetrySnapshot {
   createdAt           DateTime                      @default(now())
 
   @@index([nodeId, capturedAt])
+  // Grafana's network-wide panels filter capturedAt across ALL nodes (no
+  // nodeId predicate) — the composite index above can't serve that shape
+  // since nodeId is its leading column, so this table falls back to a full
+  // sequential scan as it grows. This standalone index lets the planner
+  // pick whichever access path fits the query.
+  @@index([capturedAt])
 }
 
 model NetworkTelemetryAssetSample {
