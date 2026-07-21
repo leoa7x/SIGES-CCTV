@@ -224,7 +224,10 @@ export default function MapPage() {
     setActionError("Ese nodo no está marcado como poste — selecciona uno con el halo blanco para trazar fibra.");
   }, []);
 
-  const lastEvent = useMonitorAll(centers.map((c) => c.id), accessToken);
+  const { events: monitorEvents, drain: drainMonitorEvents } = useMonitorAll(
+    centers.map((c) => c.id),
+    accessToken,
+  );
 
   // Read via ref inside the event effect below instead of listing fiberSegments
   // as a dependency — depending on state that the same effect also writes
@@ -235,59 +238,82 @@ export default function MapPage() {
   useEffect(() => { fiberSegmentsRef.current = fiberSegments; }, [fiberSegments]);
 
   useEffect(() => {
-    if (!lastEvent || lastEvent.entityType !== "node") return;
+    if (monitorEvents.length === 0) return;
 
-    // Live-update the node's own marker color on the map.
-    setAllNodes((prev) => {
-      let changed = false;
-      const next = prev.map((n) => {
-        if (n.id === lastEvent.entityId && n.operativeState !== lastEvent.newState) {
-          changed = true;
-          return { ...n, operativeState: lastEvent.newState };
-        }
-        return n;
+    // A single "last event" slot silently drops earlier events whenever two
+    // arrive before this effect gets to run — e.g. two different nodes going
+    // OFFLINE in the same tick. useMonitorAll queues everything since the
+    // last drain, so process the whole batch, then discard it. Last state
+    // per node wins within the batch (matches the previous single-event
+    // behavior — a node that flapped OFFLINE→ONLINE within the batch ends up
+    // ONLINE, not stuck showing a stale cut).
+    const latestStateByNodeId = new Map<string, string>();
+    for (const evt of monitorEvents) {
+      if (evt.entityType === "node") latestStateByNodeId.set(evt.entityId, evt.newState);
+    }
+
+    if (latestStateByNodeId.size > 0) {
+      // Live-update each node's own marker color on the map.
+      setAllNodes((prev) => {
+        let changed = false;
+        const next = prev.map((n) => {
+          const newState = latestStateByNodeId.get(n.id);
+          if (newState !== undefined && n.operativeState !== newState) {
+            changed = true;
+            return { ...n, operativeState: newState };
+          }
+          return n;
+        });
+        return changed ? next : prev;
       });
-      return changed ? next : prev;
-    });
 
-    // Update operative state on affected fiber segments (bail out to the
-    // same array reference when nothing matched, so this doesn't itself
-    // cause a render when the event is for a node with no fiber segment).
-    setFiberSegments((prev) => {
-      let changed = false;
-      const next = prev.map((s) => {
-        if (s.nodeA.id === lastEvent.entityId && s.nodeA.operativeState !== lastEvent.newState) {
-          changed = true;
-          return { ...s, nodeA: { ...s.nodeA, operativeState: lastEvent.newState } };
-        }
-        if (s.nodeB.id === lastEvent.entityId && s.nodeB.operativeState !== lastEvent.newState) {
-          changed = true;
-          return { ...s, nodeB: { ...s.nodeB, operativeState: lastEvent.newState } };
-        }
-        return s;
+      // Update operative state on affected fiber segments (bail out to the
+      // same array reference when nothing matched, so this doesn't itself
+      // cause a render when the batch only touches nodes with no segment).
+      setFiberSegments((prev) => {
+        let changed = false;
+        const next = prev.map((s) => {
+          let seg = s;
+          const newAState = latestStateByNodeId.get(s.nodeA.id);
+          if (newAState !== undefined && seg.nodeA.operativeState !== newAState) {
+            changed = true;
+            seg = { ...seg, nodeA: { ...seg.nodeA, operativeState: newAState } };
+          }
+          const newBState = latestStateByNodeId.get(s.nodeB.id);
+          if (newBState !== undefined && seg.nodeB.operativeState !== newBState) {
+            changed = true;
+            seg = { ...seg, nodeB: { ...seg.nodeB, operativeState: newBState } };
+          }
+          return seg;
+        });
+        return changed ? next : prev;
       });
-      return changed ? next : prev;
-    });
 
-    // Toast only on OFFLINE
-    if (lastEvent.newState !== "OFFLINE") return;
-    const affected = fiberSegmentsRef.current.filter(
-      (s) => s.nodeA.id === lastEvent.entityId || s.nodeB.id === lastEvent.entityId
-    );
-    affected.forEach((seg) => {
-      const toast: FiberToast = {
-        id: `${seg.id}-${lastEvent.timestamp}`,
-        nodeACode: seg.nodeA.code,
-        nodeBCode: seg.nodeB.code,
-        midLng: (seg.nodeA.lng + seg.nodeB.lng) / 2,
-        midLat: (seg.nodeA.lat + seg.nodeB.lat) / 2,
-      };
-      setToasts((prev) => [...prev, toast]);
-      setTimeout(() => {
-        setToasts((prev) => prev.filter((t) => t.id !== toast.id));
-      }, 8000);
-    });
-  }, [lastEvent]);
+      // Toast for every node whose latest state in this batch is OFFLINE.
+      const now = monitorEvents[monitorEvents.length - 1].timestamp;
+      for (const [nodeId, state] of latestStateByNodeId) {
+        if (state !== "OFFLINE") continue;
+        const affected = fiberSegmentsRef.current.filter(
+          (s) => s.nodeA.id === nodeId || s.nodeB.id === nodeId
+        );
+        affected.forEach((seg) => {
+          const toast: FiberToast = {
+            id: `${seg.id}-${now}`,
+            nodeACode: seg.nodeA.code,
+            nodeBCode: seg.nodeB.code,
+            midLng: (seg.nodeA.lng + seg.nodeB.lng) / 2,
+            midLat: (seg.nodeA.lat + seg.nodeB.lat) / 2,
+          };
+          setToasts((prev) => [...prev, toast]);
+          setTimeout(() => {
+            setToasts((prev) => prev.filter((t) => t.id !== toast.id));
+          }, 8000);
+        });
+      }
+    }
+
+    drainMonitorEvents();
+  }, [monitorEvents, drainMonitorEvents]);
 
   const canManageFiber = !!user &&
     (!shouldRoleUseGranularPermissions(user.role) || user.permissions.includes("MANAGE_FIBER"));

@@ -40,7 +40,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [overviewEmbedDescriptor, setOverviewEmbedDescriptor] = useState<GrafanaEmbedDescriptor | null>(null);
   const [loadingOverviewEmbed, setLoadingOverviewEmbed] = useState(false);
-  const lastEvent = useMonitorAll(centerIds, accessToken);
+  const { events: monitorEvents, drain: drainMonitorEvents } = useMonitorAll(centerIds, accessToken);
   const overviewEmbed = overviewEmbedDescriptor ? buildGrafanaEmbedModel(overviewEmbedDescriptor) : null;
 
   const loadData = useCallback(async () => {
@@ -71,9 +71,13 @@ export default function DashboardPage() {
   }, [loadData]);
 
   useEffect(() => {
-    if (!lastEvent) return;
-    setData((prev) => applyDashboardSummaryStateChange(prev, lastEvent));
-  }, [lastEvent]);
+    if (monitorEvents.length === 0) return;
+    // A single "last event" slot would silently drop earlier events whenever
+    // two arrive before this effect runs — fold the whole queued batch in
+    // order instead, then discard it.
+    setData((prev) => monitorEvents.reduce((acc, evt) => applyDashboardSummaryStateChange(acc, evt), prev));
+    drainMonitorEvents();
+  }, [monitorEvents, drainMonitorEvents]);
 
   useEffect(() => {
     if (!accessToken) return;
