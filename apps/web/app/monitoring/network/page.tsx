@@ -5,9 +5,13 @@ import { OpsShell } from "../../../components/ops-shell";
 import { OpsNotice } from "../../../components/ops-notice";
 import { GrafanaPanelEmbed } from "../../../components/grafana-panel-embed";
 import { useAuth } from "../../../components/auth-provider";
+import { useMonitor } from "../../../hooks/use-monitor";
 import { apiGet, apiPost, type GrafanaEmbedDescriptor } from "../../../lib/api";
 import {
+  applyNodeDetailStateChange,
+  applyNodeStateChange,
   buildGrafanaEmbedModel,
+  buildObservabilityEmbedPath,
   buildNetworkMonitorModel,
   formatTelemetryBytes,
   isCurrentNetworkDetailRequest,
@@ -225,6 +229,23 @@ function formatDate(value?: string | null) {
   return new Intl.DateTimeFormat("es-CO", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
 }
 
+function buildTrafficDeltas(points: NetworkTelemetryPoint[]) {
+  return points.map((point, index) => {
+    const previous = points[index - 1];
+    const totalBytesIn = Number(point.totalBytesIn);
+    const totalBytesOut = Number(point.totalBytesOut);
+    const previousBytesIn = previous ? Number(previous.totalBytesIn) : 0;
+    const previousBytesOut = previous ? Number(previous.totalBytesOut) : 0;
+    return {
+      capturedAt: point.capturedAt,
+      bytesInDelta: Math.max(0, totalBytesIn - previousBytesIn),
+      bytesOutDelta: Math.max(0, totalBytesOut - previousBytesOut),
+      activeHosts: point.activeHosts,
+      activeFlows: point.activeFlows,
+    };
+  });
+}
+
 const CLASSIFICATION_LABELS: Record<string, string> = {
   OFFICIAL: "Oficial",
   DISCOVERY: "Discovery",
@@ -246,9 +267,11 @@ export default function NetworkMonitoringPage() {
   const [telemetryAssets, setTelemetryAssets] = useState<NetworkTelemetryAssetView[]>([]);
   const [telemetryAlerts, setTelemetryAlerts] = useState<NetworkTelemetryAlert[]>([]);
   const [networkEmbedDescriptor, setNetworkEmbedDescriptor] = useState<GrafanaEmbedDescriptor | null>(null);
+  const [nodeEmbedDescriptor, setNodeEmbedDescriptor] = useState<GrafanaEmbedDescriptor | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [loadingNetworkEmbed, setLoadingNetworkEmbed] = useState(false);
+  const [loadingNodeEmbed, setLoadingNodeEmbed] = useState(false);
   const [runningDiscovery, setRunningDiscovery] = useState(false);
   const [resolvingDiscoveryId, setResolvingDiscoveryId] = useState("");
   const [filter, setFilter] = useState("");
@@ -257,6 +280,7 @@ export default function NetworkMonitoringPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const selectedNodeIdRef = useRef(selectedNodeId);
   const detailRequestIdRef = useRef(0);
+  const lastEvent = useMonitor(detail?.route.center.id ?? null, accessToken);
 
   selectedNodeIdRef.current = selectedNodeId;
 
@@ -272,6 +296,8 @@ export default function NetworkMonitoringPage() {
 
   const latestJob = detail?.discoveryJobs[0] ?? null;
   const model = useMemo(() => buildNetworkMonitorModel(nodes, detail, centerAssets), [nodes, detail, centerAssets]);
+  const trafficDeltas = useMemo(() => buildTrafficDeltas(telemetryTimeseries), [telemetryTimeseries]);
+  const latestTrafficDelta = trafficDeltas[trafficDeltas.length - 1] ?? null;
   const outageAlerts = useMemo(
     () => telemetryAlerts.filter((alert) => alert.kind?.includes("UNREACHABLE")),
     [telemetryAlerts],
@@ -280,6 +306,10 @@ export default function NetworkMonitoringPage() {
   const networkEmbed = useMemo(
     () => networkEmbedDescriptor ? buildGrafanaEmbedModel(networkEmbedDescriptor) : null,
     [networkEmbedDescriptor],
+  );
+  const nodeEmbed = useMemo(
+    () => nodeEmbedDescriptor ? buildGrafanaEmbedModel(nodeEmbedDescriptor) : null,
+    [nodeEmbedDescriptor],
   );
   const filteredInventory = useMemo(() => {
     const q = inventoryFilter.trim().toLowerCase();
@@ -315,7 +345,7 @@ export default function NetworkMonitoringPage() {
     setTelemetryAlerts([]);
   }, []);
 
-  const loadDetail = useCallback(async (nodeId: string) => {
+  const loadDetail = useCallback(async (nodeId: string, options?: { background?: boolean }) => {
     if (!accessToken || !nodeId || selectedNodeIdRef.current !== nodeId) return;
     const requestId = ++detailRequestIdRef.current;
     const isCurrentRequest = () => isCurrentNetworkDetailRequest(
@@ -325,8 +355,9 @@ export default function NetworkMonitoringPage() {
       detailRequestIdRef.current,
     );
 
-    setLoadingDetail(true);
-    resetNodeData();
+    if (!options?.background) {
+      setLoadingDetail(true);
+    }
     try {
       const detailResponse = await apiGet<MonitorNodeDetail>(`/nodes/${nodeId}`, accessToken);
       const centerId = detailResponse.route.center.id;
@@ -346,14 +377,31 @@ export default function NetworkMonitoringPage() {
       setTelemetryAssets(assetsResponse);
       setTelemetryAlerts(alertsResponse);
     } catch {
-      if (isCurrentRequest()) resetNodeData();
     } finally {
-      if (isCurrentRequest()) setLoadingDetail(false);
+      if (isCurrentRequest() && !options?.background) setLoadingDetail(false);
     }
   }, [accessToken, resetNodeData]);
 
   useEffect(() => { void loadNodes(); }, [loadNodes]);
-  useEffect(() => { if (selectedNodeId) void loadDetail(selectedNodeId); }, [selectedNodeId, loadDetail]);
+  useEffect(() => {
+    if (!selectedNodeId) return;
+    resetNodeData();
+    void loadDetail(selectedNodeId);
+  }, [selectedNodeId, loadDetail, resetNodeData]);
+  useEffect(() => {
+    if (!lastEvent) return;
+    setNodes((prev) => applyNodeStateChange(prev, lastEvent));
+    setDetail((prev) => applyNodeDetailStateChange(prev, lastEvent));
+  }, [lastEvent]);
+  useEffect(() => {
+    if (!accessToken) return;
+    const interval = window.setInterval(() => {
+      void loadNodes();
+      const currentNodeId = selectedNodeIdRef.current;
+      if (currentNodeId) void loadDetail(currentNodeId, { background: true });
+    }, 10000);
+    return () => window.clearInterval(interval);
+  }, [accessToken, loadNodes, loadDetail]);
   useEffect(() => {
     if (!accessToken) {
       setNetworkEmbedDescriptor(null);
@@ -366,9 +414,7 @@ export default function NetworkMonitoringPage() {
     setLoadingNetworkEmbed(true);
 
     const centerId = detail?.route.center.id;
-    const embedPath = centerId
-      ? `/observability/embed/network-command-view?centerId=${encodeURIComponent(centerId)}`
-      : "/observability/embed/network-command-view";
+    const embedPath = buildObservabilityEmbedPath({ dashboard: "network-command-view", centerId });
 
     void apiGet<GrafanaEmbedDescriptor>(embedPath, accessToken)
       .then((descriptor) => {
@@ -383,6 +429,33 @@ export default function NetworkMonitoringPage() {
 
     return () => { cancelled = true; };
   }, [accessToken, detail?.route.center.id]);
+  useEffect(() => {
+    if (!accessToken || !detail?.id) {
+      setNodeEmbedDescriptor(null);
+      setLoadingNodeEmbed(false);
+      return;
+    }
+
+    let cancelled = false;
+    setNodeEmbedDescriptor(null);
+    setLoadingNodeEmbed(true);
+
+    void apiGet<GrafanaEmbedDescriptor>(
+      buildObservabilityEmbedPath({ dashboard: "node-observability", nodeId: detail.id }),
+      accessToken,
+    )
+      .then((descriptor) => {
+        if (!cancelled) setNodeEmbedDescriptor(descriptor);
+      })
+      .catch(() => {
+        if (!cancelled) setNodeEmbedDescriptor(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingNodeEmbed(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [accessToken, detail?.id]);
 
   async function handleRunDiscovery() {
     if (!accessToken || !detail) return;
@@ -433,8 +506,8 @@ export default function NetworkMonitoringPage() {
 
   const observabilityAssets = telemetryAssets;
   const telemetryPulseCards = telemetrySummary ? [
-    { label: "Bytes In", value: formatTelemetryBytes(telemetrySummary.totalBytesIn), sub: "ventana más reciente" },
-    { label: "Bytes Out", value: formatTelemetryBytes(telemetrySummary.totalBytesOut), sub: "ventana más reciente" },
+    { label: "Tráfico In", value: formatTelemetryBytes(latestTrafficDelta?.bytesInDelta ?? 0), sub: "delta ventana reciente" },
+    { label: "Tráfico Out", value: formatTelemetryBytes(latestTrafficDelta?.bytesOutDelta ?? 0), sub: "delta ventana reciente" },
     { label: "Hosts activos", value: telemetrySummary.activeHosts, sub: "último snapshot" },
     { label: "Flows activos", value: telemetrySummary.activeFlows, sub: "último snapshot" },
   ] : [];
@@ -464,13 +537,17 @@ export default function NetworkMonitoringPage() {
 
         <section className={PANEL}>
           <div className="mb-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-muted">Observabilidad Global</p>
-            <h2 className="mt-1 text-base font-semibold text-ops-text">Comando de red y telemetría consolidada</h2>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-muted">
+              {detail ? "Observabilidad del Nodo" : "Observabilidad Global"}
+            </p>
+            <h2 className="mt-1 text-base font-semibold text-ops-text">
+              {detail ? "Consola NOC contextual del nodo seleccionado" : "Comando de red y telemetría consolidada"}
+            </h2>
           </div>
           <GrafanaPanelEmbed
-            title={networkEmbed?.title ?? "Comando de red"}
-            src={networkEmbed?.src ?? null}
-            loading={loadingNetworkEmbed}
+            title={(detail ? nodeEmbed?.title : networkEmbed?.title) ?? (detail ? "Observabilidad del nodo" : "Comando de red")}
+            src={detail ? (nodeEmbed?.src ?? null) : (networkEmbed?.src ?? null)}
+            loading={detail ? loadingNodeEmbed : loadingNetworkEmbed}
           />
         </section>
 
@@ -714,10 +791,10 @@ export default function NetworkMonitoringPage() {
                               value={card.value}
                               accentClass={["text-ops-blue", "text-ops-emerald", "text-ops-amber", "text-ops-rose"][index] ?? "text-ops-text"}
                               barClass={["bg-ops-blue", "bg-ops-emerald", "bg-ops-amber", "bg-ops-rose"][index] ?? "bg-ops-blue"}
-                              segments={telemetryTimeseries.map((point) => index === 0
-                                ? Number(point.totalBytesIn)
+                              segments={trafficDeltas.map((point) => index === 0
+                                ? point.bytesInDelta
                                 : index === 1
-                                  ? Number(point.totalBytesOut)
+                                  ? point.bytesOutDelta
                                   : index === 2
                                     ? point.activeHosts
                                     : point.activeFlows)}

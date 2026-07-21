@@ -6,4 +6,9 @@ export type NtopngObservedHost = {
   bytesOut: number;
   flowCount: number;
   lastSeenAt: string;
+  protocols?: Array<{
+    name: string;
+    bytes: number;
+    flowCount: number;
+  }>;
 };

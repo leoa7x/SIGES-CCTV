@@ -22,6 +22,12 @@ const DASHBOARD_TITLES: Record<GrafanaDashboardKey, string> = {
   "network-command-view": "Vista global de red",
 };
 
+function normalizeDashboardUid(rawValue: string) {
+  const trimmed = rawValue.trim().replace(/^\/+|\/+$/g, "");
+  if (!trimmed) return rawValue;
+  return trimmed.split("/")[0] ?? rawValue;
+}
+
 @Injectable()
 export class ObservabilityService {
   private readonly baseUrl: string;
@@ -35,7 +41,7 @@ export class ObservabilityService {
       throw new Error(`Unknown Grafana dashboard: ${input.dashboard}`);
     }
 
-    const uid = this.config.dashboards[input.dashboard];
+    const uid = normalizeDashboardUid(this.config.dashboards[input.dashboard]);
     const params = new URLSearchParams({
       orgId: this.config.orgId,
       from: input.from ?? "now-6h",

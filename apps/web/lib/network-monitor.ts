@@ -1,9 +1,27 @@
 import type { GrafanaEmbedDescriptor } from "./api";
+import type { StateChangeEvent } from "../hooks/use-monitor";
 
 export type GrafanaEmbedModel = {
   title: string;
   src: string | null;
 };
+
+type ObservabilityEmbedPathInput =
+  | { dashboard: "network-command-view"; centerId?: string | null }
+  | { dashboard: "node-observability"; nodeId: string };
+
+export function buildObservabilityEmbedPath(input: ObservabilityEmbedPathInput) {
+  if (input.dashboard === "node-observability") {
+    return `/observability/embed/node/${encodeURIComponent(input.nodeId)}`;
+  }
+
+  const params = new URLSearchParams();
+  if (input.centerId) params.set("centerId", input.centerId);
+  const query = params.toString();
+  return query
+    ? `/observability/embed/network-command-view?${query}`
+    : "/observability/embed/network-command-view";
+}
 
 export function buildGrafanaEmbedModel(descriptor: GrafanaEmbedDescriptor): GrafanaEmbedModel {
   try {
@@ -225,6 +243,21 @@ export type NetworkMonitorModel = {
   };
 };
 
+export type DashboardSummary = {
+  nodes: { total: number; online: number; offline: number; degraded: number };
+  cameras: { total: number; online: number; offline: number };
+  incidents: { open: number; critical: number };
+  recentIncidents: {
+    id: string;
+    title: string;
+    severity: string;
+    status: string;
+    detectedAt: string;
+    node?: { code: string; name: string } | null;
+    assignedUser?: { name: string | null; email: string } | null;
+  }[];
+};
+
 export function buildNetworkMonitorModel(
   nodes: MonitorNodeListItem[],
   detail: MonitorNodeDetail | null,
@@ -300,6 +333,42 @@ export function buildNetworkMonitorModel(
       assetTypeBreakdown: buildAssetTypeBreakdown([...centerAssets, ...(detail?.assets ?? [])]),
       stateBreakdown: buildStateBreakdown(detail, centerAssets),
     },
+  };
+}
+
+export function applyNodeStateChange(
+  nodes: MonitorNodeListItem[],
+  event: StateChangeEvent | null,
+): MonitorNodeListItem[] {
+  if (!event || event.entityType !== "node") return nodes;
+  return nodes.map((node) =>
+    node.id === event.entityId ? { ...node, operativeState: event.newState } : node,
+  );
+}
+
+export function applyNodeDetailStateChange(
+  detail: MonitorNodeDetail | null,
+  event: StateChangeEvent | null,
+): MonitorNodeDetail | null {
+  if (!detail || !event || event.entityType !== "node") return detail;
+  if (detail.id !== event.entityId) return detail;
+  return { ...detail, operativeState: event.newState };
+}
+
+export function applyDashboardSummaryStateChange(
+  summary: DashboardSummary | null,
+  event: StateChangeEvent | null,
+): DashboardSummary | null {
+  if (!summary || !event || event.entityType !== "node") return summary;
+  if (event.oldState === event.newState) return summary;
+
+  const nextNodes = { ...summary.nodes };
+  decrementStateCount(nextNodes, event.oldState);
+  incrementStateCount(nextNodes, event.newState);
+
+  return {
+    ...summary,
+    nodes: nextNodes,
   };
 }
 
@@ -465,4 +534,22 @@ function buildStateBreakdown(detail: MonitorNodeDetail | null, centerAssets: Mon
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("es-CO", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+}
+
+function incrementStateCount(
+  nodes: DashboardSummary["nodes"],
+  state: string,
+) {
+  if (state === "ONLINE") nodes.online += 1;
+  if (state === "OFFLINE") nodes.offline += 1;
+  if (state === "DEGRADED") nodes.degraded += 1;
+}
+
+function decrementStateCount(
+  nodes: DashboardSummary["nodes"],
+  state: string,
+) {
+  if (state === "ONLINE" && nodes.online > 0) nodes.online -= 1;
+  if (state === "OFFLINE" && nodes.offline > 0) nodes.offline -= 1;
+  if (state === "DEGRADED" && nodes.degraded > 0) nodes.degraded -= 1;
 }

@@ -22,6 +22,7 @@ const baseDto = {
 function createService(overrides: Record<string, unknown> = {}) {
   const persistedSamples: Array<{ ip?: string; mac?: string; nodeAssetId?: string | null; classificationSource?: string }> = [];
   const upserts: unknown[] = [];
+  const updates: unknown[] = [];
   const calls = { official: [] as unknown[], discovery: [] as unknown[], transactions: 0 };
 
   const prisma = {
@@ -61,6 +62,10 @@ function createService(overrides: Record<string, unknown> = {}) {
         upserts.push(args);
         return { id: "alert-1" };
       },
+      updateMany: async (args: unknown) => {
+        updates.push(args);
+        return { count: 0 };
+      },
     },
     operationalAlert: {
       findMany: async () => [],
@@ -73,7 +78,7 @@ function createService(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 
-  return { service: new NetworkTelemetryService(prisma as unknown as PrismaService), persistedSamples, upserts, calls };
+  return { service: new NetworkTelemetryService(prisma as unknown as PrismaService), persistedSamples, upserts, updates, calls };
 }
 
 test("getCenterOfficialAssets returns ordered official CMC inventory", async () => {
@@ -282,6 +287,27 @@ test("ingestSnapshot creates an unmatched traffic alert", async () => {
 
   assert.equal(result.alertsUpserted, 1);
   assert.equal(upserts.length, 1);
+});
+
+test("ingestSnapshot treats local node primaryIp traffic as official and avoids unmatched alerts", async () => {
+  const { service, persistedSamples, upserts } = createService({
+    node: {
+      findUnique: async () => ({ id: "node-1" }),
+      findUniqueOrThrow: async () => ({ id: "node-1" }),
+      findFirst: async ({ where }: { where: { primaryIp?: string } }) =>
+        where.primaryIp === "10.0.0.28" ? ({ id: "node-1" }) : null,
+    },
+  });
+
+  const result = await service.ingestSnapshot({
+    ...baseDto,
+    assets: [{ ip: "10.0.0.28", bytesIn: 10, bytesOut: 20, flowCount: 1, lastSeenAt: "2026-07-13T20:00:58.000Z" }],
+  });
+
+  assert.equal(result.alertsUpserted, 0);
+  assert.equal(upserts.length, 0);
+  assert.equal(persistedSamples[0]?.nodeAssetId, null);
+  assert.equal(persistedSamples[0]?.classificationSource, "OFFICIAL");
 });
 
 test("ingestSnapshot upserts unmatched alerts with the Prisma compound selector", async () => {

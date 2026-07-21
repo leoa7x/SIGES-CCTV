@@ -4,6 +4,20 @@ export type { NtopngObservedHost } from "./ntopng-collector.types";
 
 export type NtopngCollectorDependencies = {
   correlateHost: (host: import("./ntopng-collector.types").NtopngObservedHost) => Promise<TelemetryOwner>;
+  intervalSeconds?: number;
+  externalDiscovery?: {
+    upsertScanFindings: (
+      centerId: string,
+      expectedSubnetCidr: string | null,
+      observedFromTargetIp: string | null,
+      devices: Array<{
+        ip?: string | null;
+        mac?: string | null;
+        hostname?: string | null;
+      }>,
+      source: "NTOPNG",
+    ) => Promise<void>;
+  };
 };
 
 export type NetworkTelemetryProtocolEntry = {

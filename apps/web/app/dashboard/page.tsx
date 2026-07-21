@@ -1,24 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { OpsShell } from "../../components/ops-shell";
+import { GrafanaPanelEmbed } from "../../components/grafana-panel-embed";
 import { useAuth } from "../../components/auth-provider";
-import { apiGet } from "../../lib/api";
+import { useMonitorAll } from "../../hooks/use-monitor-all";
+import { apiGet, type GrafanaEmbedDescriptor } from "../../lib/api";
+import {
+  applyDashboardSummaryStateChange,
+  buildGrafanaEmbedModel,
+  buildObservabilityEmbedPath,
+  type DashboardSummary,
+} from "../../lib/network-monitor";
 
-type Summary = {
-  nodes: { total: number; online: number; offline: number; degraded: number };
-  cameras: { total: number; online: number; offline: number };
-  incidents: { open: number; critical: number };
-  recentIncidents: {
-    id: string;
-    title: string;
-    severity: string;
-    status: string;
-    detectedAt: string;
-    node?: { code: string; name: string } | null;
-    assignedUser?: { name: string | null; email: string } | null;
-  }[];
-};
+type Summary = DashboardSummary;
+type MonitoringCenterRef = { id: string };
 
 const severityColors: Record<string, string> = {
   CRITICAL: "text-ops-rose border-ops-rose/30 bg-ops-rose/10",
@@ -40,14 +36,79 @@ function StatCard({ label, value, sub, accent }: { label: string; value: number 
 export default function DashboardPage() {
   const { accessToken } = useAuth();
   const [data, setData] = useState<Summary | null>(null);
+  const [centerIds, setCenterIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [overviewEmbedDescriptor, setOverviewEmbedDescriptor] = useState<GrafanaEmbedDescriptor | null>(null);
+  const [loadingOverviewEmbed, setLoadingOverviewEmbed] = useState(false);
+  const lastEvent = useMonitorAll(centerIds, accessToken);
+  const overviewEmbed = overviewEmbedDescriptor ? buildGrafanaEmbedModel(overviewEmbedDescriptor) : null;
+
+  const loadData = useCallback(async () => {
+    if (!accessToken) {
+      setData(null);
+      setCenterIds([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const [summary, centers] = await Promise.all([
+        apiGet<Summary>("/dashboard/summary", accessToken),
+        apiGet<MonitoringCenterRef[]>("/monitoring-centers", accessToken),
+      ]);
+      setData(summary);
+      setCenterIds(centers.map((center) => center.id));
+    } catch {
+      setData(null);
+      setCenterIds([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    if (!lastEvent) return;
+    setData((prev) => applyDashboardSummaryStateChange(prev, lastEvent));
+  }, [lastEvent]);
 
   useEffect(() => {
     if (!accessToken) return;
-    apiGet<Summary>("/dashboard/summary", accessToken)
-      .then(setData)
-      .catch(() => setData(null))
-      .finally(() => setLoading(false));
+    const interval = window.setInterval(() => {
+      void loadData();
+    }, 10000);
+    return () => window.clearInterval(interval);
+  }, [accessToken, loadData]);
+
+  useEffect(() => {
+    if (!accessToken) {
+      setOverviewEmbedDescriptor(null);
+      setLoadingOverviewEmbed(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingOverviewEmbed(true);
+    void apiGet<GrafanaEmbedDescriptor>(
+      buildObservabilityEmbedPath({ dashboard: "network-command-view" }),
+      accessToken,
+    )
+      .then((descriptor) => {
+        if (!cancelled) setOverviewEmbedDescriptor(descriptor);
+      })
+      .catch(() => {
+        if (!cancelled) setOverviewEmbedDescriptor(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingOverviewEmbed(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [accessToken]);
 
   const pct = (a: number, b: number) => b === 0 ? 0 : Math.round((a / b) * 100);
@@ -105,6 +166,18 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+
+          <div className="rounded-ops border border-ops-border bg-ops-panel p-5">
+            <div className="mb-4">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-ops-muted">Observabilidad</p>
+              <p className="mt-1 text-sm font-semibold text-ops-text">Tráfico y comportamiento global de la red</p>
+            </div>
+            <GrafanaPanelEmbed
+              title={overviewEmbed?.title ?? "Vista global de red"}
+              src={overviewEmbed?.src ?? null}
+              loading={loadingOverviewEmbed}
+            />
+          </div>
 
           {/* Recent incidents */}
           <div className="rounded-ops border border-ops-border bg-ops-panel">

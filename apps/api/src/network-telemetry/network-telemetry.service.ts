@@ -16,6 +16,7 @@ import {
 } from "./network-telemetry.alerts";
 import { correlateObservedHost } from "./network-telemetry-correlation";
 import { IngestNetworkTelemetryDto } from "./network-telemetry.ingest.dto";
+import type { NtopngObservedHost } from "./network-telemetry.types";
 
 function isMatchingToken(expected: string, received: string): boolean {
   const expectedBuf = Buffer.from(expected);
@@ -188,8 +189,32 @@ export class NetworkTelemetryService {
       for (const alert of alerts) {
         await transaction.networkTelemetryAlert.upsert(alert);
       }
+      await this.resolveInactiveUnmatchedTrafficAlerts(transaction, dto, rows);
 
       return { snapshotId: snapshot.id, samplesStored: rows.length, alertsUpserted: alerts.length };
+    });
+  }
+
+  correlateTelemetryOwner(host: NtopngObservedHost) {
+    return correlateObservedHost(host, {
+      findNodeAssetByMac: async () => host.mac
+        ? this.prisma.nodeAsset.findFirst({ where: { mac: host.mac } })
+        : null,
+      findCenterAssetByMac: async () => host.mac
+        ? this.prisma.centerAsset.findFirst({ where: { mac: host.mac } })
+        : null,
+      findNodeAssetByIp: async () => host.ip
+        ? this.prisma.nodeAsset.findFirst({ where: { ip: host.ip } })
+        : null,
+      findCenterAssetByIp: async () => host.ip
+        ? this.prisma.centerAsset.findFirst({ where: { ip: host.ip } })
+        : null,
+      findNodeByPrimaryIp: async () => host.ip
+        ? this.prisma.node.findFirst({ where: { primaryIp: host.ip }, select: { id: true } })
+        : null,
+      findCenterByPrimaryIp: async () => host.ip
+        ? this.prisma.monitoringCenter.findFirst({ where: { primaryIp: host.ip }, select: { id: true } })
+        : null,
     });
   }
 
@@ -260,7 +285,7 @@ export class NetworkTelemetryService {
       bytesOut: BigInt(asset.bytesOut),
       flowCount: asset.flowCount,
       lastSeenAt: new Date(asset.lastSeenAt),
-      classificationSource: nodeAsset
+      classificationSource: nodeAsset || isLocalNodeOwner
         ? NetworkTelemetryClassificationSource.OFFICIAL
         : discoveryByMac || discoveryByIp
           ? NetworkTelemetryClassificationSource.DISCOVERY
@@ -302,6 +327,33 @@ export class NetworkTelemetryService {
           resolvedAt: null,
         },
       }));
+  }
+
+  private resolveInactiveUnmatchedTrafficAlerts(
+    prisma: Prisma.TransactionClient,
+    dto: IngestNetworkTelemetryDto,
+    rows: Array<{
+      ip: string | null;
+      mac: string | null;
+      classificationSource: NetworkTelemetryClassificationSource;
+    }>,
+  ) {
+    const activeTitles = rows
+      .filter((row) => row.classificationSource === NetworkTelemetryClassificationSource.UNMATCHED)
+      .map((row) => `Tráfico no correlacionado ${row.ip ?? row.mac ?? "desconocido"}`);
+
+    return prisma.networkTelemetryAlert.updateMany({
+      where: {
+        nodeId: dto.nodeId,
+        kind: NetworkTelemetryAlertKind.UNMATCHED_TRAFFIC,
+        isActive: true,
+        ...(activeTitles.length > 0 ? { title: { notIn: activeTitles } } : {}),
+      },
+      data: {
+        isActive: false,
+        resolvedAt: new Date(dto.capturedAt),
+      },
+    });
   }
 
   private async nodeExists(nodeId: string) {

@@ -96,3 +96,18 @@ test("getDashboardEmbed defaults to the six-hour Grafana time range", () => {
   assert.equal(result.params.from, "now-6h");
   assert.equal(result.params.to, "now");
 });
+
+test("getDashboardEmbed normalizes dashboard config values that already include a slug path", () => {
+  const service = new ObservabilityService({
+    ...config,
+    dashboards: {
+      ...config.dashboards,
+      "network-command-view": "network-command-view/network-command-view",
+    },
+  });
+
+  const result = service.getDashboardEmbed({ dashboard: "network-command-view" });
+
+  assert.match(result.url, /\/d\/network-command-view\?/);
+  assert.doesNotMatch(result.url, /\/d\/network-command-view\/network-command-view\?/);
+});

@@ -3,9 +3,14 @@ import test from "node:test";
 import * as networkMonitor from "./network-monitor";
 
 import {
+  applyDashboardSummaryStateChange,
+  applyNodeDetailStateChange,
+  applyNodeStateChange,
+  buildObservabilityEmbedPath,
   buildTopologyCenterGroups,
   buildGrafanaEmbedModel,
   buildNetworkMonitorModel,
+  type DashboardSummary,
   formatTelemetryBytes,
   telemetryAlertLevel,
   type MonitorCenterAsset,
@@ -16,6 +21,7 @@ import {
   type TopologyNodeItem,
 } from "./network-monitor";
 import type { GrafanaEmbedDescriptor } from "./api";
+import type { StateChangeEvent } from "../hooks/use-monitor";
 
 test("builds a safe iframe src from a network command API descriptor", () => {
   const descriptor: GrafanaEmbedDescriptor = {
@@ -80,6 +86,21 @@ test("buildGrafanaEmbedModel rejects non-http schemes", () => {
 
   assert.equal(result.title, "Observabilidad");
   assert.equal(result.src, null);
+});
+
+test("buildObservabilityEmbedPath builds global and node embed endpoints", () => {
+  assert.equal(
+    buildObservabilityEmbedPath({ dashboard: "network-command-view" }),
+    "/observability/embed/network-command-view",
+  );
+  assert.equal(
+    buildObservabilityEmbedPath({ dashboard: "network-command-view", centerId: "center-1" }),
+    "/observability/embed/network-command-view?centerId=center-1",
+  );
+  assert.equal(
+    buildObservabilityEmbedPath({ dashboard: "node-observability", nodeId: "node-1" }),
+    "/observability/embed/node/node-1",
+  );
 });
 
 test("network detail responses only apply to the current node and request", () => {
@@ -317,4 +338,95 @@ test("topology model reserves a separate branch for CMC equipment", () => {
   assert.equal(groups[0]?.centerAssets[0]?.name, "Core Switch");
   assert.equal(groups[0]?.nodes.length, 1);
   assert.equal(groups[0]?.nodes[0]?.code, "N-1");
+});
+
+test("applyNodeStateChange updates the matching node without mutating the rest of the list", () => {
+  const nodes: MonitorNodeListItem[] = [
+    {
+      id: "node-1",
+      code: "N-001",
+      name: "Nodo Norte",
+      primaryIp: "10.0.0.1",
+      scanSubnetCidr: "10.0.0.0/24",
+      operativeState: "ONLINE",
+      route: { identifier: "RUTA-1", center: { name: "CMC Norte" } },
+      _count: { assets: 1, discoveryJobs: 0, analyticsAssignments: 0 },
+    },
+    {
+      id: "node-2",
+      code: "N-002",
+      name: "Nodo Sur",
+      primaryIp: "10.0.1.1",
+      scanSubnetCidr: "10.0.1.0/24",
+      operativeState: "ONLINE",
+      route: { identifier: "RUTA-2", center: { name: "CMC Sur" } },
+      _count: { assets: 1, discoveryJobs: 0, analyticsAssignments: 0 },
+    },
+  ];
+  const event: StateChangeEvent = {
+    entityType: "node",
+    entityId: "node-2",
+    oldState: "ONLINE",
+    newState: "OFFLINE",
+    centerId: "center-2",
+    timestamp: "2026-07-20T10:00:00.000Z",
+  };
+
+  const updated = applyNodeStateChange(nodes, event);
+
+  assert.equal(updated[0]?.operativeState, "ONLINE");
+  assert.equal(updated[1]?.operativeState, "OFFLINE");
+});
+
+test("applyNodeDetailStateChange updates the selected node detail only when the event matches", () => {
+  const detail: MonitorNodeDetail = {
+    id: "node-1",
+    code: "N-001",
+    name: "Nodo Norte",
+    primaryIp: "10.0.0.1",
+    scanSubnetCidr: "10.0.0.0/24",
+    operativeState: "ONLINE",
+    route: { identifier: "RUTA-1", center: { id: "center-1", name: "CMC Norte" } },
+    assets: [],
+    discoveryJobs: [],
+    analyticsAssignments: [],
+  };
+  const event: StateChangeEvent = {
+    entityType: "node",
+    entityId: "node-1",
+    oldState: "ONLINE",
+    newState: "OFFLINE",
+    centerId: "center-1",
+    timestamp: "2026-07-20T10:00:00.000Z",
+  };
+
+  const updated = applyNodeDetailStateChange(detail, event);
+
+  assert.equal(updated?.operativeState, "OFFLINE");
+});
+
+test("applyDashboardSummaryStateChange keeps dashboard node counters in sync with live node events", () => {
+  const summary: DashboardSummary = {
+    nodes: { total: 5, online: 3, offline: 1, degraded: 1 },
+    cameras: { total: 10, online: 8, offline: 2 },
+    incidents: { open: 2, critical: 1 },
+    recentIncidents: [],
+  };
+  const event: StateChangeEvent = {
+    entityType: "node",
+    entityId: "node-3",
+    oldState: "ONLINE",
+    newState: "OFFLINE",
+    centerId: "center-1",
+    timestamp: "2026-07-20T10:00:00.000Z",
+  };
+
+  const updated = applyDashboardSummaryStateChange(summary, event);
+
+  assert.deepEqual(updated?.nodes, {
+    total: 5,
+    online: 2,
+    offline: 2,
+    degraded: 1,
+  });
 });
