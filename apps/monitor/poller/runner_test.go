@@ -49,6 +49,7 @@ func TestRunner_ICMPPostsOfflineOnFailure(t *testing.T) {
 		SNMPInterval:          10 * time.Minute, // not triggered in this test
 		ONVIFInterval:         10 * time.Minute, // not triggered in this test
 		DeviceRefreshInterval: 10 * time.Minute,
+		StateTransitionsEnabled: true,
 	}
 
 	api := client.NewClient(cfg.APIURL, cfg.Token)

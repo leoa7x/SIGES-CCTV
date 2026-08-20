@@ -27,9 +27,9 @@ services:
       - "${SIGES_BIND_ADDRESS:-127.0.0.1}:${GRAFANA_PORT:-3005}:3000"
 
   api:
-    env_file: !reset
-      - path: .env.production
-        required: false
+    env_file:
+      - .env
+      - .env.production
     environment:
       NODE_ENV: production
       SIGES_STRICT_PRODUCTION: "true"
@@ -53,9 +53,9 @@ services:
         condition: service_healthy
 
   lan-discovery-agent:
-    env_file: !reset
-      - path: .env.production
-        required: false
+    env_file:
+      - .env
+      - .env.production
     environment:
       LAN_DISCOVERY_AGENT_PORT: ${LAN_DISCOVERY_AGENT_PORT:-4010}
       LAN_DISCOVERY_AGENT_TOKEN: ${LAN_DISCOVERY_AGENT_TOKEN}
@@ -68,16 +68,16 @@ services:
       - "${SIGES_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT}:3000"
 
   monitor:
-    env_file: !reset
-      - path: .env.production
-        required: false
+    env_file:
+      - .env
+      - .env.production
     environment:
       API_URL: http://api:4000
 
   telemetry-collector:
-    env_file: !reset
-      - path: .env.production
-        required: false
+    env_file:
+      - .env
+      - .env.production
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       NETWORK_TELEMETRY_INGEST_URL: http://api:4000

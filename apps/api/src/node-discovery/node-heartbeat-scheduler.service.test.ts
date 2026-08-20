@@ -35,3 +35,21 @@ test("runCycle marks a node OFFLINE and upserts NODE_UNREACHABLE after the confi
   assert.equal((updates[0] as { data: { operativeState: string } }).data.operativeState, "OFFLINE");
   assert.equal((alerts[0] as { kind: string }).kind, "NODE_UNREACHABLE");
 });
+
+test("runCycle refreshes a manually degraded node without overriding its state or retaining a critical offline alert", async () => {
+  const updates: unknown[] = [];
+  const resolved: unknown[] = [];
+  const prisma = {
+    node: {
+      findMany: async () => [{ id: "node-1", code: "N1", name: "Nodo 1", primaryIp: "192.168.1.6", operativeState: "DEGRADED", heartbeatFailureCount: 0, assets: [] }],
+      update: async (args: unknown) => { updates.push(args); return args; },
+    },
+    nodeAsset: { update: async () => ({}) },
+  };
+  const probe = { probeIp: async () => ({ reachable: true, checkedAt: new Date(), detail: "TCP 80" }) };
+  const alerts = { ensureAlert: async () => undefined, resolveAlerts: async (...args: unknown[]) => { resolved.push(args); } };
+  const scheduler = new NodeHeartbeatScheduler(prisma as never, probe as never, alerts as never);
+  await scheduler.runCycle();
+  assert.equal((updates[0] as { data: { operativeState: string } }).data.operativeState, "DEGRADED");
+  assert.equal(resolved.length, 1);
+});

@@ -16,6 +16,7 @@ type Config struct {
 	ONVIFInterval         time.Duration
 	DeviceRefreshInterval time.Duration
 	ProbeConcurrency      int
+	StateTransitionsEnabled bool
 }
 
 func Load() Config {
@@ -32,6 +33,10 @@ func Load() Config {
 		ONVIFInterval:         parseDuration("ONVIF_INTERVAL", 2*time.Minute),
 		DeviceRefreshInterval: parseDuration("DEVICE_REFRESH_INTERVAL", 60*time.Second),
 		ProbeConcurrency:      parseInt("MONITOR_PROBE_CONCURRENCY", 20),
+		// API heartbeats are the authoritative state source because they use
+		// TCP fallbacks. Keep the supplemental ICMP/SNMP/ONVIF monitor from
+		// overwriting real devices unless a commissioning test enables it.
+		StateTransitionsEnabled: getenv("MONITOR_STATE_TRANSITIONS_ENABLED", "false") == "true",
 	}
 }
 

@@ -53,9 +53,8 @@ export class CenterHeartbeatScheduler implements OnModuleInit, OnModuleDestroy {
       const centers: CenterRow[] = await this.prisma.monitoringCenter.findMany({
         where: {
           state: EntityState.ACTIVE,
-          primaryIp: { not: null },
-          // MAINTENANCE/DEGRADED are a human call — heartbeat must never touch them.
-          operativeState: { in: AUTO_MANAGED_STATES },
+          // Include centers without a management IP so obsolete alerts are
+          // reconciled. Their assets can still be monitored independently.
         },
         select: {
           id: true,
@@ -71,10 +70,23 @@ export class CenterHeartbeatScheduler implements OnModuleInit, OnModuleDestroy {
 
       const concurrency = heartbeatConcurrency();
 
+      await Promise.all(
+        centers
+          .filter((center) => !center.primaryIp || !isValidIp(center.primaryIp))
+          .map((center) => this.alerts.resolveAlerts(
+            { scope: "center", monitoringCenterId: center.id },
+            OperationalAlertKind.CENTER_UNREACHABLE,
+          )),
+      );
+
       // Two flat, independently bounded-concurrency passes instead of a
       // nested per-center loop — probing one IP at a time would never fit
       // inside a 15s cycle once there are hundreds of centers/assets.
-      await mapWithConcurrency(centers, concurrency, (center) => this.checkCenter(center));
+      await mapWithConcurrency(
+        centers.filter((center) => Boolean(center.primaryIp && isValidIp(center.primaryIp))),
+        concurrency,
+        (center) => this.checkCenter(center),
+      );
 
       const assetTasks = centers.flatMap((center) =>
         center.centerAssets.map((asset) => ({ centerId: center.id, asset })),

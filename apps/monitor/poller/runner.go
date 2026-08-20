@@ -142,6 +142,10 @@ func (r *Runner) maybePost(d client.Device, newState string) {
 }
 
 func (r *Runner) postStateChange(d client.Device, oldState, newState string) {
+	if !r.cfg.StateTransitionsEnabled {
+		log.Printf("[runner] supplemental observation %s %s: %s → %s (state unchanged)", d.Type, d.ID, oldState, newState)
+		return
+	}
 	entityType := d.Type
 	if err := r.api.PostStateChange(entityType, d.ID, oldState, newState); err != nil {
 		log.Printf("[runner] PostStateChange %s %s %s→%s: %v", entityType, d.ID, oldState, newState, err)

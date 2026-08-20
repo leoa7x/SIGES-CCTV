@@ -33,3 +33,15 @@ test("runCycle marks a center OFFLINE and upserts CENTER_UNREACHABLE after the c
   assert.equal((updates[0] as { data: { operativeState: string } }).data.operativeState, "OFFLINE");
   assert.equal((alerts[0] as { kind: string }).kind, "CENTER_UNREACHABLE");
 });
+
+test("runCycle resolves an obsolete center alert when the CMC has no management IP", async () => {
+  const resolved: unknown[] = [];
+  const prisma = {
+    monitoringCenter: { findMany: async () => [{ id: "center-1", name: "CMC 1", primaryIp: null, heartbeatFailureCount: 0, centerAssets: [] }], update: async () => ({}) },
+    centerAsset: { update: async () => ({}) },
+  };
+  const alerts = { ensureAlert: async () => undefined, resolveAlerts: async (...args: unknown[]) => { resolved.push(args); } };
+  const scheduler = new CenterHeartbeatScheduler(prisma as never, {} as never, alerts as never);
+  await scheduler.runCycle();
+  assert.equal(resolved.length, 1);
+});

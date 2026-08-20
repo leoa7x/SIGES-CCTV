@@ -19,8 +19,9 @@ type NodeRow = {
   code: string;
   name: string;
   primaryIp: string | null;
+  operativeState: NodeState;
   heartbeatFailureCount: number;
-  assets: Array<{ id: string; name: string; ip: string | null; heartbeatFailureCount: number }>;
+  assets: Array<{ id: string; name: string; ip: string | null; operativeState: NodeState; heartbeatFailureCount: number }>;
 };
 
 @Injectable()
@@ -54,18 +55,20 @@ export class NodeHeartbeatScheduler implements OnModuleInit, OnModuleDestroy {
       const nodes: NodeRow[] = await this.prisma.node.findMany({
         where: {
           primaryIp: { not: null },
-          // MAINTENANCE/DEGRADED are a human call — heartbeat must never touch them.
-          operativeState: { in: AUTO_MANAGED_STATES },
+          // DEGRADED remains a human decision, but still needs fresh evidence
+          // that the underlying management address is (or is not) reachable.
+          operativeState: { in: [...AUTO_MANAGED_STATES, NodeState.DEGRADED] },
         },
         select: {
           id: true,
           code: true,
           name: true,
           primaryIp: true,
+          operativeState: true,
           heartbeatFailureCount: true,
           assets: {
-            where: { ip: { not: null }, operativeState: { in: AUTO_MANAGED_STATES } },
-            select: { id: true, name: true, ip: true, heartbeatFailureCount: true },
+            where: { ip: { not: null }, operativeState: { in: [...AUTO_MANAGED_STATES, NodeState.DEGRADED] } },
+            select: { id: true, name: true, ip: true, operativeState: true, heartbeatFailureCount: true },
           },
         },
       });
@@ -92,6 +95,7 @@ export class NodeHeartbeatScheduler implements OnModuleInit, OnModuleDestroy {
 
       const result = await this.probe.probeIp(node.primaryIp, heartbeatTcpFallbackPorts());
       const nextFailureCount = result.reachable ? 0 : node.heartbeatFailureCount + 1;
+      const manuallyDegraded = node.operativeState === NodeState.DEGRADED;
       const nextState = !result.reachable && nextFailureCount >= heartbeatFailureThreshold()
         ? NodeState.OFFLINE
         : NodeState.ONLINE;
@@ -102,9 +106,17 @@ export class NodeHeartbeatScheduler implements OnModuleInit, OnModuleDestroy {
           heartbeatFailureCount: nextFailureCount,
           lastHeartbeatAttemptAt: result.checkedAt,
           lastHeartbeatAt: result.reachable ? result.checkedAt : undefined,
-          operativeState: nextState,
+          operativeState: manuallyDegraded ? NodeState.DEGRADED : nextState,
         },
       });
+
+      if (manuallyDegraded) {
+        // A degraded state is presented to operators as the active condition;
+        // do not leave a stale critical "offline" alert from before the
+        // operator deliberately classified it.
+        await this.alerts.resolveAlerts({ scope: "node", nodeId: node.id }, OperationalAlertKind.NODE_UNREACHABLE);
+        return;
+      }
 
       if (nextState === NodeState.OFFLINE) {
         await this.alerts.ensureAlert({
@@ -126,13 +138,14 @@ export class NodeHeartbeatScheduler implements OnModuleInit, OnModuleDestroy {
 
   private async checkNodeAsset(
     nodeId: string,
-    asset: { id: string; name: string; ip: string | null; heartbeatFailureCount: number },
+    asset: { id: string; name: string; ip: string | null; operativeState: NodeState; heartbeatFailureCount: number },
   ): Promise<void> {
     try {
       if (!asset.ip || !isValidIp(asset.ip)) return;
 
       const assetResult = await this.probe.probeIp(asset.ip, heartbeatTcpFallbackPorts());
       const assetFailureCount = assetResult.reachable ? 0 : asset.heartbeatFailureCount + 1;
+      const manuallyDegraded = asset.operativeState === NodeState.DEGRADED;
       const assetState = !assetResult.reachable && assetFailureCount >= heartbeatFailureThreshold()
         ? NodeState.OFFLINE
         : NodeState.ONLINE;
@@ -143,9 +156,17 @@ export class NodeHeartbeatScheduler implements OnModuleInit, OnModuleDestroy {
           heartbeatFailureCount: assetFailureCount,
           lastHeartbeatAttemptAt: assetResult.checkedAt,
           lastHeartbeatAt: assetResult.reachable ? assetResult.checkedAt : undefined,
-          operativeState: assetState,
+          operativeState: manuallyDegraded ? NodeState.DEGRADED : assetState,
         },
       });
+
+      if (manuallyDegraded) {
+        await this.alerts.resolveAlerts(
+          { scope: "node-asset", nodeId, nodeAssetId: asset.id },
+          OperationalAlertKind.NODE_ASSET_UNREACHABLE,
+        );
+        return;
+      }
 
       if (assetState === NodeState.OFFLINE) {
         await this.alerts.ensureAlert({
