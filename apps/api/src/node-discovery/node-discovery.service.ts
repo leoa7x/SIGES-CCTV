@@ -70,7 +70,11 @@ export class NodeDiscoveryService {
         data: {
           status: NodeDiscoveryStatus.COMPLETED,
           rawSummary: {
-            source: process.env.LAN_ORANGUTAN_CMD ? "orangutan" : "mock",
+            source: process.env.LAN_DISCOVERY_AGENT_URL
+              ? "lan-agent"
+              : process.env.LAN_ORANGUTAN_CMD
+                ? "orangutan"
+                : "mock",
             discoveredCount: normalized.length,
           },
           finishedAt: new Date(),
@@ -168,6 +172,11 @@ export class NodeDiscoveryService {
   }
 
   protected async executeDiscovery(targetSubnetCidr: string, targetIp?: string) {
+    const agentUrl = process.env.LAN_DISCOVERY_AGENT_URL?.trim().replace(/\/+$/, "");
+    if (agentUrl) {
+      return this.executeDiscoveryThroughAgent(agentUrl, targetSubnetCidr);
+    }
+
     const commandTemplate = process.env.LAN_ORANGUTAN_CMD?.trim()
       ? normalizeDiscoveryCommandTemplate(process.env.LAN_ORANGUTAN_CMD.trim())
       : undefined;
@@ -214,6 +223,25 @@ export class NodeDiscoveryService {
       return result.devices;
     }
     throw new Error("LAN-Orangutan debe devolver JSON con arreglo de devices");
+  }
+
+  private async executeDiscoveryThroughAgent(agentUrl: string, targetSubnetCidr: string) {
+    const token = process.env.LAN_DISCOVERY_AGENT_TOKEN?.trim();
+    if (!token) throw new Error("LAN_DISCOVERY_AGENT_TOKEN no está configurado.");
+
+    const response = await fetch(`${agentUrl}/scan`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ target: targetSubnetCidr }),
+    });
+    const payload = await response.json().catch(() => null) as { success?: boolean; error?: string; devices?: unknown } | null;
+    if (!response.ok || payload?.success === false || !Array.isArray(payload?.devices)) {
+      throw new Error(payload?.error || `El agente LAN respondió ${response.status}`);
+    }
+    return payload.devices as Record<string, unknown>[];
   }
 
   protected buildMockResults(targetSubnetCidr: string, targetIp?: string) {
