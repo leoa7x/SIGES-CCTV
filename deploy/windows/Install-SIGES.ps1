@@ -88,5 +88,9 @@ try {
   $ready = $false; foreach ($i in 1..30) { try { if ((Invoke-WebRequest -UseBasicParsing -SkipCertificateCheck "https://$ServerIp/api/display/overview").StatusCode -eq 200) { $ready = $true; break } } catch {}; Start-Sleep -Seconds 2 }
   if (!$ready) { throw 'SIGES no respondió a tiempo. Ejecute docker compose logs desde C:\SIGES-CCTV.' }
 } finally { Pop-Location }
+$taskAction = New-ScheduledTaskAction -Execute "$env:WINDIR\System32\wsl.exe" -Argument '-d Ubuntu-24.04 -u root --exec /bin/bash -lc "until docker info >/dev/null 2>&1; do sleep 2; done; cd /opt/siges-cctv; docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.production.yml -f docker-compose.single-host.yml -f docker-compose.lan.yml up -d; exec tail -f /dev/null"'
+$taskTrigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$taskSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 10 -RestartInterval (New-TimeSpan -Minutes 1)
+Register-ScheduledTask -TaskName 'SIGES WSL Keepalive' -Action $taskAction -Trigger $taskTrigger -Settings $taskSettings -User $env:USERNAME -RunLevel Highest -Force | Out-Null
 Write-Host "SIGES instalado: https://$ServerIp" -ForegroundColor Green
 Write-Host "NOC público: https://$ServerIp/display/noc" -ForegroundColor Green
