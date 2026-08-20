@@ -222,6 +222,33 @@ export default function OperationsPage() {
             </div>
           </section>
 
+          <section className="rounded-ops border border-ops-blue/30 bg-ops-blue/5 p-5 shadow-ops">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-ops-blue">Pantallas de operación</h2>
+                <p className="mt-2 text-sm text-ops-muted">Abre una vista preparada para proyección. Cada botón conserva la sesión actual y se abre en otra pestaña.</p>
+              </div>
+              <span className="rounded-full border border-ops-blue/30 bg-ops-blue/10 px-2.5 py-1 text-[10px] font-semibold text-ops-blue">MODO MURAL</span>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <a href="/monitoring/network?mural=1" target="_blank" rel="noreferrer" className="rounded-ops border border-ops-border bg-ops-surface p-4 transition hover:border-ops-blue hover:bg-ops-blue/10">
+                <p className="text-sm font-semibold text-ops-text">Recorrido NOC</p>
+                <p className="mt-1 text-xs text-ops-muted">Rota automáticamente por todos los nodos y prioriza incidencias.</p>
+                <span className="mt-3 inline-block text-xs font-semibold text-ops-blue">Abrir mural →</span>
+              </a>
+              <a href="/dashboard?mural=1" target="_blank" rel="noreferrer" className="rounded-ops border border-ops-border bg-ops-surface p-4 transition hover:border-ops-blue hover:bg-ops-blue/10">
+                <p className="text-sm font-semibold text-ops-text">Vista global de red</p>
+                <p className="mt-1 text-xs text-ops-muted">Indicadores generales, cámaras, incidentes y gráficas consolidadas.</p>
+                <span className="mt-3 inline-block text-xs font-semibold text-ops-blue">Abrir mural →</span>
+              </a>
+              <a href="/map?mural=1" target="_blank" rel="noreferrer" className="rounded-ops border border-ops-border bg-ops-surface p-4 transition hover:border-ops-blue hover:bg-ops-blue/10">
+                <p className="text-sm font-semibold text-ops-text">Mapa GIS offline</p>
+                <p className="mt-1 text-xs text-ops-muted">Mapa de Puerto Gaitán con el estado operativo en vivo.</p>
+                <span className="mt-3 inline-block text-xs font-semibold text-ops-blue">Abrir mural →</span>
+              </a>
+            </div>
+          </section>
+
           <section className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
             <form onSubmit={saveSettings} className="rounded-ops border border-ops-border bg-ops-panel p-5 shadow-ops">
               <div className="mb-4 flex items-start gap-3">

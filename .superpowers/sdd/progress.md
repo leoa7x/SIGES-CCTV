@@ -16,3 +16,5 @@ Task 2 (center assets phase 1): complete (commit df95d91, local verification cle
 Task 3 (center assets phase 1): complete (commit ab2ee69, web build/test clean)
 Task 4 (center assets phase 1): complete (commit 8466de8, topology build/test clean)
 Task 5 (center assets phase 1): complete (commit pending, api/web tests and builds clean)
+Task 1 (ntopng collector): complete (commits 3413bd6..23a7ed2, review clean)
+Task 2 (ntopng collector): complete (commits 23a7ed2..ce633aa, review clean)

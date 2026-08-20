@@ -1,0 +1,62 @@
+# The Windows installer supplies the CA-signed certificate and private key in
+# ./certificates. No public ACME/Internet dependency is used.
+{$SIGES_PUBLIC_HOST} {
+  tls /etc/caddy/certificates/siges.crt /etc/caddy/certificates/siges.key
+
+  encode zstd gzip
+  header {
+    Strict-Transport-Security "max-age=31536000"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "SAMEORIGIN"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+
+  # Anonymous, read-only views for the dedicated NOC monitors.  They remain
+  # available only to this host and the operational LAN.
+  @display_api_allowed {
+    path /api/display/*
+    remote_ip 127.0.0.1 ::1 172.16.45.0/24
+  }
+  @display_api path /api/display/*
+  handle @display_api_allowed {
+    uri strip_prefix /api
+    reverse_proxy api:4000
+  }
+  handle @display_api {
+    respond "NOC display is restricted to the operational LAN" 403
+  }
+
+  @display_web_allowed {
+    path /display/*
+    remote_ip 127.0.0.1 ::1 172.16.45.0/24
+  }
+  @display_web path /display/*
+  handle @display_web_allowed {
+    reverse_proxy web:3000
+  }
+  handle @display_web {
+    respond "NOC display is restricted to the operational LAN" 403
+  }
+
+  # The browser sees one host. API and Socket.IO traffic are routed internally.
+  handle_path /api/* {
+    reverse_proxy api:4000
+  }
+
+  handle /socket.io/* {
+    reverse_proxy api:4000
+  }
+
+  # Public branding files stay reachable without publishing MinIO itself.
+  handle_path /storage/* {
+    reverse_proxy minio:9000
+  }
+
+  handle_path /grafana/* {
+    reverse_proxy grafana:3000
+  }
+
+  handle {
+    reverse_proxy web:3000
+  }
+}

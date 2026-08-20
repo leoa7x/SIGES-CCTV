@@ -1,0 +1,48 @@
+# LAN publication overlay for the Windows offline installer design.
+# Use after production and single-host overlays once the installer has placed
+# the internal CA server certificate under deploy/caddy/certificates/.
+services:
+  # No infrastructure service is reachable directly from LAN clients.
+  minio:
+    ports: !reset []
+
+  grafana:
+    ports: !reset []
+    environment:
+      GF_SERVER_ROOT_URL: https://${SIGES_PUBLIC_HOST}/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+
+  api:
+    ports: !reset []
+    environment:
+      MINIO_PUBLIC_URL: https://${SIGES_PUBLIC_HOST}/storage
+
+  web:
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: https://${SIGES_PUBLIC_HOST}/api
+    environment:
+      NEXT_PUBLIC_API_URL: https://${SIGES_PUBLIC_HOST}/api
+    ports: !reset []
+
+  proxy:
+    image: caddy:2.8.4-alpine
+    container_name: siges-proxy
+    restart: unless-stopped
+    environment:
+      SIGES_PUBLIC_HOST: ${SIGES_PUBLIC_HOST}
+    ports:
+      - "${SIGES_BIND_ADDRESS:-0.0.0.0}:80:80"
+      - "${SIGES_BIND_ADDRESS:-0.0.0.0}:443:443"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./deploy/caddy/certificates:/etc/caddy/certificates:ro
+    depends_on:
+      api:
+        condition: service_started
+      web:
+        condition: service_started
+      minio:
+        condition: service_healthy
+      grafana:
+        condition: service_started

@@ -27,11 +27,12 @@ export class NtopngClient {
     const rows = Array.isArray(active.data) ? active.data : [];
 
     const observed = rows.map((host, index) => this.normalizeHost(host, index));
-    if (observed.length > 0) {
-      return observed;
-    }
-
-    const fallbackHosts = [...new Set((this.config.seedHosts ?? []).map((host) => host.trim()).filter(Boolean))];
+    // ntopng's active list can be sparse during quiet periods. Merge it with
+    // the official inventory so a selected node still has a contextual record
+    // instead of making the NOC appear empty whenever only a few hosts talk.
+    const observedIps = new Set(observed.map((host) => host.ip).filter((ip): ip is string => Boolean(ip)));
+    const fallbackHosts = [...new Set((this.config.seedHosts ?? []).map((host) => host.trim()).filter(Boolean))]
+      .filter((host) => !observedIps.has(host));
     const fallbackResults = await Promise.all(
       fallbackHosts.map(async (host, index) => {
         try {
@@ -45,7 +46,7 @@ export class NtopngClient {
       }),
     );
 
-    return fallbackResults.filter((host): host is NtopngObservedHost => host !== null);
+    return [...observed, ...fallbackResults.filter((host): host is NtopngObservedHost => host !== null)];
   }
 
   private async fetchJson<T>(path: string): Promise<T> {

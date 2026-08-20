@@ -35,6 +35,7 @@ function StatCard({ label, value, sub, accent }: { label: string; value: number 
 
 export default function DashboardPage() {
   const { accessToken } = useAuth();
+  const [isMural, setIsMural] = useState(false);
   const [data, setData] = useState<Summary | null>(null);
   const [centerIds, setCenterIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +43,10 @@ export default function DashboardPage() {
   const [loadingOverviewEmbed, setLoadingOverviewEmbed] = useState(false);
   const { events: monitorEvents, drain: drainMonitorEvents } = useMonitorAll(centerIds, accessToken);
   const overviewEmbed = overviewEmbedDescriptor ? buildGrafanaEmbedModel(overviewEmbedDescriptor) : null;
+
+  useEffect(() => {
+    setIsMural(new URLSearchParams(window.location.search).get("mural") === "1");
+  }, []);
 
   const loadData = useCallback(async () => {
     if (!accessToken) {
@@ -118,11 +123,42 @@ export default function DashboardPage() {
   const pct = (a: number, b: number) => b === 0 ? 0 : Math.round((a / b) * 100);
 
   return (
-    <OpsShell eyebrow="Centro de Operaciones" title="Panel General">
+    <OpsShell eyebrow="Centro de Operaciones" title="Panel General" kiosk={isMural}>
       {loading ? (
         <div className="flex items-center gap-2 py-16 text-ops-muted">
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" />
           Cargando estadísticas…
+        </div>
+      ) : isMural ? (
+        <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
+          <header className="flex flex-wrap items-center justify-between gap-3 rounded-ops border border-ops-border bg-ops-panel px-5 py-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-ops-blue">SIGES-CCTV · Puerto Gaitán</p>
+              <h1 className="mt-1 text-xl font-semibold text-ops-text">Vista global de red</h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-ops-emerald/30 bg-ops-emerald/10 px-3 py-1.5 text-xs font-semibold text-ops-emerald">
+                <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ops-emerald opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-ops-emerald" /></span>
+                En vivo · 5 s
+              </span>
+              <span className="rounded-full border border-ops-emerald/30 bg-ops-emerald/10 px-3 py-1.5 text-xs font-semibold text-ops-emerald">{data?.nodes.online ?? 0} nodos en línea</span>
+              <a href="/dashboard" className="rounded-ops border border-ops-border px-3 py-1.5 text-sm text-ops-muted hover:border-ops-blue/50 hover:text-ops-text">Salir del mural</a>
+            </div>
+          </header>
+          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard label="Nodos en línea" value={data?.nodes.online ?? 0} sub={`de ${data?.nodes.total ?? 0} nodos`} accent="text-ops-emerald" />
+            <StatCard label="Cámaras activas" value={`${pct(data?.cameras.online ?? 0, data?.cameras.total ?? 1)}%`} sub={`${data?.cameras.online ?? 0} / ${data?.cameras.total ?? 0} en línea`} accent="text-ops-blue" />
+            <StatCard label="Incidentes abiertos" value={data?.incidents.open ?? 0} sub="sin resolver" accent={(data?.incidents.open ?? 0) > 0 ? "text-ops-amber" : "text-ops-emerald"} />
+            <StatCard label="Incidentes críticos" value={data?.incidents.critical ?? 0} sub="severidad crítica" accent={(data?.incidents.critical ?? 0) > 0 ? "text-ops-rose" : "text-ops-emerald"} />
+          </section>
+          <section className="min-h-0 flex-1 overflow-hidden rounded-ops border border-ops-border bg-ops-panel p-3">
+            <GrafanaPanelEmbed
+              title={overviewEmbed?.title ?? "Vista global de red"}
+              src={overviewEmbed?.src ?? null}
+              loading={loadingOverviewEmbed}
+              iframeClassName="h-[calc(100vh-13rem)]"
+            />
+          </section>
         </div>
       ) : (
         <div className="space-y-6">

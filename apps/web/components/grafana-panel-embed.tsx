@@ -2,9 +2,10 @@ type GrafanaPanelEmbedProps = {
   title: string;
   src: string | null;
   loading?: boolean;
+  iframeClassName?: string;
 };
 
-export function GrafanaPanelEmbed({ title, src, loading = false }: GrafanaPanelEmbedProps) {
+export function GrafanaPanelEmbed({ title, src, loading = false, iframeClassName = "h-[720px]" }: GrafanaPanelEmbedProps) {
   if (loading) {
     return (
       <div className="rounded-ops border border-ops-border bg-ops-panel p-4 text-sm text-ops-muted">
@@ -26,7 +27,7 @@ export function GrafanaPanelEmbed({ title, src, loading = false }: GrafanaPanelE
       <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-ops-muted">{title}</p>
       <iframe
         title={title}
-        className="h-[720px] w-full rounded-ops border border-ops-border bg-black"
+        className={`${iframeClassName} w-full rounded-ops border border-ops-border bg-black`}
         src={src}
         loading="lazy"
       />

@@ -32,6 +32,7 @@ type OpsShellProps = {
   children: ReactNode;
   title?: string;
   eyebrow?: string;
+  kiosk?: boolean;
 };
 
 function SidebarIcon({ item }: { item: SidebarNavItem }) {
@@ -48,7 +49,7 @@ function SidebarIcon({ item }: { item: SidebarNavItem }) {
 
 const OPERATIONS_GROUP_PREFIX = "/admin/operations";
 
-export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
+export function OpsShell({ children, title, eyebrow, kiosk = false }: OpsShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading, logout } = useAuth();
@@ -105,6 +106,14 @@ export function OpsShell({ children, title, eyebrow }: OpsShellProps) {
     adminNavRender.push({ kind: "item", item });
   }
   const opsGroupActive = pathname.startsWith(OPERATIONS_GROUP_PREFIX);
+
+  if (kiosk) {
+    return (
+      <main className="h-screen overflow-hidden bg-ops-bg text-ops-text">
+        <div className="h-full overflow-hidden p-3">{children}</div>
+      </main>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-ops-bg text-ops-text">

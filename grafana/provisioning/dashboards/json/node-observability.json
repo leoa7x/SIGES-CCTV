@@ -193,7 +193,7 @@
         "legend": { "displayMode": "list", "placement": "bottom" },
         "orientation": "horizontal",
         "tooltip": { "mode": "single" },
-        "xField": "destino"
+        "xField": "estado"
       },
       "pluginVersion": "11.1.0",
       "targets": [
@@ -201,11 +201,11 @@
           "datasource": { "type": "postgres", "uid": "siges-postgres" },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH summary AS ( SELECT top_destinations_json::jsonb AS top_destinations_json FROM telemetry_node_summary_view WHERE node_id = ${nodeId:sqlstring} LIMIT 1 ) SELECT CONCAT(destination.value->>'target', ' (', destination.value->>'kind', ')') AS destino, COALESCE((destination.value->>'bytes')::numeric, 0) AS \"Bytes\", COALESCE((destination.value->>'flowCount')::numeric, 0) AS \"Flows\" FROM summary, LATERAL jsonb_array_elements(COALESCE(summary.top_destinations_json, '[]'::jsonb)) AS destination(value) ORDER BY \"Bytes\" DESC LIMIT 10;",
+          "rawSql": "SELECT estado, cantidad AS \"Cantidad\" FROM ( SELECT 'Cámaras ONLINE' AS estado, COUNT(*)::numeric AS cantidad, 1 AS orden FROM \"Camera\" WHERE \"nodeId\" = ${nodeId:sqlstring} AND state = 'ONLINE' UNION ALL SELECT 'Cámaras OFFLINE', COUNT(*)::numeric, 2 FROM \"Camera\" WHERE \"nodeId\" = ${nodeId:sqlstring} AND state = 'OFFLINE' UNION ALL SELECT 'Activos ONLINE', COUNT(*)::numeric, 3 FROM \"NodeAsset\" WHERE \"nodeId\" = ${nodeId:sqlstring} AND \"operativeState\" = 'ONLINE' UNION ALL SELECT 'Activos OFFLINE', COUNT(*)::numeric, 4 FROM \"NodeAsset\" WHERE \"nodeId\" = ${nodeId:sqlstring} AND \"operativeState\" = 'OFFLINE' ) estados WHERE cantidad > 0 ORDER BY orden;",
           "refId": "A"
         }
       ],
-      "title": "Top destinos",
+      "title": "Estado operativo del nodo",
       "type": "barchart"
     },
     {
@@ -232,7 +232,7 @@
       "type": "table"
     }
   ],
-  "refresh": "10s",
+  "refresh": "5s",
   "schemaVersion": 39,
   "style": "dark",
   "tags": ["siges", "node", "noc"],

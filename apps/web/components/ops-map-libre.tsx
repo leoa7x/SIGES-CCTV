@@ -83,17 +83,58 @@ function buildFiberGeoJson(segments: FiberSegmentGeo[]): GeoJSON.FeatureCollecti
   };
 }
 
-const OSM_STYLE: maplibregl.StyleSpecification = {
+/**
+ * Cartographic base bundled with SIGES.  It intentionally uses a local
+ * GeoJSON snapshot instead of online raster tiles, so the operational map is
+ * still useful when the CCTV network has no Internet connection.
+ */
+const PUERTO_GAITAN_OFFLINE_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {
-    osm: {
-      type: "raster",
-      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-      tileSize: 256,
-      attribution: "© OpenStreetMap contributors",
+    "puerto-gaitan-basemap": {
+      type: "geojson",
+      data: "/maps/puerto-gaitan-basemap.geojson",
+      attribution: "Datos © OpenStreetMap contributors, ODbL 1.0 — instantánea local",
     },
   },
-  layers: [{ id: "osm-tiles", type: "raster", source: "osm" }],
+  layers: [
+    { id: "offline-background", type: "background", paint: { "background-color": "#e7edf0" } },
+    {
+      id: "offline-landuse",
+      type: "fill",
+      source: "puerto-gaitan-basemap",
+      filter: ["==", ["get", "kind"], "landuse"],
+      paint: { "fill-color": "#dce8d8", "fill-opacity": 0.72 },
+    },
+    {
+      id: "offline-water",
+      type: "fill",
+      source: "puerto-gaitan-basemap",
+      filter: ["==", ["get", "kind"], "water"],
+      paint: { "fill-color": "#a8d5e8", "fill-opacity": 0.9 },
+    },
+    {
+      id: "offline-waterways",
+      type: "line",
+      source: "puerto-gaitan-basemap",
+      filter: ["==", ["get", "kind"], "waterway"],
+      paint: { "line-color": "#73bcd7", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 15, 3] },
+    },
+    {
+      id: "offline-roads-casing",
+      type: "line",
+      source: "puerto-gaitan-basemap",
+      filter: ["==", ["get", "kind"], "road"],
+      paint: { "line-color": "#aeb8bd", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.5, 15, 5] },
+    },
+    {
+      id: "offline-roads",
+      type: "line",
+      source: "puerto-gaitan-basemap",
+      filter: ["==", ["get", "kind"], "road"],
+      paint: { "line-color": "#f8f5ec", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.8, 15, 3] },
+    },
+  ],
 };
 
 export default function OpsMapLibre({
@@ -145,9 +186,9 @@ export default function OpsMapLibre({
     if (!containerRef.current) return;
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: OSM_STYLE,
-      center: [-74.0758, 4.5981], // Bogotá default
-      zoom: 12,
+      style: PUERTO_GAITAN_OFFLINE_STYLE,
+      center: [-72.086602, 4.312644], // CMC Puerto Gaitán
+      zoom: 13,
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl(), "top-right");

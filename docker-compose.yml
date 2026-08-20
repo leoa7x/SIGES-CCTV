@@ -27,7 +27,9 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      # Avoid colliding with a Redis instance installed on the host. Containers
+      # continue to use redis:6379 over the Docker network.
+      - "${SIGES_REDIS_PORT:-6380}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -42,8 +44,12 @@ services:
     command:
       - redpanda
       - start
-      - --kafka-addr=0.0.0.0:9092
-      - --advertise-kafka-addr=localhost:9092
+      # Keep Docker clients on the internal listener while exposing a separate
+      # listener to the host. Kafka clients use the advertised address after
+      # bootstrapping, so advertising localhost on the internal listener makes
+      # them reconnect to themselves.
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://${REDPANDA_EXTERNAL_HOST:-localhost}:9092
       - --pandaproxy-addr=0.0.0.0:8082
       - --advertise-pandaproxy-addr=localhost:8082
       - --mode=dev-container
@@ -52,7 +58,7 @@ services:
     volumes:
       - redpanda_data:/var/lib/redpanda/data
     ports:
-      - "9092:9092"
+      - "9092:19092"
       - "8082:8082"
     healthcheck:
       test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
@@ -116,6 +122,8 @@ services:
       REDPANDA_BROKERS: redpanda:9092
       LAN_ORANGUTAN_HOME: /app/tools/LAN-Orangutan
       LAN_ORANGUTAN_CMD: python3 /app/apps/api/scripts/run_lan_orangutan_scan.py {target}
+      LAN_DISCOVERY_AGENT_URL: http://host.docker.internal:${LAN_DISCOVERY_AGENT_PORT:-4010}
+      LAN_DISCOVERY_AGENT_TOKEN: ${LAN_DISCOVERY_AGENT_TOKEN:-siges-local-lan-agent-change-before-production}
       MINIO_ENDPOINT: http://minio:9000
       MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:-http://localhost:9000}
       MINIO_BUCKET: ${MINIO_BUCKET:-siges-cctv}
@@ -123,6 +131,8 @@ services:
       MINIO_PASSWORD: ${MINIO_PASSWORD:-siges_minio_change_me}
     ports:
       - "${API_PORT:-4001}:4000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -130,6 +140,67 @@ services:
         condition: service_healthy
       redpanda:
         condition: service_healthy
+
+  # Runs on the host network so ARP discovers real MAC addresses from the
+  # physical LAN. The API calls it with a token; it never writes SIGES data.
+  lan-discovery-agent:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_RAW
+    env_file: .env
+    environment:
+      LAN_DISCOVERY_AGENT_PORT: ${LAN_DISCOVERY_AGENT_PORT:-4010}
+      LAN_DISCOVERY_AGENT_TOKEN: ${LAN_DISCOVERY_AGENT_TOKEN:-siges-local-lan-agent-change-before-production}
+      LAN_DISCOVERY_INTERFACE: ${LAN_DISCOVERY_INTERFACE:-}
+      LAN_ORANGUTAN_HOME: /app/tools/LAN-Orangutan
+    command: node /app/apps/api/scripts/run_lan_discovery_agent.js
+
+  # ── Active monitor (ICMP/SNMP/ONVIF) ────────────────────────────────────────
+  # Explicit profile: it must only be enabled after the real inventory is loaded.
+  monitor:
+    build:
+      context: .
+      dockerfile: apps/monitor/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      API_URL: http://api:4000
+    cap_add:
+      - NET_RAW
+    depends_on:
+      api:
+        condition: service_started
+    profiles: ["monitoring"]
+
+  # ── Passive ntopng telemetry collector ──────────────────────────────────────
+  # Runs one bounded cycle at a time and retries on the next interval.
+  telemetry-collector:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-siges}:${POSTGRES_PASSWORD:-siges_pass_change_me}@postgres:5432/${POSTGRES_DB:-siges_cctv}
+      NETWORK_TELEMETRY_INGEST_URL: http://api:4000
+      # ntopng captures on the host NIC, so localhost inside this container is
+      # not the collector. Docker resolves host-gateway on Linux and Desktop.
+      NTOPNG_BASE_URL: http://host.docker.internal:3002
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: >-
+      sh -ec 'while true; do node /app/apps/api/scripts/run_ntopng_telemetry_collector.js;
+      sleep "$${NTOPNG_COLLECTION_INTERVAL_SECONDS:-20}"; done'
+    depends_on:
+      api:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    profiles: ["monitoring"]
 
   # ── Next.js Web ──────────────────────────────────────────────────────────────
   web:

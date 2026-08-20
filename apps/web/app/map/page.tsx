@@ -57,6 +57,7 @@ type FiberToast = {
 
 export default function MapPage() {
   const { accessToken, user } = useAuth();
+  const [isMural, setIsMural] = useState(false);
   const [allNodes, setAllNodes] = useState<NodeItem[]>([]);
   const [centers, setCenters] = useState<CenterGeo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,6 +71,10 @@ export default function MapPage() {
   const [toasts, setToasts] = useState<FiberToast[]>([]);
   const [actionError, setActionError] = useState("");
   const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    setIsMural(new URLSearchParams(window.location.search).get("mural") === "1");
+  }, []);
 
   useEffect(() => {
     if (!accessToken) { setLoading(false); return; }
@@ -328,7 +333,7 @@ export default function MapPage() {
       : [];
 
   return (
-    <OpsShell eyebrow="GIS" title="Mapa de Red CCTV">
+    <OpsShell eyebrow="GIS" title="Mapa de Red CCTV" kiosk={isMural}>
       {loadError ? (
         <div className="mb-3">
           <OpsNotice tone="error" title="No se pudo cargar la información" message={loadError} onDismiss={() => setLoadError("")} />
@@ -339,7 +344,7 @@ export default function MapPage() {
           <OpsNotice tone="error" title="No se pudo guardar" message={actionError} onDismiss={() => setActionError("")} />
         </div>
       ) : null}
-      <div className="flex h-[calc(100vh-10rem)] gap-3">
+      <div className={`flex gap-3 ${isMural ? "h-full" : "h-[calc(100vh-10rem)]"}`}>
         {/* Map container */}
         <div className="relative flex-1 overflow-hidden rounded-ops border border-ops-border bg-ops-panel">
           {/* Placement banner */}
@@ -359,7 +364,7 @@ export default function MapPage() {
           )}
 
           {/* Fiber toolbar button — top-right corner, above map controls */}
-          <div className="absolute right-10 top-2 z-10">
+          {!isMural && <div className="absolute right-10 top-2 z-10">
             {drawPhase === "idle" && canManageFiber && (
               <button
                 onClick={() => setDrawPhase("select-pole")}
@@ -376,7 +381,22 @@ export default function MapPage() {
                 × Cancelar
               </button>
             )}
-          </div>
+          </div>}
+
+          {isMural && (
+            <div className="absolute inset-x-3 top-3 z-10 flex flex-wrap items-center justify-between gap-3 rounded-ops border border-ops-border bg-ops-panel/95 px-4 py-3 shadow-ops backdrop-blur">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-ops-blue">SIGES-CCTV · Puerto Gaitán</p>
+                <h1 className="mt-1 text-lg font-semibold text-ops-text">Mapa GIS · Estado operativo en vivo</h1>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+                <span className="rounded-full border border-ops-emerald/30 bg-ops-emerald/10 px-3 py-1.5 text-ops-emerald">{locatedNodes.filter((node) => node.operativeState === "ONLINE").length} en línea</span>
+                <span className="rounded-full border border-ops-amber/30 bg-ops-amber/10 px-3 py-1.5 text-ops-amber">{locatedNodes.filter((node) => node.operativeState === "DEGRADED").length} degradados</span>
+                <span className="rounded-full border border-ops-rose/30 bg-ops-rose/10 px-3 py-1.5 text-ops-rose">{locatedNodes.filter((node) => node.operativeState === "OFFLINE").length} fuera de línea</span>
+                <a href="/map" className="rounded-ops border border-ops-border px-3 py-1.5 text-ops-muted hover:border-ops-blue/50 hover:text-ops-text">Salir del mural</a>
+              </div>
+            </div>
+          )}
 
           <OpsMapLibre
             nodes={locatedNodes}
@@ -393,7 +413,7 @@ export default function MapPage() {
         </div>
 
         {/* Side panel — unlocated nodes */}
-        {(unlocatedNodes.length > 0 || loading) && (
+        {!isMural && (unlocatedNodes.length > 0 || loading) && (
           <div className="flex w-64 flex-col rounded-ops border border-ops-border bg-ops-panel">
             <div className="border-b border-ops-border px-4 py-2.5">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">
@@ -445,7 +465,7 @@ export default function MapPage() {
         )}
 
         {/* Drawing mode panel */}
-        {drawPhase !== "idle" && (
+        {!isMural && drawPhase !== "idle" && (
           <div className="flex w-56 flex-col rounded-ops border border-ops-border bg-ops-panel">
             <div className="border-b border-ops-border px-4 py-2.5">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-ops-muted">
@@ -498,10 +518,10 @@ export default function MapPage() {
         )}
       </div>
 
-      <p className="mt-2 text-[10px] text-ops-dim">
+      {!isMural && <p className="mt-2 text-[10px] text-ops-dim">
         {locatedNodes.length} nodos ubicados · {unlocatedNodes.length} pendientes de coordenadas
         {placingNode ? " · Haz clic en el mapa para colocar el nodo" : ""}
-      </p>
+      </p>}
 
       {/* Fiber alert toasts — bottom-right stack */}
       {toasts.length > 0 && (

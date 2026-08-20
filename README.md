@@ -88,7 +88,7 @@ SIGES-CCTV es la plataforma que le da a un centro de monitoreo control total sob
 | Servicio | Tecnología | Puerto |
 |---|---|---|
 | Base de datos | PostgreSQL 16 + PostGIS 3.4 | 5434 |
-| Cache | Redis 7 | 6379 |
+| Cache | Redis 7 | 6380 (host) / 6379 (Docker) |
 | Event bus | Redpanda (Kafka-compatible, sin JVM) | 9092 |
 | Admin UI Redpanda | Redpanda Console | 8082 |
 | Almacenamiento de objetos | MinIO (S3-compatible) | 9000 / 9001 (consola) |
@@ -267,6 +267,22 @@ Catálogo de referencia de cada módulo — qué hace y dónde vive.
 | `/admin/operations/reports-infrastructure` | Informe oficial de infraestructura: capacidad, distribución y composición física de la red |
 | `/admin/operations/reports-incidents` | Informe oficial de incidentes: volumen, severidad, tiempos de resolución y tendencia |
 
+### Enlaces directos para operación y proyección
+
+Los enlaces requieren haber iniciado sesión en SIGES. En el servidor final use
+la IP `172.16.45.212` en lugar de `localhost`; durante las pruebas locales ambas
+formas apuntan a la misma interfaz Web publicada en el puerto `3001`.
+
+| Pantalla | Local | Servidor SIGES |
+|---|---|---|
+| Mural NOC: recorrido automático de nodos | `http://localhost:3001/monitoring/network?mural=1` | `http://172.16.45.212:3001/monitoring/network?mural=1` |
+| Vista global de red | `http://localhost:3001/dashboard?mural=1` | `http://172.16.45.212:3001/dashboard?mural=1` |
+| Mapa GIS offline de Puerto Gaitán | `http://localhost:3001/map?mural=1` | `http://172.16.45.212:3001/map?mural=1` |
+
+Para proyección, abra uno de estos enlaces y active **Pantalla completa** del
+navegador con `F11`. Las versiones sin `?mural=1` conservan los controles de
+administración y edición.
+
 ---
 
 ## Arquitectura
@@ -313,13 +329,15 @@ Catálogo de referencia de cada módulo — qué hace y dónde vive.
 | apps/web | **3001** | Next.js dev server |
 | apps/api | **4001** | NestJS REST + WebSocket |
 | PostgreSQL | **5434** | No conflicta con LMS (5432) |
-| Redis | **6379** | — |
+| Redis | **6380** (host) / 6379 (Docker) | — |
 | Redpanda Kafka | **9092** | — |
 | Redpanda Console | **8082** | UI admin |
 | MinIO | **9000** / **9001** | API S3 / consola admin |
 | Grafana | **3005** | Observabilidad embebida |
 
 > En producción, Postgres/Redis/Redpanda/consola de MinIO **no deben** exponerse fuera de la red interna — solo `web`, `api`, y si aplica Grafana/MinIO detrás de un reverse proxy con TLS.
+>
+> Si un cliente Kafka externo debe conectarse a Redpanda, defina `REDPANDA_EXTERNAL_HOST` con el DNS o IP alcanzable del servidor antes de iniciar el stack. Los contenedores SIGES usan automáticamente el listener interno `redpanda:9092`.
 
 ---
 
@@ -357,7 +375,9 @@ cd apps/monitor && go run .          # Monitor daemon
 ```
 
 **6. Discovery automático (opcional)**
-Sin configurar nada, el discovery devuelve datos simulados (no rompe el flujo, pero no escanea de verdad). Para escaneo real: instalar `nmap` y/o `arp-scan`, y configurar `LAN_ORANGUTAN_HOME`/`LAN_ORANGUTAN_CMD` en `.env` (ver comentarios en `.env.example`).
+Para escaneo real: instalar `nmap` y/o `arp-scan`, y configurar `LAN_ORANGUTAN_HOME`/`LAN_ORANGUTAN_CMD` en `.env`. Los resultados simulados solo pueden habilitarse explícitamente con `DISCOVERY_ALLOW_MOCK=true` y están prohibidos en producción.
+
+El heartbeat comprueba nodos y activos por ICMP y, si ICMP está bloqueado, por los puertos TCP definidos en `HEARTBEAT_TCP_FALLBACK_PORTS`. Las cámaras se revisan por separado cada 30 segundos mediante RTSP/HTTP/puerto Dahua (`CAMERA_HEARTBEAT_PORTS`). Un estado `NETWORK_REACHABLE` confirma alcance de red; la validación de video RTSP sigue siendo una comprobación adicional.
 
 **7. Stack completo en Docker**
 ```bash
@@ -365,6 +385,62 @@ docker compose up -d --build
 ```
 
 Esto construye `apps/api` y `apps/web` desde el monorepo raíz usando el `package-lock.json` del workspace. La API arranca con `prisma migrate deploy` (no `db push`), así que no hay riesgo de pérdida de datos por drift de schema.
+
+## Despliegue de producción
+
+1. Copie `.env.production.example` como `.env.production` y sustituya cada valor `REPLACE_*` por un secreto o endpoint real.
+2. Para un único servidor local, use también `docker-compose.single-host.yml`: Redpanda queda interno y SIGES se conecta a `redpanda:9092`. Un solo broker no da alta disponibilidad; para tolerancia a fallos use un clúster externo de varios brokers.
+3. Cree el primer administrador antes de cargar inventario. `db:seed` crea exclusivamente esa cuenta: no inserta CMC, nodos, rutas, cámaras ni datos de prueba.
+
+```bash
+docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.production.yml run --rm api npx ts-node --project tsconfig.seed.json prisma/seed.ts
+```
+
+4. Ejecute el verificador — debe completarse después de retirar los datos demo y cargar al menos un CMC y un nodo reales:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.production.yml run --rm api node scripts/verify_production_readiness.js
+```
+
+5. Para el instalador LAN de `172.16.45.212`, añada `docker-compose.lan.yml`. Este overlay publica únicamente los puertos `80` y `443` mediante el proxy HTTPS interno; PostgreSQL, Redis, Redpanda, MinIO, Grafana, API y Web no quedan expuestos a la LAN. El instalador debe instalar el certificado interno en `deploy/caddy/certificates/siges.crt` y `siges.key`, y los clientes acceden a `https://siges.cctv.local`. El perfil `monitoring` inicia el daemon ICMP/SNMP/ONVIF y el colector ntopng una vez que el inventario real esté cargado.
+
+   El servicio `lan-discovery-agent` se inicia con el stack y ejecuta ARP en la interfaz física del servidor para que los scans de CMC guarden MAC y fabricante reales. Antes de instalar, configure `LAN_DISCOVERY_AGENT_TOKEN` y `LAN_DISCOVERY_INTERFACE` en `.env.production`; la API permanece aislada y solicita al agente los scans autenticados.
+
+```bash
+docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.production.yml -f docker-compose.single-host.yml -f docker-compose.lan.yml up -d --build
+```
+
+### Pantallas NOC sin inicio de sesión
+
+Para los monitores operativos, SIGES tiene tres vistas de solo lectura que se
+abren directamente, inician su actualización automática y no requieren una
+sesión de operador:
+
+- `https://172.16.45.212/display/noc` — recorrido automático, 12 segundos por nodo.
+- `https://172.16.45.212/display/global` — resumen en vivo de la red.
+- `https://172.16.45.212/display/map` — mapa GIS offline.
+
+El proxy de producción permite estas rutas únicamente desde `localhost` y la
+red `172.16.45.0/24`. No exponen credenciales, URLs RTSP, MACs, inventario
+detallado, controles de escaneo ni acciones administrativas. En cada TV basta
+abrir el enlace y pulsar `F11` una vez para usar toda la pantalla.
+
+### Mapa sin Internet
+
+SIGES incluye una instantánea cartográfica local de Puerto Gaitán en
+`apps/web/public/maps/puerto-gaitan-basemap.geojson`. El mapa operativo no
+consulta teselas ni APIs externas: carga esa capa desde el mismo servidor
+SIGES y superpone los CMC, nodos, cámaras y trazados de fibra de la base de
+datos.
+
+Cuando sea necesario actualizar la cartografía, hágalo durante el armado de
+una nueva versión conectada a Internet y vuelva a empacar el instalador:
+
+```bash
+npm run map:offline:puerto-gaitan --workspace=apps/web
+```
+
+El servidor instalado no ejecuta ese comando ni necesita salida a Internet.
 
 ---
 

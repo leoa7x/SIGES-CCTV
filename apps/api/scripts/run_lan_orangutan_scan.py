@@ -160,6 +160,23 @@ def run_ip_neigh_scan(cidr: str) -> list[dict[str, object]]:
     return parse_ip_neigh_output(result.stdout, network)
 
 
+def resolve_scan_interface(cidr: str) -> str | None:
+    """Return the host NIC that routes to this CIDR when none was configured."""
+    try:
+        network = ipaddress.ip_network(cidr, strict=False)
+        probe = str(next(network.hosts()))
+        result = subprocess.run(["ip", "route", "get", probe], capture_output=True, text=True, check=False)
+    except (OSError, StopIteration, ValueError):
+        return None
+    if result.returncode != 0:
+        return None
+    parts = result.stdout.split()
+    if "dev" not in parts:
+        return None
+    index = parts.index("dev")
+    return parts[index + 1] if index + 1 < len(parts) else None
+
+
 def run_targeted_nmap(ip: str) -> dict[str, object] | None:
     try:
         result = subprocess.run(["nmap", "-Pn", "-oX", "-", ip], capture_output=True, text=True, timeout=60, check=False)
@@ -261,6 +278,19 @@ def main() -> int:
 
     result = module.scan_network(cidr)
     if result.get("success"):
+      # nmap can identify reachable remote IPs but only ARP on the physical
+      # LAN can provide their MAC addresses. Always merge both sources: the
+      # vendored scanner otherwise runs arp-scan only if nmap itself fails.
+      arp_devices = module.run_arp_scan(
+          cidr,
+          os.environ.get("LAN_DISCOVERY_INTERFACE") or resolve_scan_interface(cidr),
+      )
+      if arp_devices:
+        result["devices"] = merge_devices(
+            [device for device in result.get("devices", []) if isinstance(device, dict)],
+            arp_devices,
+        )
+        result["scanner"] = "nmap+arp-scan"
       result = enrich_scan_result(cidr, result)
     print(json.dumps(result))
     return 0 if result.get("success") else 1

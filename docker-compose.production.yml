@@ -1,0 +1,83 @@
+# Usage:
+#   cp .env.production.example .env.production
+#   docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.production.yml up -d --build
+#
+# This overlay keeps stateful services private. Add docker-compose.single-host.yml
+# for a one-server installation, or leave Redpanda disabled and point
+# REDPANDA_BROKERS to an external cluster.
+services:
+  postgres:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  redpanda:
+    profiles: ["development-only"]
+
+  minio:
+    ports: !reset []
+
+  grafana:
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    ports: !override
+      - "${SIGES_BIND_ADDRESS:-127.0.0.1}:${GRAFANA_PORT:-3005}:3000"
+
+  api:
+    env_file: !reset
+      - path: .env.production
+        required: false
+    environment:
+      NODE_ENV: production
+      SIGES_STRICT_PRODUCTION: "true"
+      API_PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_HOST: redis
+      REDPANDA_BROKERS: ${REDPANDA_BROKERS}
+      LAN_ORANGUTAN_HOME: /app/tools/LAN-Orangutan
+      LAN_ORANGUTAN_CMD: python3 /app/apps/api/scripts/run_lan_orangutan_scan.py {target}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_USER: ${MINIO_USER}
+      MINIO_PASSWORD: ${MINIO_PASSWORD}
+    ports: !override
+      - "${SIGES_BIND_ADDRESS:-127.0.0.1}:${API_PORT}:4000"
+    depends_on: !reset
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  lan-discovery-agent:
+    env_file: !reset
+      - path: .env.production
+        required: false
+    environment:
+      LAN_DISCOVERY_AGENT_PORT: ${LAN_DISCOVERY_AGENT_PORT:-4010}
+      LAN_DISCOVERY_AGENT_TOKEN: ${LAN_DISCOVERY_AGENT_TOKEN}
+      LAN_DISCOVERY_INTERFACE: ${LAN_DISCOVERY_INTERFACE}
+
+  web:
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    ports: !override
+      - "${SIGES_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT}:3000"
+
+  monitor:
+    env_file: !reset
+      - path: .env.production
+        required: false
+    environment:
+      API_URL: http://api:4000
+
+  telemetry-collector:
+    env_file: !reset
+      - path: .env.production
+        required: false
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      NETWORK_TELEMETRY_INGEST_URL: http://api:4000

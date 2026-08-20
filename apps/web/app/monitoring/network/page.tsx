@@ -258,6 +258,7 @@ function classificationLabel(source: string) {
 
 export default function NetworkMonitoringPage() {
   const { accessToken } = useAuth();
+  const [isMural, setIsMural] = useState(false);
   const [nodes, setNodes] = useState<MonitorNodeListItem[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState("");
   const [detail, setDetail] = useState<MonitorNodeDetail | null>(null);
@@ -277,12 +278,21 @@ export default function NetworkMonitoringPage() {
   const [filter, setFilter] = useState("");
   const [inventoryFilter, setInventoryFilter] = useState("");
   const [tab, setTab] = useState<"inventario" | "trafico" | "alertas">("inventario");
+  const [nocTourEnabled, setNocTourEnabled] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const selectedNodeIdRef = useRef(selectedNodeId);
+  const nocTourNodeIdsRef = useRef<string[]>([]);
   const detailRequestIdRef = useRef(0);
   const lastEvent = useMonitor(detail?.route.center.id ?? null, accessToken);
 
   selectedNodeIdRef.current = selectedNodeId;
+
+  useEffect(() => {
+    setIsMural(new URLSearchParams(window.location.search).get("mural") === "1");
+  }, []);
+  useEffect(() => {
+    if (isMural) setNocTourEnabled(true);
+  }, [isMural]);
 
   const filteredNodes = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -293,6 +303,19 @@ export default function NetworkMonitoringPage() {
       node.route.identifier.toLowerCase().includes(q) ||
       node.route.center.name.toLowerCase().includes(q));
   }, [filter, nodes]);
+
+  // A NOC tour starts with the nodes that need attention, then continues
+  // through the healthy estate. It always cycles through every registered node.
+  const nocTourNodeIds = useMemo(() => {
+    const priority: Record<string, number> = { OFFLINE: 0, DEGRADED: 1, ONLINE: 2 };
+    return [...nodes]
+      .sort((left, right) => {
+        const stateOrder = (priority[left.operativeState] ?? 3) - (priority[right.operativeState] ?? 3);
+        return stateOrder || left.code.localeCompare(right.code, "es");
+      })
+      .map((node) => node.id);
+  }, [nodes]);
+  const nocTourPosition = Math.max(0, nocTourNodeIds.indexOf(selectedNodeId));
 
   const latestJob = detail?.discoveryJobs[0] ?? null;
   const model = useMemo(() => buildNetworkMonitorModel(nodes, detail, centerAssets), [nodes, detail, centerAssets]);
@@ -388,6 +411,20 @@ export default function NetworkMonitoringPage() {
     resetNodeData();
     void loadDetail(selectedNodeId);
   }, [selectedNodeId, loadDetail, resetNodeData]);
+  useEffect(() => {
+    nocTourNodeIdsRef.current = nocTourNodeIds;
+  }, [nocTourNodeIds]);
+  useEffect(() => {
+    if (!nocTourEnabled) return;
+    const interval = window.setInterval(() => {
+      const nodeIds = nocTourNodeIdsRef.current;
+      if (nodeIds.length < 2) return;
+      const currentIndex = nodeIds.indexOf(selectedNodeIdRef.current);
+      const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % nodeIds.length;
+      setSelectedNodeId(nodeIds[nextIndex]);
+    }, 12000);
+    return () => window.clearInterval(interval);
+  }, [nocTourEnabled]);
   useEffect(() => {
     if (!lastEvent) return;
     setNodes((prev) => applyNodeStateChange(prev, lastEvent));
@@ -508,12 +545,83 @@ export default function NetworkMonitoringPage() {
   const telemetryPulseCards = telemetrySummary ? [
     { label: "Tráfico In", value: formatTelemetryBytes(latestTrafficDelta?.bytesInDelta ?? 0), sub: "delta ventana reciente" },
     { label: "Tráfico Out", value: formatTelemetryBytes(latestTrafficDelta?.bytesOutDelta ?? 0), sub: "delta ventana reciente" },
-    { label: "Hosts activos", value: telemetrySummary.activeHosts, sub: "último snapshot" },
-    { label: "Flows activos", value: telemetrySummary.activeFlows, sub: "último snapshot" },
+    { label: "Hosts con tráfico", value: telemetrySummary.activeHosts, sub: "IPs vistas por ntopng" },
+    { label: "Flujos observados", value: telemetrySummary.activeFlows, sub: "conexiones de esas IPs" },
   ] : [];
 
   return (
-    <OpsShell eyebrow="Centro de Operaciones" title="Monitoreo de Red">
+    <OpsShell eyebrow="Centro de Operaciones" title="Monitoreo de Red" kiosk={isMural}>
+      {isMural ? (
+        <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
+          <header className="flex flex-wrap items-center justify-between gap-3 rounded-ops border border-ops-border bg-ops-panel px-5 py-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-ops-blue">SIGES-CCTV · Puerto Gaitán</p>
+              <h1 className="mt-1 text-xl font-semibold text-ops-text">Mural NOC · Recorrido de nodos</h1>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+              <span className="rounded-full border border-ops-emerald/30 bg-ops-emerald/10 px-3 py-1.5 text-ops-emerald">{model.summary.onlineNodes} en línea</span>
+              <span className="rounded-full border border-ops-amber/30 bg-ops-amber/10 px-3 py-1.5 text-ops-amber">{model.summary.degradedNodes} degradados</span>
+              <span className="rounded-full border border-ops-rose/30 bg-ops-rose/10 px-3 py-1.5 text-ops-rose">{model.summary.offlineNodes} fuera de línea</span>
+              <a href="/monitoring/network" className="rounded-ops border border-ops-border px-3 py-1.5 text-ops-muted hover:border-ops-blue/50 hover:text-ops-text">Salir del mural</a>
+            </div>
+          </header>
+
+          <section className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[0.78fr_1.55fr]">
+            <div className="flex min-h-0 flex-col gap-3">
+              <section className="rounded-ops border border-ops-border bg-ops-surface p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-blue">{nocTourEnabled ? `Revisando ahora · recorrido ${nocTourPosition + 1}/${nocTourNodeIds.length}` : "Recorrido en pausa"}</p>
+                    <h2 className="mt-2 text-2xl font-semibold text-ops-text">{detail?.name ?? "Cargando nodo…"}</h2>
+                    <p className="mt-1 font-mono text-sm text-ops-blue">{detail?.code ?? "—"} · {detail?.primaryIp ?? "sin IP"}</p>
+                    <p className="mt-2 text-sm text-ops-muted">{detail ? `${detail.route.identifier} · ${detail.route.center.name}` : ""}</p>
+                  </div>
+                  {detail && <span className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${stateBadge(detail.operativeState)}`}>{detail.operativeState}</span>}
+                </div>
+                <div className="mt-5 grid grid-cols-2 gap-2">
+                  <StatCard label="Activos" value={detail?.assets.length ?? 0} sub="equipos oficiales" />
+                  <StatCard label="Alertas" value={telemetrySummary?.alertCount ?? 0} sub="último snapshot" />
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <button type="button" onClick={() => setNocTourEnabled((enabled) => !enabled)} className="flex-1 rounded-ops bg-ops-blue px-3 py-2 text-sm font-semibold text-white hover:bg-ops-blue/80">
+                    {nocTourEnabled ? "Pausar recorrido" : "Iniciar recorrido automático"}
+                  </button>
+                  <button type="button" onClick={() => void document.documentElement.requestFullscreen?.()} className="rounded-ops border border-ops-border px-3 py-2 text-sm text-ops-muted hover:text-ops-text">Pantalla completa</button>
+                </div>
+              </section>
+
+              <section className="rounded-ops border border-ops-border bg-ops-panel p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-ops-blue">Métricas del nodo revisado · {detail?.code ?? "—"}</p>
+                <p className="mt-1 text-[11px] text-ops-muted">Hosts y flujos pertenecen solo a este nodo, no al total de la red.</p>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  {telemetryPulseCards.map((card, index) => (
+                    <TelemetryStrip key={card.label} title={card.label} value={card.value} accentClass={["text-ops-blue", "text-ops-emerald", "text-ops-amber", "text-ops-rose"][index] ?? "text-ops-text"} barClass={["bg-ops-blue", "bg-ops-emerald", "bg-ops-amber", "bg-ops-rose"][index] ?? "bg-ops-blue"} segments={trafficDeltas.map((point) => index === 0 ? point.bytesInDelta : index === 1 ? point.bytesOutDelta : index === 2 ? point.activeHosts : point.activeFlows)} />
+                  ))}
+                </div>
+              </section>
+
+              <section className="min-h-0 flex-1 rounded-ops border border-ops-border bg-ops-panel p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-ops-muted">Siguiente prioridad</p>
+                <div className="mt-3 space-y-2">
+                  {nocTourNodeIds.slice(nocTourPosition + 1, nocTourPosition + 5).concat(nocTourNodeIds.slice(0, Math.max(0, 4 - (nocTourNodeIds.length - nocTourPosition - 1)))).map((nodeId) => {
+                    const node = nodes.find((item) => item.id === nodeId);
+                    return node ? <div key={node.id} className="flex items-center justify-between gap-3 rounded-ops border border-ops-border bg-ops-surface px-3 py-2"><span className="truncate text-sm text-ops-text">{node.code} · {node.name}</span><span className={`rounded-full border px-2 py-0.5 text-[10px] ${stateBadge(node.operativeState)}`}>{node.operativeState}</span></div> : null;
+                  })}
+                </div>
+              </section>
+            </div>
+
+            <section className="min-h-0 overflow-hidden rounded-ops border border-ops-border bg-ops-panel p-3">
+              <GrafanaPanelEmbed
+                title={nodeEmbed?.title ?? "Observabilidad del nodo"}
+                src={nodeEmbed?.src ?? null}
+                loading={loadingNodeEmbed}
+                iframeClassName="h-[calc(100vh-11rem)]"
+              />
+            </section>
+          </section>
+        </div>
+      ) : (
       <div className="space-y-8">
         {errorMessage ? (
           <OpsNotice tone="error" title="Acción no completada" message={errorMessage} onDismiss={() => setErrorMessage("")} />
@@ -541,7 +649,11 @@ export default function NetworkMonitoringPage() {
               {detail ? "Observabilidad del Nodo" : "Observabilidad Global"}
             </p>
             <h2 className="mt-1 text-base font-semibold text-ops-text">
-              {detail ? "Consola NOC contextual del nodo seleccionado" : "Comando de red y telemetría consolidada"}
+              {detail
+                ? nocTourEnabled
+                  ? `Recorrido NOC activo · nodo ${nocTourPosition + 1} de ${nocTourNodeIds.length}`
+                  : "Consola NOC contextual del nodo seleccionado"
+                : "Comando de red y telemetría consolidada"}
             </h2>
           </div>
           <GrafanaPanelEmbed
@@ -574,7 +686,10 @@ export default function NetworkMonitoringPage() {
                   <button
                     key={node.id}
                     type="button"
-                    onClick={() => setSelectedNodeId(node.id)}
+                    onClick={() => {
+                      setNocTourEnabled(false);
+                      setSelectedNodeId(node.id);
+                    }}
                     className={`group relative w-full overflow-hidden rounded-ops border p-3 text-left transition-colors ${
                       node.id === selectedNodeId
                         ? "border-ops-blue bg-ops-blue/10 shadow-ops-glow-blue"
@@ -618,7 +733,9 @@ export default function NetworkMonitoringPage() {
                 <div className={PANEL_HUD}>
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-blue/80">Nodo seleccionado</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ops-blue/80">
+                        {nocTourEnabled ? `Recorrido NOC · ${nocTourPosition + 1}/${nocTourNodeIds.length}` : "Nodo seleccionado"}
+                      </p>
                       <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
                         <h2 className="text-2xl font-semibold tracking-tight text-ops-text">{detail.name}</h2>
                         <span className="font-mono text-xs font-semibold tracking-[0.16em] text-ops-blue">{detail.code}</span>
@@ -632,8 +749,20 @@ export default function NetworkMonitoringPage() {
                         <span className="rounded-full border border-ops-border bg-black/20 px-2.5 py-1">{detail.assets.length} activos oficiales</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 rounded-ops border border-ops-border bg-black/20 p-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2 rounded-ops border border-ops-border bg-black/20 p-2">
                       {loadingDetail && <div className="h-4 w-4 animate-spin rounded-full border-2 border-ops-border border-t-ops-blue" aria-label="Actualizando detalle del nodo" />}
+                      <button
+                        type="button"
+                        onClick={() => setNocTourEnabled((enabled) => !enabled)}
+                        disabled={nocTourNodeIds.length < 2}
+                        className={`rounded-ops border px-3 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                          nocTourEnabled
+                            ? "border-ops-amber/50 bg-ops-amber/15 text-ops-amber hover:bg-ops-amber/25"
+                            : "border-ops-blue/40 bg-ops-blue/10 text-ops-blue hover:bg-ops-blue/20"
+                        }`}
+                      >
+                        {nocTourEnabled ? "Pausar recorrido" : "Iniciar recorrido automático"}
+                      </button>
                       <button
                         type="button"
                         onClick={() => void handleRunDiscovery()}
@@ -1017,6 +1146,7 @@ export default function NetworkMonitoringPage() {
           </section>
         </div>
       </div>
+      )}
     </OpsShell>
   );
 }

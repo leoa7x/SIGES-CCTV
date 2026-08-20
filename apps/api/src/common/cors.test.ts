@@ -23,6 +23,14 @@ test("supports comma-separated origins and keeps non-localhost hosts exact", () 
   assert.equal(isAllowedCorsOrigin("https://evil.example.com", "http://localhost:3001,https://ops.example.com"), false);
 });
 
+test("allows both the server localhost and configured LAN address", () => {
+  const configured = "http://localhost:3001,http://172.16.45.212:3001";
+
+  assert.equal(isAllowedCorsOrigin("http://localhost:3001", configured), true);
+  assert.equal(isAllowedCorsOrigin("http://127.0.0.1:3001", configured), true);
+  assert.equal(isAllowedCorsOrigin("http://172.16.45.212:3001", configured), true);
+});
+
 test("allows requests without an Origin header", () => {
   assert.equal(isAllowedCorsOrigin(undefined, "http://localhost:3001"), true);
 });

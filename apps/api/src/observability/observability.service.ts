@@ -44,11 +44,9 @@ export class ObservabilityService {
     const uid = normalizeDashboardUid(this.config.dashboards[input.dashboard]);
     const params = new URLSearchParams({
       orgId: this.config.orgId,
-      // A 6h default window made these 10s-refresh panels look static —
-      // each new data point was an invisible sliver against 6 hours of
-      // x-axis. An hour keeps recent movement visible while still giving
-      // useful context.
-      from: input.from ?? "now-1h",
+      // A short live window makes the one-minute collector samples visible
+      // on a NOC screen. A one-hour window made each new point look static.
+      from: input.from ?? "now-15m",
       to: input.to ?? "now",
       theme: "dark",
       kiosk: "tv",

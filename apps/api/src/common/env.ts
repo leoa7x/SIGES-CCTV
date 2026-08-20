@@ -1,5 +1,10 @@
 const KNOWN_WEAK_VALUES = new Set([
   "dev_secret_change_me",
+  "change_this_refresh_secret_too",
+  "siges_pass_change_me",
+  "siges_minio_change_me",
+  "admin1234!",
+  "admin",
   "change_this_to_a_random_256bit_secret_in_production",
   "change_me_for_camera_stream_credentials",
   "change-me",

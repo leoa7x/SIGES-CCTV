@@ -1,0 +1,31 @@
+# Single-server production overlay. Use after docker-compose.production.yml:
+#   docker compose --env-file .env.production \
+#     -f docker-compose.yml -f docker-compose.production.yml -f docker-compose.single-host.yml up -d --build
+#
+# This provides one local Redpanda broker for SIGES only. It is intentionally
+# not exposed to the LAN or Internet. It is suitable for a single-server
+# deployment, but does not provide the fault tolerance of a multi-broker setup.
+services:
+  redpanda:
+    profiles: !reset []
+    ports: !reset []
+
+  minio:
+    ports: !override
+      - "${SIGES_BIND_ADDRESS:-127.0.0.1}:9000:9000"
+      - "${SIGES_BIND_ADDRESS:-127.0.0.1}:9001:9001"
+
+  api:
+    environment:
+      REDPANDA_BROKERS: redpanda:9092
+    depends_on: !reset
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+
+  telemetry-collector:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

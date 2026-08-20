@@ -6,6 +6,7 @@ import {
   heartbeatConcurrency,
   heartbeatFailureThreshold,
   heartbeatIntervalMs,
+  heartbeatTcpFallbackPorts,
 } from "../heartbeat/heartbeat.constants";
 import { mapWithConcurrency } from "../heartbeat/heartbeat-concurrency";
 import { HeartbeatProbeService } from "../heartbeat/heartbeat-probe.service";
@@ -89,7 +90,7 @@ export class NodeHeartbeatScheduler implements OnModuleInit, OnModuleDestroy {
     try {
       if (!node.primaryIp || !isValidIp(node.primaryIp)) return;
 
-      const result = await this.probe.probeIp(node.primaryIp);
+      const result = await this.probe.probeIp(node.primaryIp, heartbeatTcpFallbackPorts());
       const nextFailureCount = result.reachable ? 0 : node.heartbeatFailureCount + 1;
       const nextState = !result.reachable && nextFailureCount >= heartbeatFailureThreshold()
         ? NodeState.OFFLINE
@@ -130,7 +131,7 @@ export class NodeHeartbeatScheduler implements OnModuleInit, OnModuleDestroy {
     try {
       if (!asset.ip || !isValidIp(asset.ip)) return;
 
-      const assetResult = await this.probe.probeIp(asset.ip);
+      const assetResult = await this.probe.probeIp(asset.ip, heartbeatTcpFallbackPorts());
       const assetFailureCount = assetResult.reachable ? 0 : asset.heartbeatFailureCount + 1;
       const assetState = !assetResult.reachable && assetFailureCount >= heartbeatFailureThreshold()
         ? NodeState.OFFLINE

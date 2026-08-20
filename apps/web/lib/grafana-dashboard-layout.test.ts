@@ -6,6 +6,7 @@ import { join } from "node:path";
 type DashboardPanel = {
   type: string;
   title?: string;
+  gridPos?: { y?: number };
 };
 
 type DashboardJson = {
@@ -39,6 +40,9 @@ test("network command dashboard prioritizes live charts over raw stat tiles", ()
   assert.ok(timeseriesPanels >= 1, "expected a primary live traffic chart");
   assert.ok(gaugePanels >= 1, "expected an operational health gauge");
   assert.ok(tablePanels >= 1, "expected a bottom operational status table");
+
+  const primaryTrafficPanel = dashboard.panels.find((panel) => panel.gridPos?.y === 3);
+  assert.equal(primaryTrafficPanel?.title, "Tráfico por nodo", "expected the global chart to compare nodes, not only a fleet sum");
 });
 
 test("node observability dashboard uses multiple live charts instead of mostly numbers", () => {
