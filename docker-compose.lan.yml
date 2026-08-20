@@ -20,9 +20,11 @@ services:
   web:
     build:
       args:
-        NEXT_PUBLIC_API_URL: https://${SIGES_PUBLIC_HOST}/api
+        # Keep browser calls on the current origin, so localhost and the LAN
+        # address both use Caddy rather than a fixed IP.
+        NEXT_PUBLIC_API_URL: /api
     environment:
-      NEXT_PUBLIC_API_URL: https://${SIGES_PUBLIC_HOST}/api
+      NEXT_PUBLIC_API_URL: /api
     ports: !reset []
 
   proxy:

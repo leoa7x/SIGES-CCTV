@@ -7,11 +7,18 @@ export function getSocket(accessToken: string): Socket {
     throw new Error("getSocket can only be called in browser context");
   }
   if (!socket) {
-    socket = io(process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001", {
+    const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL;
+    const options = {
       transports: ["websocket"],
       autoConnect: true,
       auth: { token: accessToken },
-    });
+    };
+    // Production is served through Caddy. A relative API path must use the
+    // browser origin for Socket.IO too (passing "/api" to io() would select a
+    // namespace instead of an HTTP origin).
+    socket = configuredApiUrl?.startsWith("http")
+      ? io(configuredApiUrl, options)
+      : io(options);
   } else {
     socket.auth = { token: accessToken };
   }
