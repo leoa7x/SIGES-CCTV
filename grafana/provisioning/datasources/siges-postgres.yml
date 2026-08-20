@@ -8,7 +8,7 @@ datasources:
     url: postgres:5432
     user: siges
     secureJsonData:
-      password: siges_pass_change_me
+      password: $__env{POSTGRES_PASSWORD}
     jsonData:
       database: siges_cctv
       sslmode: disable

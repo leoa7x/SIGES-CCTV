@@ -98,6 +98,7 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_SECURITY_ALLOW_EMBEDDING: "true"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/json/network-command-view.json
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-siges_pass_change_me}
     volumes:
       - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
