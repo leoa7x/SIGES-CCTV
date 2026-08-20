@@ -25,9 +25,20 @@ export function buildObservabilityEmbedPath(input: ObservabilityEmbedPathInput) 
 
 export function buildGrafanaEmbedModel(descriptor: GrafanaEmbedDescriptor): GrafanaEmbedModel {
   try {
-    const url = new URL(descriptor.url);
+    const browserOrigin = typeof window === "undefined" ? undefined : window.location.origin;
+    const url = new URL(descriptor.url, browserOrigin);
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       return { title: descriptor.title, src: null };
+    }
+
+    // Grafana is published by Caddy under /grafana. Keep an embed on the
+    // current browser origin: localhost on the server and the LAN address on
+    // operator workstations. This avoids a fixed-IP iframe from failing in
+    // WSL's local network path.
+    if (browserOrigin && (url.pathname === "/grafana" || url.pathname.startsWith("/grafana/"))) {
+      const currentOrigin = new URL(browserOrigin);
+      url.protocol = currentOrigin.protocol;
+      url.host = currentOrigin.host;
     }
 
     for (const [key, value] of Object.entries(descriptor.params)) {

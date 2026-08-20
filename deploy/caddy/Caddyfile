@@ -58,9 +58,15 @@
 		reverse_proxy minio:9000
 	}
 
-	handle_path /grafana/* {
-		reverse_proxy grafana:3000
-	}
+  # Grafana runs with serve_from_sub_path and must receive /grafana itself;
+  # unlike API/storage, do not strip this prefix before proxying.
+  handle /grafana/* {
+    reverse_proxy grafana:3000 {
+      # Grafana has a canonical public URL, but local WSL access uses
+      # localhost. Preserve the origin that the browser used on redirects.
+      header_down Location "https://{$SIGES_PUBLIC_HOST}" "{http.request.scheme}://{http.request.host}"
+    }
+  }
 
 	handle {
 		reverse_proxy web:3000
