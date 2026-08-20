@@ -106,11 +106,13 @@ export class NodeHeartbeatScheduler implements OnModuleInit, OnModuleDestroy {
           heartbeatFailureCount: nextFailureCount,
           lastHeartbeatAttemptAt: result.checkedAt,
           lastHeartbeatAt: result.reachable ? result.checkedAt : undefined,
-          operativeState: manuallyDegraded ? NodeState.DEGRADED : nextState,
+          operativeState: manuallyDegraded && process.env.DEGRADED_AUTO_RECOVER_ENABLED !== "false" && result.reachable
+            ? NodeState.ONLINE
+            : manuallyDegraded ? NodeState.DEGRADED : nextState,
         },
       });
 
-      if (manuallyDegraded) {
+      if (manuallyDegraded && process.env.DEGRADED_AUTO_RECOVER_ENABLED === "false") {
         // A degraded state is presented to operators as the active condition;
         // do not leave a stale critical "offline" alert from before the
         // operator deliberately classified it.
@@ -156,11 +158,13 @@ export class NodeHeartbeatScheduler implements OnModuleInit, OnModuleDestroy {
           heartbeatFailureCount: assetFailureCount,
           lastHeartbeatAttemptAt: assetResult.checkedAt,
           lastHeartbeatAt: assetResult.reachable ? assetResult.checkedAt : undefined,
-          operativeState: manuallyDegraded ? NodeState.DEGRADED : assetState,
+          operativeState: manuallyDegraded && process.env.DEGRADED_AUTO_RECOVER_ENABLED !== "false" && assetResult.reachable
+            ? NodeState.ONLINE
+            : manuallyDegraded ? NodeState.DEGRADED : assetState,
         },
       });
 
-      if (manuallyDegraded) {
+      if (manuallyDegraded && process.env.DEGRADED_AUTO_RECOVER_ENABLED === "false") {
         await this.alerts.resolveAlerts(
           { scope: "node-asset", nodeId, nodeAssetId: asset.id },
           OperationalAlertKind.NODE_ASSET_UNREACHABLE,

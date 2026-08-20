@@ -36,7 +36,7 @@ test("runCycle marks a node OFFLINE and upserts NODE_UNREACHABLE after the confi
   assert.equal((alerts[0] as { kind: string }).kind, "NODE_UNREACHABLE");
 });
 
-test("runCycle refreshes a manually degraded node without overriding its state or retaining a critical offline alert", async () => {
+test("runCycle promotes a reachable manually degraded node and clears its obsolete offline alert", async () => {
   const updates: unknown[] = [];
   const resolved: unknown[] = [];
   const prisma = {
@@ -50,6 +50,6 @@ test("runCycle refreshes a manually degraded node without overriding its state o
   const alerts = { ensureAlert: async () => undefined, resolveAlerts: async (...args: unknown[]) => { resolved.push(args); } };
   const scheduler = new NodeHeartbeatScheduler(prisma as never, probe as never, alerts as never);
   await scheduler.runCycle();
-  assert.equal((updates[0] as { data: { operativeState: string } }).data.operativeState, "DEGRADED");
+  assert.equal((updates[0] as { data: { operativeState: string } }).data.operativeState, "ONLINE");
   assert.equal(resolved.length, 1);
 });

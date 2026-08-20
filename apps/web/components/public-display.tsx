@@ -42,7 +42,7 @@ export function PublicDisplay({ view }: { view: View }) {
         setError("");
       } catch { if (!disposed) setError("Sin conexión con el canal de pantalla NOC"); }
     };
-    void refresh(); const timer = window.setInterval(() => void refresh(), view === "noc" ? 10_000 : 5_000);
+    void refresh(); const timer = window.setInterval(() => void refresh(), view === "global" ? 5_000 : 10_000);
     return () => { disposed = true; window.clearInterval(timer); };
   }, [view]);
   const tour = useMemo(
