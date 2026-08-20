@@ -12,7 +12,7 @@ import { JwtStrategy } from "./jwt.strategy";
     PassportModule,
     JwtModule.register({
       secret: requireEnv("JWT_SECRET"),
-      signOptions: { expiresIn: "8h" },
+      signOptions: { expiresIn: (process.env.JWT_EXPIRES_IN ?? "30d") as never },
     }),
     // Scoped to this module only — brute-force protection for /auth/login,
     // does not affect rate limits anywhere else in the API.

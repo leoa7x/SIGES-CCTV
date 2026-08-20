@@ -78,13 +78,15 @@ export default function MapPage() {
 
   useEffect(() => {
     if (!accessToken) { setLoading(false); return; }
-    setLoadError("");
-    Promise.all([
-      apiGet<NodeItem[]>("/nodes/geojson", accessToken),
-      apiGet<CenterApiItem[]>("/monitoring-centers", accessToken),
-      apiGet<{ segments: FiberSegmentGeo[] }>("/fiber-segments/geojson", accessToken),
-    ])
-      .then(([nodes, rawCenters, { segments }]) => {
+    let disposed = false;
+    const loadMapState = async () => {
+      try {
+        const [nodes, rawCenters, { segments }] = await Promise.all([
+          apiGet<NodeItem[]>("/nodes/geojson", accessToken),
+          apiGet<CenterApiItem[]>("/monitoring-centers", accessToken),
+          apiGet<{ segments: FiberSegmentGeo[] }>("/fiber-segments/geojson", accessToken),
+        ]);
+        if (disposed) return;
         setAllNodes(nodes);
         setFiberSegments(segments);
         setCenters(
@@ -100,9 +102,16 @@ export default function MapPage() {
               lng: c.lng as number,
             })),
         );
-      })
-      .catch((err) => setLoadError(toUserFacingError(err, "No se pudo cargar el mapa de red.")))
-      .finally(() => setLoading(false));
+        setLoadError("");
+      } catch (err) {
+        if (!disposed) setLoadError(toUserFacingError(err, "No se pudo actualizar el mapa de red."));
+      } finally {
+        if (!disposed) setLoading(false);
+      }
+    };
+    void loadMapState();
+    const timer = window.setInterval(() => void loadMapState(), 10_000);
+    return () => { disposed = true; window.clearInterval(timer); };
   }, [accessToken]);
 
   const locatedNodes: NodeGeo[] = useMemo(
