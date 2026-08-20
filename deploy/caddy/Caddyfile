@@ -4,7 +4,9 @@
 
 # The Windows installer supplies the CA-signed certificate and private key in
 # ./certificates. No public ACME/Internet dependency is used.
-{$SIGES_PUBLIC_HOST} {
+# Serve the operational address and local Windows/WSL access identically.
+# WSL's mirrored network accepts localhost independently of the LAN IP.
+{$SIGES_PUBLIC_HOST}, localhost, 127.0.0.1 {
 	tls /etc/caddy/certificates/siges.crt /etc/caddy/certificates/siges.key
 
 	encode zstd gzip
