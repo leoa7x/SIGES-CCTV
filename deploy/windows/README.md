@@ -13,7 +13,9 @@ branding y adjuntos tal como estaban al sellar el paquete. El instalador restaur
 esos datos antes de publicar API/Web y levanta el perfil `monitoring`; no crea
 datos demo ni reinicializa el inventario.
 
-También registra la tarea de Windows `SIGES WSL Keepalive`: al iniciar sesión
-en la cuenta operativa espera a que Docker esté disponible, ejecuta `docker
-compose up -d` y mantiene Ubuntu/WSL activo. Los servicios usan `restart:
-unless-stopped`, por lo que se recuperan automáticamente tras un reinicio.
+También registra la tarea oculta de Windows `SIGES WSL Keepalive`: al iniciar
+sesión en la cuenta operativa espera a que Docker esté disponible, ejecuta
+`docker compose up -d` y mantiene Ubuntu/WSL activo sin depender de una ventana
+CMD. Los servicios usan `restart: unless-stopped`, por lo que se recuperan tras
+un reinicio. En el escritorio público quedan los accesos `Iniciar SIGES.cmd` y
+`Estado SIGES.cmd` para recuperación y diagnóstico manual.
